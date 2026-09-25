@@ -78,6 +78,10 @@ let state = Object.assign({
   notifications: { enabled: false, sound: false },
   pinHash: null,
   idleLock: 0,
+  projects: [],
+  memories: [],
+  skills: [],
+  activeProject: null,
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
@@ -90,6 +94,9 @@ if (!state.notifications || typeof state.notifications !== "object")
   state.notifications = { enabled: false, sound: false };
 if (typeof state.pinHash !== "string") state.pinHash = null;
 if (typeof state.idleLock !== "number") state.idleLock = 0;
+for (const k of ["projects", "memories", "skills"])
+  if (!Array.isArray(state[k])) state[k] = [];
+if (!state.projects.some(p => p.id === state.activeProject)) state.activeProject = null;
 
 function selectedModel() {
   return state.models.find(m => m.id === state.selectedModel) ?? state.models[0];
@@ -110,10 +117,12 @@ function setGreeting() {
 
 /* ---------- conversations ---------- */
 function newConversation() {
-  const conv = { id: crypto.randomUUID(), title: "New chat", messages: [], createdAt: Date.now() };
+  const conv = { id: crypto.randomUUID(), title: "New chat", messages: [], createdAt: Date.now(),
+    projectId: state.activeProject };
   state.conversations.unshift(conv);
   state.activeId = conv.id;
   save();
+  setView("chats");
   renderHistory();
   renderMessages();
   els.input.focus();
@@ -122,13 +131,16 @@ function newConversation() {
 function openConversation(id) {
   state.activeId = id;
   save();
+  setView("chats");
   renderHistory();
   renderMessages();
 }
 
 function renderHistory(filter = "") {
   const q = filter.trim().toLowerCase();
-  const items = state.conversations.filter(c => !q || c.title.toLowerCase().includes(q));
+  const items = state.conversations.filter(c =>
+    (!state.activeProject || (c.projectId ?? null) === state.activeProject) &&
+    (!q || c.title.toLowerCase().includes(q)));
   els.historyList.innerHTML = "";
   if (!items.length) {
     els.historyList.innerHTML = `<li class="history-empty">${q ? "No matching chats" : "No chats yet"}</li>`;
@@ -203,7 +215,8 @@ function appendMessage(msg) {
     img.alt = "";
     avatar.append(img);
   } else if (msg.role === "assistant") {
-    avatar.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg>`;
+    avatar.innerHTML = `<svg class="stare-logo" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M5 7h14l-7 10.5z"/><g class="eyes"><circle cx="9.5" cy="10.2" r="1.3" fill="var(--bg)"/><circle cx="12.5" cy="10.2" r="1.3" fill="var(--bg)"/></g></svg>`;
+    stareTargets.push(avatar.querySelector(".eyes"));
   } else {
     avatar.textContent = "B";
   }
@@ -250,6 +263,7 @@ async function sendMessage(text) {
       ? (trimmed.length > 42 ? trimmed.slice(0, 42) + "…" : trimmed)
       : userMsg.attachments[0].name;
   }
+  setView("chats");
   appendMessage(userMsg);
   scrollToBottom();
   save();
@@ -342,7 +356,14 @@ const KIND_DEFAULTS = {
   gemini: "https://generativelanguage.googleapis.com",
   ollama: "http://localhost:11434",
 };
-const SYSTEM_PROMPT = "You are Notal, a calm, clear assistant in the Notal AI workspace.";
+function systemPrompt() {
+  const facts = state.memories.filter(m => m.enabled).map(m => m.text);
+  const proj = state.projects.find(p => p.id === state.activeProject);
+  let s = "You are Notal, a calm, clear assistant in the Notal AI workspace.";
+  if (proj) s += ` The current project is "${proj.name}".`;
+  if (facts.length) s += `\nThings the user wants you to remember:\n- ${facts.join("\n- ")}`;
+  return s;
+}
 
 function splitDataUrl(u) {
   const m = /^data:([^;]+);base64,(.*)$/.exec(u) || [];
@@ -395,7 +416,7 @@ async function callProvider(model, messages) {
         "anthropic-version": "2023-06-01",
         "anthropic-dangerous-direct-browser-access": "true",
       },
-      body: JSON.stringify({ model: p.name, max_tokens: 2048, system: SYSTEM_PROMPT, messages: msgs }),
+      body: JSON.stringify({ model: p.name, max_tokens: 2048, system: systemPrompt(), messages: msgs }),
     });
     const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
     if (!text) throw new Error("The provider returned an empty response.");
@@ -417,7 +438,7 @@ async function callProvider(model, messages) {
       `${base}/v1beta/models/${encodeURIComponent(p.name)}:generateContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": p.apiKey },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }, contents }),
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt() }] }, contents }),
     });
     if (data.error?.message) throw new Error(data.error.message);
     const text = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || "").join("");
@@ -425,7 +446,7 @@ async function callProvider(model, messages) {
     return text;
   }
 
-  const msgs = [{ role: "system", content: SYSTEM_PROMPT }];
+  const msgs = [{ role: "system", content: systemPrompt() }];
   for (const m of history) {
     const imgs = imageAtts(m);
     if (p.kind === "openai" && m.role === "user" && imgs.length) {
@@ -607,10 +628,7 @@ els.sidebarOpen.addEventListener("click", () => {
 });
 
 document.querySelectorAll(".nav-item").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-  });
+  btn.addEventListener("click", () => setView(btn.dataset.view));
 });
 
 els.newChat.addEventListener("click", newConversation);
@@ -1090,8 +1108,308 @@ document.addEventListener("keydown", (e) => {
   else if (k === "f" && e.shiftKey) { e.preventDefault(); lockScreenSafe(() => els.search.focus()); }
 });
 
+/* ---------- views (projects / memory / skills) ---------- */
+els.chatTitle = $(".chat-title");
+els.composerWrap = $(".composer-wrap");
+const VIEWS = ["chats", "projects", "memory", "skills"];
+const VIEW_LABELS = { chats: "Notal AI", projects: "Projects", memory: "Memory", skills: "Skills" };
+
+function setView(name) {
+  document.querySelectorAll(".nav-item").forEach(b =>
+    b.classList.toggle("active", b.dataset.view === name));
+  els.chat.hidden = name !== "chats";
+  els.composerWrap.hidden = name !== "chats";
+  for (const v of VIEWS) {
+    if (v === "chats") continue;
+    const el = $(`#view-${v}`);
+    if (el) el.hidden = v !== name;
+  }
+  els.chatTitle.textContent = name === "chats"
+    ? (activeConv()?.title || (state.activeProject ? projectName(state.activeProject) : "Notal AI"))
+    : VIEW_LABELS[name];
+  if (name === "projects") renderProjects();
+  if (name === "memory") renderMemory();
+  if (name === "skills") renderSkills();
+}
+
+function projectName(id) {
+  return state.projects.find(p => p.id === id)?.name || "Notal AI";
+}
+
+/* ----- projects ----- */
+els.projectGrid = $("#projectGrid");
+
+function projectChats(id) {
+  return state.conversations.filter(c => (c.projectId ?? null) === id);
+}
+function projectMemos(id) {
+  return state.memories.filter(m => m.projectId === id);
+}
+
+function renderProjects() {
+  els.projectGrid.innerHTML = "";
+  if (!state.projects.length) {
+    const li = document.createElement("li");
+    li.className = "empty-note";
+    li.textContent = "No projects yet — create one above to group chats and memory.";
+    els.projectGrid.append(li);
+    return;
+  }
+  for (const p of state.projects) {
+    const li = document.createElement("li");
+    li.className = "card" + (p.id === state.activeProject ? " active" : "");
+
+    const h = document.createElement("h3");
+    h.textContent = p.name;
+    const meta = document.createElement("small");
+    meta.textContent = `${projectChats(p.id).length} chats · ${projectMemos(p.id).length} memories`;
+
+    const open = document.createElement("button");
+    open.type = "button"; open.className = "ghost-btn";
+    open.textContent = p.id === state.activeProject ? "Active" : "Open";
+    open.addEventListener("click", () => {
+      state.activeProject = p.id;
+      save();
+      renderProjects();
+      renderMemory();
+      setView("chats");
+      renderHistory(els.search.value);
+      renderMessages();
+      toast(`Now working in "${p.name}" — new chats belong to it.`);
+    });
+
+    const mem = document.createElement("button");
+    mem.type = "button"; mem.className = "ghost-btn";
+    mem.textContent = "Memory";
+    mem.addEventListener("click", () => {
+      state.activeProject = p.id;
+      save();
+      setView("memory");
+      renderMemory();
+    });
+
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "icon-btn pi-del";
+    del.setAttribute("aria-label", `Delete ${p.name}`);
+    del.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+    del.addEventListener("click", () => {
+      if (!confirm(`Delete "${p.name}"? Its chats stay but return to no project.`)) return;
+      state.projects = state.projects.filter(x => x.id !== p.id);
+      for (const c of state.conversations)
+        if (c.projectId === p.id) c.projectId = null;
+      for (const m of state.memories)
+        if (m.projectId === p.id) m.projectId = null;
+      if (state.activeProject === p.id) state.activeProject = null;
+      save();
+      renderProjects();
+      renderHistory(els.search.value);
+    });
+
+    li.append(h, meta, open, mem, del);
+    els.projectGrid.append(li);
+  }
+}
+
+$("#projectForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = $("#projNameInput").value.trim();
+  if (!name) return;
+  state.projects.push({ id: crypto.randomUUID(), name, createdAt: Date.now() });
+  $("#projNameInput").value = "";
+  save();
+  renderProjects();
+  renderMemory();
+});
+
+/* ----- memory ----- */
+els.memoryList = $("#memoryList");
+els.memProjectSel = $("#memProjectSel");
+
+function renderMemory() {
+  els.memProjectSel.innerHTML = "";
+  const general = document.createElement("option");
+  general.value = ""; general.textContent = "General (all chats)";
+  els.memProjectSel.append(general);
+  for (const p of state.projects) {
+    const o = document.createElement("option");
+    o.value = p.id; o.textContent = p.name;
+    els.memProjectSel.append(o);
+  }
+  if (state.activeProject && state.projects.some(p => p.id === state.activeProject))
+    els.memProjectSel.value = state.activeProject;
+
+  els.memoryList.innerHTML = "";
+  if (!state.memories.length) {
+    const li = document.createElement("li");
+    li.className = "empty-note";
+    li.textContent = "Nothing remembered yet. Add a fact above — it goes into the prompt for every real model call.";
+    els.memoryList.append(li);
+    return;
+  }
+  for (const m of state.memories) {
+    const li = document.createElement("li");
+    li.className = "mem-item" + (m.enabled ? "" : " off");
+
+    const label = document.createElement("label");
+    label.className = "switch";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = m.enabled;
+    cb.addEventListener("change", () => {
+      m.enabled = cb.checked;
+      save();
+      renderMemory();
+    });
+    const sl = document.createElement("span");
+    sl.className = "sl track";
+    label.append(cb, sl);
+
+    const body = document.createElement("div");
+    body.className = "mem-body";
+    const text = document.createElement("span");
+    text.textContent = m.text;
+    const scope = document.createElement("small");
+    scope.textContent = m.projectId ? projectName(m.projectId) : "General";
+    body.append(text, document.createElement("br"), scope);
+
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "icon-btn pi-del";
+    del.setAttribute("aria-label", "Forget this");
+    del.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+    del.addEventListener("click", () => {
+      state.memories = state.memories.filter(x => x.id !== m.id);
+      save();
+      renderMemory();
+      toast("Forgotten.");
+    });
+
+    li.append(label, body, del);
+    els.memoryList.append(li);
+  }
+}
+
+$("#memoryForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = $("#memInput").value.trim();
+  if (!text) return;
+  state.memories.unshift({
+    id: crypto.randomUUID(), text,
+    projectId: els.memProjectSel.value || null,
+    enabled: true, createdAt: Date.now(),
+  });
+  $("#memInput").value = "";
+  save();
+  renderMemory();
+  toast("Saved to memory.");
+});
+
+/* ----- skills ----- */
+els.skillGrid = $("#skillGrid");
+
+function renderSkills() {
+  els.skillGrid.innerHTML = "";
+  if (!state.skills.length) {
+    const li = document.createElement("li");
+    li.className = "empty-note";
+    li.textContent = "No skills yet — add a reusable prompt above.";
+    els.skillGrid.append(li);
+    return;
+  }
+  for (const s of state.skills) {
+    const li = document.createElement("li");
+    li.className = "card";
+    const h = document.createElement("h3");
+    h.textContent = s.name;
+    const p = document.createElement("p");
+    p.className = "card-desc";
+    p.textContent = s.prompt;
+
+    const use = document.createElement("button");
+    use.type = "button"; use.className = "ghost-btn";
+    use.textContent = "Use";
+    use.addEventListener("click", () => {
+      setView("chats");
+      els.input.value = s.prompt;
+      autoresize();
+      sendMessage(s.prompt);
+    });
+
+    const edit = document.createElement("button");
+    edit.type = "button"; edit.className = "ghost-btn";
+    edit.textContent = "Insert";
+    edit.title = "Put the prompt in the message box without sending";
+    edit.addEventListener("click", () => {
+      setView("chats");
+      els.input.value = s.prompt;
+      autoresize();
+      els.input.focus();
+      els.input.setSelectionRange(els.input.value.length, els.input.value.length);
+    });
+
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "icon-btn pi-del";
+    del.setAttribute("aria-label", `Delete ${s.name}`);
+    del.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+    del.addEventListener("click", () => {
+      state.skills = state.skills.filter(x => x.id !== s.id);
+      save();
+      renderSkills();
+    });
+
+    li.append(h, p, use, edit, del);
+    els.skillGrid.append(li);
+  }
+}
+
+$("#skillForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = $("#skillNameInput").value.trim();
+  const prompt = $("#skillPromptInput").value.trim();
+  if (!name || !prompt) return;
+  state.skills.push({ id: crypto.randomUUID(), name, prompt });
+  $("#skillNameInput").value = "";
+  $("#skillPromptInput").value = "";
+  save();
+  renderSkills();
+  toast(`Skill "${name}" added.`);
+});
+
 /* ---------- global dismiss ---------- */
 document.addEventListener("click", () => setModelMenu(false));
+
+/* ---------- chat logo: eyes that follow the cursor ---------- */
+let stareTargets = [];
+const pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+window.addEventListener("pointermove", (e) => { pointer.x = e.clientX; pointer.y = e.clientY; }, { passive: true });
+
+function updateStare() {
+  stareTargets = stareTargets.filter(eyes => {
+    if (!eyes.isConnected) return false;
+    const svg = eyes.parentNode;
+    const r = svg.getBoundingClientRect();
+    if (!r.width) return true;
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const dx = pointer.x - cx, dy = pointer.y - cy;
+    const dist = Math.hypot(dx, dy) || 1;
+    const k = Math.min(1.5, dist / 110);      // viewBox units of travel
+    const ux = dx / dist * k, uy = dy / dist * k;
+    const [L, R] = eyes.children;
+    L.setAttribute("cx", 9.5 + ux); L.setAttribute("cy", 10.2 + uy);
+    R.setAttribute("cx", 12.5 + ux); R.setAttribute("cy", 10.2 + uy);
+    return true;
+  });
+}
+setInterval(updateStare, 60);
+
+/* blink: flatten all visible avatars' eyes every few seconds */
+setInterval(() => {
+  const onScreen = stareTargets.filter(eyes => {
+    const b = eyes.parentNode.getBoundingClientRect();
+    return b.top > -30 && b.top < window.innerHeight;
+  });
+  if (!onScreen.length) return;
+  onScreen.forEach(e => e.style.transform = "scaleY(.12)");
+  setTimeout(() => onScreen.forEach(e => e.style.transform = ""), 150);
+}, 4200);
 
 /* ---------- init ---------- */
 if (window.innerWidth < 860) els.sidebar.classList.add("collapsed");
@@ -1103,6 +1421,7 @@ renderAuthUI();
 renderNotifUI();
 renderSecurityUI();
 if (state.pinHash) lockApp(); else resetIdleTimer();
+setView("chats");
 setGreeting();
 renderHistory();
 renderMessages();

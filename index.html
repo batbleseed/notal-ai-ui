@@ -111,6 +111,51 @@
         <div class="messages" id="messages"></div>
       </section>
 
+      <!-- Views for Projects / Memory / Skills -->
+      <section class="view" id="view-projects" hidden>
+        <header class="view-header">
+          <div>
+            <h1>Projects</h1>
+            <p class="view-sub">Group chats into a project. Anything you add to Memory for a project is shared with the AI in its chats.</p>
+          </div>
+          <form class="inline-add" id="projectForm">
+            <input type="text" id="projNameInput" placeholder="New project name" required />
+            <button type="submit" class="primary-btn">Create</button>
+          </form>
+        </header>
+        <ul class="card-grid" id="projectGrid"></ul>
+      </section>
+
+      <section class="view" id="view-memory" hidden>
+        <header class="view-header">
+          <div>
+            <h1>Memory</h1>
+            <p class="view-sub">Facts the AI should remember when it answers.</p>
+          </div>
+        </header>
+        <form class="inline-add" id="memoryForm">
+          <select id="memProjectSel"></select>
+          <input type="text" id="memInput" placeholder="e.g. I'm building Notal AI, a v2 of my chat app" style="flex:1" required />
+          <button type="submit" class="primary-btn">Add</button>
+        </form>
+        <ul class="item-list" id="memoryList"></ul>
+      </section>
+
+      <section class="view" id="view-skills" hidden>
+        <header class="view-header">
+          <div>
+            <h1>Skills</h1>
+            <p class="view-sub">Reusable prompts. Click Use and the prompt lands in your message box, ready to edit.</p>
+          </div>
+          <form class="inline-add" id="skillForm">
+            <input type="text" id="skillNameInput" placeholder="Skill name" required />
+            <input type="text" id="skillPromptInput" placeholder="Prompt template, e.g. Review this code for bugs: [paste code]" style="flex:2" required />
+            <button type="submit" class="primary-btn">Add skill</button>
+          </form>
+        </header>
+        <ul class="card-grid" id="skillGrid"></ul>
+      </section>
+
       <footer class="composer-wrap">
         <form class="composer" id="composer">
           <div class="attach-tray" id="attachTray" hidden></div>
