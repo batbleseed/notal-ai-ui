@@ -762,6 +762,8 @@ function switchTab(name) {
 const THEME_SEGS = document.querySelectorAll("[data-theme-seg]");
 function applyTheme() {
   document.documentElement.dataset.theme = state.theme;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = THEME_COLORS[state.theme] || THEME_COLORS.light;
   THEME_SEGS.forEach(seg => seg.querySelectorAll("button").forEach(b =>
     b.classList.toggle("active", b.dataset.themeVal === state.theme)));
 }
@@ -1474,6 +1476,37 @@ setInterval(() => {
   onScreen.forEach(e => e.style.transform = "scaleY(.12)");
   setTimeout(() => onScreen.forEach(e => e.style.transform = ""), 150);
 }, 4200);
+
+/* ---------- progressive web app ---------- */
+const THEME_COLORS = { light: "#f5f1ea", dark: "#262624" };
+els.amInstallBtn = $("#amInstallBtn");
+let installPrompt = null;
+const isStandalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js", { scope: "./" })
+    .catch(err => console.warn("Offline support did not start:", err?.message));
+}
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  if (!isStandalone) els.amInstallBtn.hidden = false;
+});
+window.addEventListener("appinstalled", () => {
+  installPrompt = null;
+  els.amInstallBtn.hidden = true;
+  toast("Notal AI installed. Find it on your home screen or apps list.");
+});
+els.amInstallBtn.addEventListener("click", async () => {
+  setAccountMenu(false);
+  if (!installPrompt) { toast("Your browser will offer the install option again shortly."); return; }
+  installPrompt.prompt();
+  const { outcome } = await installPrompt.userChoice.catch(() => ({ outcome: "failed" }));
+  if (outcome === "accepted") toast("Installing Notal AI…");
+  installPrompt = null;
+  els.amInstallBtn.hidden = true;
+});
 
 /* ---------- init ---------- */
 if (window.innerWidth < 860) els.sidebar.classList.add("collapsed");

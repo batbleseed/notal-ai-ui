@@ -1,0 +1,17 @@
+{
+  "name": "Notal AI — Your AI Workspace",
+  "short_name": "Notal AI",
+  "description": "A calm AI workspace where you bring your own models: projects, memory, reusable skills, attachments, dictation and Google sign-in.",
+  "id": "notal-ai",
+  "start_url": "./chat.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f1ea",
+  "theme_color": "#f5f1ea",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
