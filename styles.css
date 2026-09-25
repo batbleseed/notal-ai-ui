@@ -474,3 +474,64 @@ body.sidebar-hidden .sidebar-open { display: inline-flex; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- switch toggle ---------- */
+.switch { position: relative; display: inline-block; width: 42px; height: 24px; flex: none; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.sl.track {
+  position: absolute; inset: 0; border-radius: 999px;
+  background: var(--border); transition: background .18s;
+}
+.sl.track::before {
+  content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px;
+  border-radius: 50%; background: #fff; transition: transform .18s;
+  box-shadow: 0 1px 2px rgba(0,0,0,.25);
+}
+.switch input:checked + .sl.track { background: var(--accent); }
+.switch input:checked + .sl.track::before { transform: translateX(18px); }
+.switch input:disabled + .sl.track { opacity: .45; cursor: not-allowed; }
+
+/* ---------- shortcut list ---------- */
+.shortcut-list { list-style: none; display: grid; gap: 8px; }
+.shortcut-list li {
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); font-size: 13.5px;
+}
+.shortcut-list li span { flex: 1; color: var(--text-soft); }
+kbd {
+  font-family: var(--mono, ui-monospace, monospace); font-size: 11.5px;
+  padding: 2px 7px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); box-shadow: 0 1px 0 var(--border);
+}
+
+/* ---------- pin lock screen ---------- */
+.lock-screen {
+  position: fixed; inset: 0; z-index: 120;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(14px);
+}
+.lock-screen[hidden] { display: none; }
+.lock-card {
+  width: min(330px, 88vw); padding: 28px 26px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 18px; box-shadow: var(--shadow, 0 18px 50px rgba(0,0,0,.16));
+  display: grid; gap: 10px; justify-items: center;
+}
+.lock-logo {
+  width: 44px; height: 44px; border-radius: 13px; background: var(--text);
+  display: grid; place-items: center;
+}
+.lock-logo::after { content: ""; width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 16px solid var(--bg); }
+.lock-card h2 { font-family: var(--serif); font-size: 19px; font-weight: 600; }
+.lock-hint { font-size: 13px; color: var(--text-soft); margin-top: -4px; }
+.pin-input {
+  width: 100%; text-align: center; letter-spacing: 6px; font-size: 18px;
+  padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg); color: var(--text);
+}
+.pin-input:focus { outline: none; border-color: var(--accent); }
+.lock-card .primary-btn { width: 100%; justify-content: center; }
+.lock-error { font-size: 12.5px; color: #c0392b; }
+.lock-error[hidden] { display: none; }

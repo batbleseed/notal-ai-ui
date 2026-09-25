@@ -158,6 +158,9 @@
           <button class="settings-tab active" data-tab="general">General</button>
           <button class="settings-tab" data-tab="account">Account</button>
           <button class="settings-tab" data-tab="providers">Providers</button>
+          <button class="settings-tab" data-tab="notifications">Notifications</button>
+          <button class="settings-tab" data-tab="security">Security</button>
+          <button class="settings-tab" data-tab="shortcuts">Shortcuts</button>
         </nav>
         <div class="settings-panels">
           <section class="settings-panel" id="panel-general">
@@ -215,9 +218,79 @@
               </div>
             </form>
           </section>
+          <section class="settings-panel" id="panel-notifications" hidden>
+            <p class="panel-note">Desktop alerts fire when Notal finishes a reply while the tab is in the background.</p>
+            <div class="setting-row">
+              <div class="setting-info"><span class="setting-name">Desktop notifications</span><small id="notifStatus">Browser permission: not requested</small></div>
+              <div class="auth-actions">
+                <label class="switch"><input type="checkbox" id="notifToggle" /><span class="sl track"></span></label>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info"><span class="setting-name">Reply sound</span><small>Soft chime when an answer lands</small></div>
+              <label class="switch"><input type="checkbox" id="soundToggle" /><span class="sl track"></span></label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info"><span class="setting-name">Test</span><small>Send one sample notification now</small></div>
+              <button class="ghost-btn" id="notifTestBtn" type="button">Send test</button>
+            </div>
+          </section>
+          <section class="settings-panel" id="panel-security" hidden>
+            <p class="panel-note">Local only. A PIN hides the app from people using your device — it does not encrypt your data.</p>
+            <div class="setting-row">
+              <div class="setting-info"><span class="setting-name">App lock PIN</span><small id="pinStatus">Not set</small></div>
+              <div class="auth-actions">
+                <button class="ghost-btn" id="setPinBtn" type="button">Set PIN</button>
+                <button class="danger-btn" id="clearPinBtn" type="button" hidden>Remove PIN</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info"><span class="setting-name">Auto-lock on idle</span><small>Lock after inactivity (needs a PIN)</small></div>
+              <select id="idleLockSel" class="text-input">
+                <option value="0">Off</option>
+                <option value="60">1 minute</option>
+                <option value="300">5 minutes</option>
+                <option value="900">15 minutes</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info"><span class="setting-name">Lock now</span><small>Hide behind the PIN screen</small></div>
+              <button class="ghost-btn" id="lockNowBtn" type="button" disabled>Lock</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info"><span class="setting-name">API keys</span><small id="keyCount">No provider keys stored</small></div>
+              <button class="danger-btn" id="clearKeysBtn" type="button">Clear all keys</button>
+            </div>
+          </section>
+          <section class="settings-panel" id="panel-shortcuts" hidden>
+            <p class="panel-note">Shortcuts work anywhere in the app. Ctrl on Windows/Linux, ⌘ on Mac.</p>
+            <ul class="shortcut-list">
+              <li><span>New chat</span><kbd>Ctrl</kbd><kbd>K</kbd></li>
+              <li><span>Search chats</span><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F</kbd></li>
+              <li><span>Focus input</span><kbd>Ctrl</kbd><kbd>I</kbd></li>
+              <li><span>Toggle sidebar</span><kbd>Ctrl</kbd><kbd>B</kbd></li>
+              <li><span>Open settings</span><kbd>Ctrl</kbd><kbd>,</kbd></li>
+              <li><span>Lock app (with PIN)</span><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>L</kbd></li>
+              <li><span>Send message</span><kbd>Enter</kbd></li>
+              <li><span>New line</span><kbd>Shift</kbd><kbd>Enter</kbd></li>
+              <li><span>Close menu / settings</span><kbd>Esc</kbd></li>
+            </ul>
+          </section>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- PIN lock screen -->
+  <div class="lock-screen" id="lockScreen" hidden>
+    <form class="lock-card" id="lockForm" autocomplete="off">
+      <div class="lock-logo" aria-hidden="true"></div>
+      <h2>Notal AI is locked</h2>
+      <p class="lock-hint">Enter your PIN to continue</p>
+      <input type="password" id="pinInput" class="pin-input" inputmode="numeric" autocomplete="off" placeholder="••••" aria-label="PIN" />
+      <button type="submit" class="primary-btn">Unlock</button>
+      <p class="lock-error" id="lockError" hidden>Wrong PIN — try again</p>
+    </form>
   </div>
 
   <div class="toast" id="toast" role="status"></div>

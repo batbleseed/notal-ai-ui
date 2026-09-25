@@ -75,6 +75,9 @@ let state = Object.assign({
   models: [{ id: "notal-generic", name: "notal generic", provider: "Notal built-in" }],
   selectedModel: "notal-generic",
   providers: [],
+  notifications: { enabled: false, sound: false },
+  pinHash: null,
+  idleLock: 0,
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
@@ -83,6 +86,10 @@ if (!state.models.some(m => m.id === "notal-generic")) state.models.unshift(GENE
 if (!state.models.some(m => m.id === state.selectedModel)) state.selectedModel = "notal-generic";
 if (!Array.isArray(state.providers)) state.providers = [];
 if (!state.firebaseConfig) state.firebaseConfig = DEFAULT_FIREBASE_CONFIG;
+if (!state.notifications || typeof state.notifications !== "object")
+  state.notifications = { enabled: false, sound: false };
+if (typeof state.pinHash !== "string") state.pinHash = null;
+if (typeof state.idleLock !== "number") state.idleLock = 0;
 
 function selectedModel() {
   return state.models.find(m => m.id === state.selectedModel) ?? state.models[0];
@@ -268,7 +275,7 @@ async function sendMessage(text) {
     }
     conv.messages.push({ role: "assistant", text: reply });
     save();
-    typewrite(typingEl, reply);
+    typewrite(typingEl, reply, () => notifyReply(reply));
   } catch (err) {
     typingEl.classList.add("msg-error");
     typingEl.textContent = "⚠ " + (err?.message || "Request failed");
@@ -878,13 +885,213 @@ function renderAuthUI() {
   }
 }
 
+/* ---------- notifications ---------- */
+els.notifToggle = $("#notifToggle");
+els.soundToggle = $("#soundToggle");
+els.notifStatus = $("#notifStatus");
+
+function renderNotifUI() {
+  els.notifToggle.checked = !!state.notifications.enabled;
+  els.soundToggle.checked = !!state.notifications.sound;
+  if (!("Notification" in window)) {
+    els.notifStatus.textContent = "This browser has no notification support";
+    els.notifToggle.disabled = true;
+    return;
+  }
+  const perm = Notification.permission;
+  els.notifStatus.textContent = perm === "granted" ? "Browser permission: allowed"
+    : perm === "denied" ? "Browser permission: blocked — allow it in site settings"
+    : "Browser permission: not requested";
+  if (perm !== "granted") state.notifications.enabled = false;
+  els.notifToggle.checked = !!state.notifications.enabled;
+}
+
+els.notifToggle.addEventListener("change", async () => {
+  if (!("Notification" in window)) return;
+  if (els.notifToggle.checked) {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") {
+      toast("Notifications are blocked in your browser settings.");
+      renderNotifUI();
+      return;
+    }
+  }
+  state.notifications.enabled = els.notifToggle.checked;
+  save();
+  renderNotifUI();
+  toast(state.notifications.enabled ? "You'll be notified when a reply finishes." : "Desktop notifications off.");
+});
+
+els.soundToggle.addEventListener("change", () => {
+  state.notifications.sound = els.soundToggle.checked;
+  save();
+  if (els.soundToggle.checked) chime();
+});
+
+$("#notifTestBtn").addEventListener("click", async () => {
+  if (!("Notification" in window)) return;
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") { toast("Permission denied."); renderNotifUI(); return; }
+  new Notification("Notal AI", { body: "Test notification — replies will appear like this." });
+  state.notifications.enabled = true;
+  save();
+  renderNotifUI();
+});
+
+let audioCtx;
+function chime() {
+  try {
+    audioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
+    const t = audioCtx.currentTime;
+    [["G4", 392], ["C5", 523.25]].forEach(([_, f], i) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = "sine"; o.frequency.value = f;
+      o.connect(g); g.connect(audioCtx.destination);
+      const start = t + i * 0.12;
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(0.07, start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
+      o.start(start); o.stop(start + 0.4);
+    });
+  } catch { /* audio unavailable */ }
+}
+
+function notifyReply(text) {
+  if (!state.notifications.enabled || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+  if (!document.hidden) return;
+  new Notification("Notal AI", { body: text.slice(0, 120) || "Reply ready" });
+  if (state.notifications.sound) chime();
+}
+
+/* ---------- security (local PIN lock) ---------- */
+els.lockScreen = $("#lockScreen");
+els.lockForm = $("#lockForm");
+els.pinInput = $("#pinInput");
+els.lockError = $("#lockError");
+els.setPinBtn = $("#setPinBtn");
+els.clearPinBtn = $("#clearPinBtn");
+els.lockNowBtn = $("#lockNowBtn");
+els.idleLockSel = $("#idleLockSel");
+els.pinStatus = $("#pinStatus");
+els.keyCount = $("#keyCount");
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function renderSecurityUI() {
+  els.pinStatus.textContent = state.pinHash ? "PIN set — app locks on open" : "Not set";
+  els.setPinBtn.textContent = state.pinHash ? "Change PIN" : "Set PIN";
+  els.clearPinBtn.hidden = !state.pinHash;
+  els.lockNowBtn.disabled = !state.pinHash;
+  els.idleLockSel.value = String(state.idleLock);
+  const withKeys = state.providers.filter(p => p.apiKey);
+  els.keyCount.textContent = withKeys.length
+    ? `${withKeys.length} provider key${withKeys.length > 1 ? "s" : ""} stored in this browser`
+    : "No provider keys stored";
+}
+
+els.setPinBtn.addEventListener("click", async () => {
+  if (state.pinHash) {
+    const old = prompt("Enter your current PIN:");
+    if (old === null) return;
+    if (await sha256(old) !== state.pinHash) { toast("Wrong PIN."); return; }
+  }
+  const pin = prompt(state.pinHash ? "New PIN (4–8 digits):" : "Choose a PIN (4–8 digits):");
+  if (pin === null) return;
+  if (!/^\d{4,8}$/.test(pin.trim())) { toast("PIN must be 4–8 digits."); return; }
+  state.pinHash = await sha256(pin.trim());
+  save();
+  renderSecurityUI();
+  resetIdleTimer();
+  toast("PIN saved. It unlocks this app only.");
+});
+
+els.clearPinBtn.addEventListener("click", async () => {
+  const old = prompt("Enter your current PIN to remove it:");
+  if (old === null) return;
+  if (await sha256(old) !== state.pinHash) { toast("Wrong PIN."); return; }
+  state.pinHash = null;
+  state.idleLock = 0;
+  save();
+  renderSecurityUI();
+  resetIdleTimer();
+  toast("PIN removed.");
+});
+
+els.idleLockSel.addEventListener("change", () => {
+  state.idleLock = Number(els.idleLockSel.value) || 0;
+  save();
+  resetIdleTimer();
+});
+
+$("#clearKeysBtn").addEventListener("click", () => {
+  const withKeys = state.providers.filter(p => p.apiKey);
+  if (!withKeys.length) { toast("No keys to clear."); return; }
+  if (!confirm(`Remove the saved API key from ${withKeys.length} provider(s)? The models stay, you'd just re-enter keys later.`)) return;
+  for (const p of state.providers) p.apiKey = "";
+  save();
+  renderProviders();
+  renderSecurityUI();
+  toast("All API keys cleared.");
+});
+
+function lockApp() {
+  if (!state.pinHash) return;
+  els.lockScreen.hidden = false;
+  els.pinInput.value = "";
+  els.lockError.hidden = true;
+  setTimeout(() => els.pinInput.focus(), 30);
+}
+
+els.lockForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const ok = await sha256(els.pinInput.value.trim()) === state.pinHash;
+  if (ok) {
+    els.lockScreen.hidden = true;
+    resetIdleTimer();
+  } else {
+    els.lockError.hidden = false;
+    els.pinInput.select();
+  }
+});
+
+let idleTimer;
+function resetIdleTimer() {
+  clearTimeout(idleTimer);
+  if (!state.idleLock || !state.pinHash || !els.lockScreen.hidden) return;
+  idleTimer = setTimeout(lockApp, state.idleLock * 1000);
+}
+["pointerdown", "keydown", "pointermove"].forEach(ev =>
+  window.addEventListener(ev, () => resetIdleTimer(), { passive: true }));
+
+/* ---------- keyboard shortcuts ---------- */
+function shortcutOpenSettings() {
+  lockScreenSafe(() => openSettings());
+}
+function lockScreenSafe(fn) { if (!els.lockScreen.hidden) return; fn(); }
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (!els.lockScreen.hidden) return;
+    setModelMenu(false);
+    if (!els.overlay.hidden) closeSettings();
+    return;
+  }
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "k") { e.preventDefault(); lockScreenSafe(newConversation); }
+  else if (k === "i") { e.preventDefault(); lockScreenSafe(() => els.input.focus()); }
+  else if (k === "b") { e.preventDefault(); lockScreenSafe(() => els.sidebarClose.click()); }
+  else if (k === ",") { e.preventDefault(); shortcutOpenSettings(); }
+  else if (k === "l" && e.shiftKey) { e.preventDefault(); lockApp(); }
+  else if (k === "f" && e.shiftKey) { e.preventDefault(); lockScreenSafe(() => els.search.focus()); }
+});
+
 /* ---------- global dismiss ---------- */
 document.addEventListener("click", () => setModelMenu(false));
-document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
-  setModelMenu(false);
-  if (!els.overlay.hidden) closeSettings();
-});
 
 /* ---------- init ---------- */
 if (window.innerWidth < 860) els.sidebar.classList.add("collapsed");
@@ -893,6 +1100,9 @@ els.modelName.textContent = selectedModel().name;
 renderModelMenu();
 renderProviders();
 renderAuthUI();
+renderNotifUI();
+renderSecurityUI();
+if (state.pinHash) lockApp(); else resetIdleTimer();
 setGreeting();
 renderHistory();
 renderMessages();
