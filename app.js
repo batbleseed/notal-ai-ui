@@ -705,7 +705,48 @@ els.overlay.addEventListener("click", (e) => {
   if (e.target === els.overlay) closeSettings();
 });
 els.signinBtn = $("#signinBtn");
-els.signinBtn.addEventListener("click", () => openSettings("account"));
+els.accountMenu = $("#accountMenu");
+els.amAvatar = $("#amAvatar");
+els.amName = $("#amName");
+els.amSub = $("#amSub");
+els.amSettingsBtn = $("#amSettingsBtn");
+els.amSignInBtn = $("#amSignInBtn");
+els.amSignOutBtn = $("#amSignOutBtn");
+els.amSwitchBtn = $("#amSwitchBtn");
+
+function setAccountMenu(open) {
+  els.accountMenu.hidden = !open;
+  els.signinBtn.setAttribute("aria-expanded", String(open));
+  els.signinBtn.classList.toggle("open", open);
+}
+
+els.signinBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setAccountMenu(els.accountMenu.hidden);
+});
+els.accountMenu.addEventListener("click", (e) => e.stopPropagation());
+els.amSettingsBtn.addEventListener("click", () => { setAccountMenu(false); openSettings(); });
+els.amSignInBtn.addEventListener("click", () => { setAccountMenu(false); els.googleSignInBtn.click(); });
+els.amSignOutBtn.addEventListener("click", () => { setAccountMenu(false); els.googleSignOutBtn.click(); });
+els.amSwitchBtn.addEventListener("click", async () => {
+  setAccountMenu(false);
+  els.amSwitchBtn.disabled = true;
+  try {
+    const { auth, mods } = await ensureAuth();
+    await mods.signOut(auth);
+    const provider = new mods.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    await mods.signInWithPopup(auth, provider);
+    toast("Switched account.");
+  } catch (err) {
+    const cancelled = String(err?.code || "").includes("popup-closed-by-user")
+      || String(err?.code || "").includes("cancelled");
+    toast(cancelled ? "Sign-in cancelled — you are signed out."
+      : "Could not switch account: " + String(err?.message || err).slice(0, 120));
+  } finally {
+    els.amSwitchBtn.disabled = false;
+  }
+});
 
 document.querySelectorAll(".settings-tab").forEach(tab => {
   tab.addEventListener("click", () => switchTab(tab.dataset.tab));
@@ -718,18 +759,19 @@ function switchTab(name) {
 }
 
 /* ---------- general ---------- */
+const THEME_SEGS = document.querySelectorAll("[data-theme-seg]");
 function applyTheme() {
   document.documentElement.dataset.theme = state.theme;
-  document.querySelectorAll("#themeSeg button").forEach(b =>
-    b.classList.toggle("active", b.dataset.themeVal === state.theme));
+  THEME_SEGS.forEach(seg => seg.querySelectorAll("button").forEach(b =>
+    b.classList.toggle("active", b.dataset.themeVal === state.theme)));
 }
-$("#themeSeg").addEventListener("click", (e) => {
+THEME_SEGS.forEach(seg => seg.addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-theme-val]");
   if (!btn) return;
   state.theme = btn.dataset.themeVal;
   applyTheme();
   save();
-});
+}));
 
 $("#clearChatsBtn").addEventListener("click", () => {
   if (!state.conversations.length) return;
@@ -748,6 +790,7 @@ els.displayNameInput.addEventListener("input", () => {
   state.displayName = els.displayNameInput.value.trim() || "there";
   save();
   setGreeting();
+  if (!currentUser) renderAuthUI();
 });
 
 /* ---------- providers ---------- */
@@ -879,11 +922,31 @@ els.googleSignOutBtn.addEventListener("click", async () => {
 function renderAuthUI() {
   els.googleSignInBtn.hidden = !!currentUser;
   els.googleSignOutBtn.hidden = !currentUser;
+  els.amSignInBtn.hidden = !!currentUser;
+  els.amSignOutBtn.hidden = !currentUser;
+  els.amSwitchBtn.hidden = !currentUser;
   els.authStatus.textContent = currentUser
     ? `${currentUser.displayName || currentUser.email} — signed in with Google`
     : "Configured — click Sign in with Google";
   const label = els.signinBtn.querySelector("span");
   let photo = els.signinBtn.querySelector("img");
+
+  els.amSub.textContent = currentUser
+    ? (currentUser.email || "Signed in with Google")
+    : "Not signed in";
+  els.amName.textContent = currentUser
+    ? (currentUser.displayName || currentUser.email || "Account")
+    : (state.displayName || "Guest");
+  els.amAvatar.innerHTML = "";
+  if (currentUser?.photoURL) {
+    const img = document.createElement("img");
+    img.src = currentUser.photoURL;
+    img.alt = "";
+    els.amAvatar.append(img);
+  } else {
+    els.amAvatar.textContent = (currentUser?.displayName || state.displayName || "G").slice(0, 1).toUpperCase();
+  }
+
   if (currentUser) {
     label.textContent = (currentUser.displayName || currentUser.email || "Account").split(" ")[0];
     els.signinBtn.classList.add("signed-in");
@@ -1095,6 +1158,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (!els.lockScreen.hidden) return;
     setModelMenu(false);
+    setAccountMenu(false);
     if (!els.overlay.hidden) closeSettings();
     return;
   }
@@ -1374,7 +1438,7 @@ $("#skillForm").addEventListener("submit", (e) => {
 });
 
 /* ---------- global dismiss ---------- */
-document.addEventListener("click", () => setModelMenu(false));
+document.addEventListener("click", () => { setModelMenu(false); setAccountMenu(false); });
 
 /* ---------- chat logo: eyes that follow the cursor ---------- */
 let stareTargets = [];

@@ -3,344 +3,288 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Notal AI — Your AI Workspace</title>
+  <title>Notal AI — your own AI workspace</title>
+  <meta name="description" content="Notal AI is a calm AI workspace where you bring your own models: projects, memory, reusable skills, attachments, dictation and Google sign-in. Everything stays in your browser." />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f5f1ea;
+      --surface: #fffdfa;
+      --surface-2: #efe9df;
+      --text: #1f1e1d;
+      --text-soft: #5c5750;
+      --text-faint: #8b847b;
+      --border: #e0d8cb;
+      --accent: #d97757;
+      --serif: "Source Serif 4", Georgia, serif;
+      --sans: Inter, system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: var(--sans); font-size: 16px; line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; }
+    .wrap { width: min(1040px, calc(100% - 48px)); margin: 0 auto; }
+
+    /* ---------- nav ---------- */
+    .nav {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 22px 0;
+    }
+    .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 600; }
+    .tile {
+      width: 30px; height: 30px; border-radius: 9px; background: var(--text); color: var(--bg);
+      display: grid; place-items: center;
+    }
+    .nav-links { display: flex; align-items: center; gap: 22px; font-size: 14.5px; }
+    .nav-links a { text-decoration: none; color: var(--text-soft); }
+    .nav-links a:hover { color: var(--text); }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 20px; border-radius: 999px; text-decoration: none;
+      font-size: 14.5px; font-weight: 600; border: 1px solid transparent;
+      transition: transform .14s ease, background .14s ease, border-color .14s ease;
+    }
+    .btn-primary { background: var(--text); color: var(--bg); }
+    .btn-primary:hover { transform: translateY(-1px); background: #000; }
+    .btn-ghost { border-color: var(--border); background: var(--surface); color: var(--text); }
+    .btn-ghost:hover { border-color: var(--text-faint); }
+    .btn-lg { padding: 14px 28px; font-size: 16px; }
+
+    /* ---------- hero ---------- */
+    .hero { padding: clamp(48px, 11vh, 104px) 0 68px; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12.5px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 22px;
+    }
+    .eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--accent); }
+    h1 {
+      font-family: var(--serif); font-weight: 600;
+      font-size: clamp(38px, 7vw, 66px); line-height: 1.06; letter-spacing: -.5px;
+      max-width: 17ch;
+    }
+    h1 em { font-style: italic; color: var(--accent); }
+    .lede {
+      margin-top: 22px; max-width: 52ch;
+      font-size: clamp(16.5px, 2.1vw, 19px); color: var(--text-soft);
+    }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+    .hero-note { margin-top: 16px; font-size: 13.5px; color: var(--text-faint); }
+
+    /* ---------- preview strip ---------- */
+    .preview {
+      margin: 12px 0 78px;
+      border: 1px solid var(--border); border-radius: 20px; background: var(--surface);
+      box-shadow: 0 26px 60px -32px rgba(31, 30, 29, .35);
+      overflow: hidden;
+    }
+    .preview-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2);
+    }
+    .preview-bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--border); display: block; }
+    .preview-bar span { margin-left: 6px; font-size: 12.5px; color: var(--text-faint); }
+    .preview-body { display: flex; flex-direction: column; gap: 16px; padding: 26px 26px 30px; }
+    .row { display: flex; gap: 12px; align-items: flex-start; }
+    .row.me { justify-content: flex-end; }
+    .mark {
+      width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+      display: grid; place-items: center; background: var(--accent); color: #fff;
+    }
+    .bubble {
+      max-width: 46ch; padding: 11px 15px; border-radius: 14px; font-size: 14.5px;
+      background: var(--surface-2); color: var(--text-soft);
+    }
+    .row.me .bubble { background: var(--text); color: var(--bg); border-bottom-right-radius: 4px; }
+    .row:not(.me) .bubble { border-bottom-left-radius: 4px; }
+
+    /* ---------- sections ---------- */
+    section { padding: 62px 0; border-top: 1px solid var(--border); }
+    h2 { font-family: var(--serif); font-size: clamp(26px, 4vw, 36px); font-weight: 600; line-height: 1.15; }
+    .section-sub { margin-top: 12px; max-width: 58ch; color: var(--text-soft); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 14px; margin-top: 36px; }
+    .feature {
+      padding: 22px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface);
+      transition: transform .16s ease, border-color .16s ease;
+    }
+    .feature:hover { transform: translateY(-3px); border-color: var(--text-faint); }
+    .feature .tile { width: 28px; height: 28px; border-radius: 8px; margin-bottom: 14px; }
+    .feature h3 { font-family: var(--serif); font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+    .feature p { font-size: 14.5px; color: var(--text-soft); }
+
+    /* ---------- steps ---------- */
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 26px; margin-top: 34px; }
+    .step { display: grid; gap: 8px; }
+    .step .n {
+      width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border);
+      display: grid; place-items: center; font-family: var(--serif); font-size: 15px; color: var(--text-soft);
+    }
+    .step h3 { font-size: 15.5px; font-weight: 600; }
+    .step p { font-size: 14.5px; color: var(--text-soft); }
+
+    /* ---------- honest note ---------- */
+    .note {
+      display: grid; gap: 6px; margin-top: 36px; padding: 20px 22px;
+      border: 1px dashed var(--border); border-radius: 16px; background: var(--surface-2);
+    }
+    .note h3 { font-size: 15px; font-weight: 600; }
+    .note p { font-size: 14px; color: var(--text-soft); }
+
+    /* ---------- closing ---------- */
+    .closing { text-align: center; padding: 78px 0 84px; }
+    .closing h2 { max-width: 22ch; margin: 0 auto; }
+    .closing p { margin: 14px auto 30px; max-width: 46ch; color: var(--text-soft); }
+
+    footer { border-top: 1px solid var(--border); padding: 26px 0 40px; font-size: 13.5px; color: var(--text-faint); }
+    footer .wrap { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+    footer a { color: var(--text-soft); text-decoration: none; }
+    footer a:hover { color: var(--accent); }
+
+    @media (max-width: 620px) {
+      .nav-links a:not(.btn) { display: none; }
+    }
+  </style>
 </head>
 <body>
-  <div class="app">
-    <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <a class="brand" href="#">
-          <span class="brand-logo" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg>
-          </span>
-          <span class="brand-name">Notal AI</span>
-        </a>
-        <button class="icon-btn sidebar-close" id="sidebarClose" title="Collapse sidebar" aria-label="Collapse sidebar">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
-        </button>
+  <div class="wrap">
+    <nav class="nav">
+      <a class="brand" href="index.html">
+        <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+        <span>Notal AI</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">What it does</a>
+        <a href="#how">How it works</a>
+        <a href="#private">Privacy</a>
+        <a class="btn btn-primary" href="chat.html">Try now</a>
       </div>
+    </nav>
 
-      <nav class="sidebar-nav">
-        <button class="nav-item active" data-view="chats">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 01-9 8.3 8.6 8.6 0 01-3.8-.9L3 20l1.1-4.9a8.4 8.4 0 01-.9-3.6 8.4 8.4 0 018.3-9 8.4 8.4 0 019.5 9z"/></svg>
-          <span>Chats</span>
-        </button>
-        <button class="nav-item" data-view="projects">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
-          <span>Projects</span>
-        </button>
-        <button class="nav-item" data-view="memory">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4a4 4 0 00-4 4v1a4 4 0 00-2 7 4 4 0 006 4h0a4 4 0 006-4 4 4 0 00-2-7V8a4 4 0 00-4-4z"/><path d="M12 4v16"/></svg>
-          <span>Memory</span>
-        </button>
-        <button class="nav-item" data-view="skills">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 4l8 14H4z"/></svg>
-          <span>Skills</span>
-        </button>
-      </nav>
+    <header class="hero">
+      <span class="eyebrow">Your workspace, your models</span>
+      <h1>Think with <em>any</em> model, in one calm place.</h1>
+      <p class="lede">
+        Notal AI is a small, fast AI workspace you actually control. Bring your own model keys,
+        organise chats into projects, teach it things to remember, and turn your best prompts into
+        one-click skills — no accounts to buy, no interface in your way.
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-lg" href="chat.html">Try now →</a>
+        <a class="btn btn-ghost btn-lg" href="#features">See what it does</a>
+      </div>
+      <p class="hero-note">Opens straight into the chat. Nothing to install, nothing to sign up for.</p>
+    </header>
 
-      <div class="new-chat-wrap">
-        <button class="new-chat-btn" id="newChatBtn">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          <span>New chat</span>
-        </button>
-        <div class="search-wrap">
-          <svg class="search-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          <input type="text" id="searchChats" placeholder="Search chats…" />
+    <div class="preview" aria-hidden="true">
+      <div class="preview-bar">
+        <i></i><i></i><i></i>
+        <span>notal.ai / chat — project: Notal AI v2</span>
+      </div>
+      <div class="preview-body">
+        <div class="row me">
+          <div class="bubble">Review this idea: an app that turns meeting notes into tasks</div>
         </div>
-      </div>
-
-      <div class="history">
-        <p class="history-label">Recent</p>
-        <ul class="history-list" id="historyList"></ul>
-      </div>
-
-      <div class="sidebar-footer">
-        <button class="signin-btn" id="signinBtn">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0115 0"/></svg>
-          <span>Sign in</span>
-        </button>
-        <button class="icon-btn" id="gearBtn" title="Settings" aria-label="Settings">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1.03 1.56V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.03-1.56 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.7 1.7 0 004.6 15a1.7 1.7 0 00-1.56-1.03H3a2 2 0 110-4h.09A1.7 1.7 0 004.68 8.6a1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001.03-1.56V3a2 2 0 114 0v.09A1.7 1.7 0 0015.06 4.65a1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.56 1.03H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1z"/></svg>
-        </button>
-      </div>
-    </aside>
-
-    <!-- Main -->
-    <main class="main">
-      <header class="topbar">
-        <button class="icon-btn sidebar-open" id="sidebarOpen" title="Open sidebar" aria-label="Open sidebar">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-        </button>
-        <span class="brand-logo" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg>
-        </span>
-        <span class="chat-title">Notal AI</span>
-        <div class="topbar-spacer"></div>
-        <button class="ghost-btn" id="shareBtn">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.5l6.8-4M8.6 13.5l6.8 4"/></svg>
-          <span>Share</span>
-        </button>
-      </header>
-
-      <section class="chat" id="chat">
-        <div class="greeting" id="greeting">
-          <h1 id="greetingTitle">Good evening, batbleseed</h1>
-          <p class="greeting-sub">What are you thinking about today?</p>
-          <div class="suggestions" id="suggestions">
-            <button class="suggestion" data-prompt="Write a project brief for a weekly team newsletter">
-              <span class="s-icon">✎</span> Write a project brief
-            </button>
-            <button class="suggestion" data-prompt="Explain the difference between RAG and fine-tuning, simply">
-              <span class="s-icon">◎</span> Explain a concept
-            </button>
-            <button class="suggestion" data-prompt="Help me plan a 3-day trip to Kyoto in autumn">
-              <span class="s-icon">☼</span> Plan a trip
-            </button>
-            <button class="suggestion" data-prompt="Review this idea: an app that turns meeting notes into tasks">
-              <span class="s-icon">✓</span> Review an idea
-            </button>
+        <div class="row">
+          <span class="mark"><svg viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <div class="bubble">
+            Good seed. Strengths — it solves a pain people already feel, and the value is visible
+            immediately. Risks — the magic moment depends entirely on extraction quality.<br><br>
+            You wanted me to remember that you prefer short answers with a first test you can run
+            this week. So: try it on ten real meetings before writing any code.
           </div>
-        </div>
-        <div class="messages" id="messages"></div>
-      </section>
-
-      <!-- Views for Projects / Memory / Skills -->
-      <section class="view" id="view-projects" hidden>
-        <header class="view-header">
-          <div>
-            <h1>Projects</h1>
-            <p class="view-sub">Group chats into a project. Anything you add to Memory for a project is shared with the AI in its chats.</p>
-          </div>
-          <form class="inline-add" id="projectForm">
-            <input type="text" id="projNameInput" placeholder="New project name" required />
-            <button type="submit" class="primary-btn">Create</button>
-          </form>
-        </header>
-        <ul class="card-grid" id="projectGrid"></ul>
-      </section>
-
-      <section class="view" id="view-memory" hidden>
-        <header class="view-header">
-          <div>
-            <h1>Memory</h1>
-            <p class="view-sub">Facts the AI should remember when it answers.</p>
-          </div>
-        </header>
-        <form class="inline-add" id="memoryForm">
-          <select id="memProjectSel"></select>
-          <input type="text" id="memInput" placeholder="e.g. I'm building Notal AI, a v2 of my chat app" style="flex:1" required />
-          <button type="submit" class="primary-btn">Add</button>
-        </form>
-        <ul class="item-list" id="memoryList"></ul>
-      </section>
-
-      <section class="view" id="view-skills" hidden>
-        <header class="view-header">
-          <div>
-            <h1>Skills</h1>
-            <p class="view-sub">Reusable prompts. Click Use and the prompt lands in your message box, ready to edit.</p>
-          </div>
-          <form class="inline-add" id="skillForm">
-            <input type="text" id="skillNameInput" placeholder="Skill name" required />
-            <input type="text" id="skillPromptInput" placeholder="Prompt template, e.g. Review this code for bugs: [paste code]" style="flex:2" required />
-            <button type="submit" class="primary-btn">Add skill</button>
-          </form>
-        </header>
-        <ul class="card-grid" id="skillGrid"></ul>
-      </section>
-
-      <footer class="composer-wrap">
-        <form class="composer" id="composer">
-          <div class="attach-tray" id="attachTray" hidden></div>
-          <textarea id="input" rows="1" placeholder="Message Notal AI..." autofocus></textarea>
-          <div class="composer-bar">
-            <div class="composer-left">
-              <div class="model-picker" id="modelPicker">
-                <svg class="mp-star" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><path d="M5 7h14l-7 10.5z"/></svg>
-                <span class="model-name">Notal AI</span>
-                <svg class="mp-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
-                <div class="model-menu" id="modelMenu" hidden></div>
-              </div>
-              <input type="file" id="fileInput" multiple hidden />
-              <label class="icon-btn" for="fileInput" title="Attach file" aria-label="Attach file">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L15 4.5a3.3 3.3 0 014.7 4.7L10.4 18.5a1.7 1.7 0 01-2.4-2.4l7.8-7.8"/></svg>
-              </label>
-              <button type="button" class="icon-btn" id="micBtn" title="Dictate" aria-label="Voice input">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3M8.5 21h7"/></svg>
-              </button>
-            </div>
-            <div class="composer-right">
-              <span class="char-count" id="charCount">0</span>
-              <button type="submit" class="send-btn" id="sendBtn" title="Send" aria-label="Send message">
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-              </button>
-            </div>
-          </div>
-        </form>
-        <p class="fineprint">Notal AI can make mistakes. Double-check important information.</p>
-      </footer>
-    </main>
-  </div>
-
-  <!-- Settings modal -->
-  <div class="modal-overlay" id="settingsOverlay" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-      <header class="modal-header">
-        <h2 id="settingsTitle">Settings</h2>
-        <button class="icon-btn" id="settingsClose" aria-label="Close settings">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
-      </header>
-      <div class="modal-body">
-        <nav class="settings-nav">
-          <button class="settings-tab active" data-tab="general">General</button>
-          <button class="settings-tab" data-tab="account">Account</button>
-          <button class="settings-tab" data-tab="providers">Providers</button>
-          <button class="settings-tab" data-tab="notifications">Notifications</button>
-          <button class="settings-tab" data-tab="security">Security</button>
-          <button class="settings-tab" data-tab="shortcuts">Shortcuts</button>
-        </nav>
-        <div class="settings-panels">
-          <section class="settings-panel" id="panel-general">
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Appearance</span><small>Switch between light and dark</small></div>
-              <div class="seg" id="themeSeg">
-                <button type="button" data-theme-val="light">Light</button>
-                <button type="button" data-theme-val="dark">Dark</button>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Chat history</span><small>Stored only in this browser</small></div>
-              <button class="danger-btn" id="clearChatsBtn" type="button">Clear all chats</button>
-            </div>
-          </section>
-          <section class="settings-panel" id="panel-account" hidden>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Display name</span><small>Used in the greeting</small></div>
-              <input type="text" id="displayNameInput" class="text-input" placeholder="Your name" />
-            </div>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Google account</span><small id="authStatus">Not signed in</small></div>
-              <div class="auth-actions">
-                <button class="ghost-btn" id="googleSignInBtn" type="button">Sign in with Google</button>
-                <button class="danger-btn" id="googleSignOutBtn" type="button" hidden>Sign out</button>
-              </div>
-            </div>
-          </section>
-          <section class="settings-panel" id="panel-providers" hidden>
-            <p class="panel-note">Models you add here appear in the model picker. Keys stay in this browser only.</p>
-            <ul class="provider-list" id="providerList"></ul>
-            <form class="provider-form" id="providerForm">
-              <div class="pf-grid">
-                <label>Provider
-                  <select id="pfProvider">
-                    <option>OpenAI-compatible</option>
-                    <option>Anthropic</option>
-                    <option>Google Gemini</option>
-                    <option>Ollama (local)</option>
-                    <option>Custom</option>
-                  </select>
-                </label>
-                <label>Model ID
-                  <input type="text" id="pfName" placeholder="e.g. llama3.1:8b, gpt-4o-mini" required />
-                </label>
-                <label>Base URL
-                  <input type="url" id="pfUrl" placeholder="https://api.example.com/v1 or http://localhost:11434" />
-                </label>
-                <label>API key
-                  <input type="password" id="pfKey" placeholder="not needed for local Ollama" autocomplete="off" />
-                </label>
-              </div>
-              <div class="pf-actions">
-                <button type="submit" class="primary-btn">Add model</button>
-              </div>
-            </form>
-          </section>
-          <section class="settings-panel" id="panel-notifications" hidden>
-            <p class="panel-note">Desktop alerts fire when Notal finishes a reply while the tab is in the background.</p>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Desktop notifications</span><small id="notifStatus">Browser permission: not requested</small></div>
-              <div class="auth-actions">
-                <label class="switch"><input type="checkbox" id="notifToggle" /><span class="sl track"></span></label>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Reply sound</span><small>Soft chime when an answer lands</small></div>
-              <label class="switch"><input type="checkbox" id="soundToggle" /><span class="sl track"></span></label>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Test</span><small>Send one sample notification now</small></div>
-              <button class="ghost-btn" id="notifTestBtn" type="button">Send test</button>
-            </div>
-          </section>
-          <section class="settings-panel" id="panel-security" hidden>
-            <p class="panel-note">Local only. A PIN hides the app from people using your device — it does not encrypt your data.</p>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">App lock PIN</span><small id="pinStatus">Not set</small></div>
-              <div class="auth-actions">
-                <button class="ghost-btn" id="setPinBtn" type="button">Set PIN</button>
-                <button class="danger-btn" id="clearPinBtn" type="button" hidden>Remove PIN</button>
-              </div>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Auto-lock on idle</span><small>Lock after inactivity (needs a PIN)</small></div>
-              <select id="idleLockSel" class="text-input">
-                <option value="0">Off</option>
-                <option value="60">1 minute</option>
-                <option value="300">5 minutes</option>
-                <option value="900">15 minutes</option>
-              </select>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Lock now</span><small>Hide behind the PIN screen</small></div>
-              <button class="ghost-btn" id="lockNowBtn" type="button" disabled>Lock</button>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">API keys</span><small id="keyCount">No provider keys stored</small></div>
-              <button class="danger-btn" id="clearKeysBtn" type="button">Clear all keys</button>
-            </div>
-          </section>
-          <section class="settings-panel" id="panel-shortcuts" hidden>
-            <p class="panel-note">Shortcuts work anywhere in the app. Ctrl on Windows/Linux, ⌘ on Mac.</p>
-            <ul class="shortcut-list">
-              <li><span>New chat</span><kbd>Ctrl</kbd><kbd>K</kbd></li>
-              <li><span>Search chats</span><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F</kbd></li>
-              <li><span>Focus input</span><kbd>Ctrl</kbd><kbd>I</kbd></li>
-              <li><span>Toggle sidebar</span><kbd>Ctrl</kbd><kbd>B</kbd></li>
-              <li><span>Open settings</span><kbd>Ctrl</kbd><kbd>,</kbd></li>
-              <li><span>Lock app (with PIN)</span><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>L</kbd></li>
-              <li><span>Send message</span><kbd>Enter</kbd></li>
-              <li><span>New line</span><kbd>Shift</kbd><kbd>Enter</kbd></li>
-              <li><span>Close menu / settings</span><kbd>Esc</kbd></li>
-            </ul>
-          </section>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- PIN lock screen -->
-  <div class="lock-screen" id="lockScreen" hidden>
-    <form class="lock-card" id="lockForm" autocomplete="off">
-      <div class="lock-logo" aria-hidden="true"></div>
-      <h2>Notal AI is locked</h2>
-      <p class="lock-hint">Enter your PIN to continue</p>
-      <input type="password" id="pinInput" class="pin-input" inputmode="numeric" autocomplete="off" placeholder="••••" aria-label="PIN" />
-      <button type="submit" class="primary-btn">Unlock</button>
-      <p class="lock-error" id="lockError" hidden>Wrong PIN — try again</p>
-    </form>
-  </div>
+  <section id="features">
+    <div class="wrap">
+      <h2>Built around the way you already work</h2>
+      <p class="section-sub">Every part of the workspace is real and usable on day one — no locked features, no upgrade wall.</p>
+      <div class="grid">
+        <article class="feature">
+          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <h3>Bring your own model</h3>
+          <p>Add OpenAI-compatible, Anthropic, Google Gemini or a local Ollama model in Settings → Providers. Keys are typed once, kept in your browser, and sent only to that provider.</p>
+        </article>
+        <article class="feature">
+          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <h3>Projects</h3>
+          <p>Group related chats under a project. Open one and your sidebar, new chats and memories all switch to that context.</p>
+        </article>
+        <article class="feature">
+          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <h3>Memory</h3>
+          <p>Write down the facts you're tired of repeating. Switchable per project, and everything you leave on goes into the prompt of every real model call.</p>
+        </article>
+        <article class="feature">
+          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <h3>Skills</h3>
+          <p>Save the prompts you use all the time. One click sends them, or drops them in the message box so you can fill in the blanks first.</p>
+        </article>
+        <article class="feature">
+          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <h3>Files &amp; voice</h3>
+          <p>Attach images and files to a message, click any image to see it full size, and dictate with the mic instead of typing.</p>
+        </article>
+        <article class="feature">
+          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <h3>Sign in, switch, lock</h3>
+          <p>Google sign-in with your photo next to your messages, a switch-account picker, and an optional PIN that locks the app on this device.</p>
+        </article>
+      </div>
+    </div>
+  </section>
 
-  <div class="toast" id="toast" role="status"></div>
-  <div class="lightbox" id="lightbox" hidden><img id="lightboxImg" alt="Attached image, full size" /></div>
+  <section id="how">
+    <div class="wrap">
+      <h2>Three minutes to your first real answer</h2>
+      <div class="steps">
+        <div class="step">
+          <span class="n">1</span>
+          <h3>Open the workspace</h3>
+          <p>Click Try now. You're in the chat — start typing straight away with the built-in model.</p>
+        </div>
+        <div class="step">
+          <span class="n">2</span>
+          <h3>Add a model</h3>
+          <p>Settings → Providers → pick the kind, paste your model ID and key. It appears in the model picker instantly.</p>
+        </div>
+        <div class="step">
+          <span class="n">3</span>
+          <h3>Make it yours</h3>
+          <p>Create a project, save what it should remember, keep your best prompts as skills.</p>
+        </div>
+      </div>
+      <div class="note" id="private">
+        <h3>Where your data lives</h3>
+        <p>Chats, projects, memories, skills, preferences and provider keys are stored in this browser only — there is no Notal server holding your history. Clearing your browser data clears the app.</p>
+        <p>The built-in <strong>notal generic</strong> model gives written-out example replies so you can see the interface work. Real answers start once you add a provider key, and then your messages go directly to that provider.</p>
+      </div>
+    </div>
+  </section>
 
-  <script src="app.js"></script>
+  <section class="closing">
+    <div class="wrap">
+      <h2>Ready when you are.</h2>
+      <p>No signup, no setup wizard. Open the workspace and ask it something.</p>
+      <a class="btn btn-primary btn-lg" href="chat.html">Try Notal AI now →</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <span>Notal AI · built by batbleseed · MIT licensed</span>
+      <span><a href="https://github.com/batbleseed/notal-ai-ui" target="_blank" rel="noreferrer">Source on GitHub</a> · <a href="chat.html">Open chat</a></span>
+    </div>
+  </footer>
 </body>
 </html>
