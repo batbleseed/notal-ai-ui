@@ -204,6 +204,114 @@ function renderAttachments(atts) {
   return tray;
 }
 
+/* ---------- markdown ----------
+   Model output is untrusted text, so every node here is built with
+   textContent — raw HTML in a reply can never become markup. */
+const MD_BLOCK = /^ {0,3}(#{1,6}\s|>|```|([-*+]|\d+[.)])\s|(-{3,}|\*{3,})$)/;
+
+function mdInline(str, into) {
+  const re = /(\*\*|__)(?=\S)([\s\S]*?\S)\1|(\*|_)(?=\S)([\s\S]*?\S)\3|`([^`\n]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  let last = 0, m;
+  while ((m = re.exec(str))) {
+    if (m.index > last) into.append(document.createTextNode(str.slice(last, m.index)));
+    const node = document.createElement(
+      m[2] !== undefined ? "strong" : m[4] !== undefined ? "em" : m[5] !== undefined ? "code" : "a");
+    if (node.tagName === "A") {
+      node.href = m[7];
+      node.target = "_blank";
+      node.rel = "noreferrer noopener";
+      node.textContent = m[6];
+    } else {
+      node.textContent = m[2] ?? m[4] ?? m[5];
+    }
+    into.append(node);
+    last = re.lastIndex;
+  }
+  if (last < str.length) into.append(document.createTextNode(str.slice(last)));
+  return into;
+}
+
+function renderMarkdown(src) {
+  const frag = document.createDocumentFragment();
+  const lines = String(src ?? "").replace(/\r\n?/g, "\n").split("\n");
+  const block = (tag, text) => {
+    const n = document.createElement(tag);
+    if (text !== undefined) mdInline(text, n);
+    return n;
+  };
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+
+    if (/^ {0,3}```/.test(line)) {
+      const code = [];
+      i++;
+      while (i < lines.length && !/^ {0,3}```/.test(lines[i])) code.push(lines[i++]);
+      i++;
+      const pre = document.createElement("pre");
+      pre.append(block("code", code.join("\n")));
+      frag.append(pre);
+      continue;
+    }
+
+    const h = /^ {0,3}(#{1,6})\s+(.*)$/.exec(line);
+    if (h) {
+      frag.append(block("h" + Math.min(6, h[1].length + 2), h[2]));
+      i++;
+      continue;
+    }
+
+    if (/^ {0,3}(-{3,}|\*{3,})\s*$/.test(line)) {
+      frag.append(document.createElement("hr"));
+      i++;
+      continue;
+    }
+
+    if (/^ {0,3}>/.test(line)) {
+      const q = document.createElement("blockquote");
+      while (i < lines.length && /^ {0,3}>/.test(lines[i])) {
+        q.append(block("p", lines[i].replace(/^ {0,3}>\s?/, "")));
+        i++;
+      }
+      frag.append(q);
+      continue;
+    }
+
+    const ul = /^ {0,3}[-*+]\s+(.*)$/, ol = /^ {0,3}(\d+)[.)]\s+(.*)$/;
+    if (ul.test(line) || ol.test(line)) {
+      const ordered = ol.test(line);
+      const re = ordered ? ol : ul;
+      const list = document.createElement(ordered ? "ol" : "ul");
+      while (i < lines.length) {
+        const mm = re.exec(lines[i]);
+        if (!mm) break;
+        list.append(block("li", mm[mm.length - 1]));
+        i++;
+      }
+      frag.append(list);
+      continue;
+    }
+
+    const p = document.createElement("p");
+    let first = true;
+    while (i < lines.length && lines[i].trim() && !MD_BLOCK.test(lines[i])) {
+      if (!first) p.append(document.createElement("br"));
+      mdInline(lines[i].trim(), p);
+      first = false;
+      i++;
+    }
+    frag.append(p);
+  }
+  return frag;
+}
+
+function renderText(el, text, asMarkdown) {
+  if (asMarkdown) el.replaceChildren(renderMarkdown(text));
+  else el.textContent = text || "";
+}
+
 function appendMessage(msg) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${msg.role}`;
@@ -214,7 +322,7 @@ function appendMessage(msg) {
 
   const content = document.createElement("div");
   content.className = msg.role === "user" ? "msg-bubble" : "msg-text";
-  content.textContent = msg.text || "";
+  renderText(content, msg.text, msg.role === "assistant");
 
   if (msg.role === "assistant") {
     const avatar = document.createElement("div");
@@ -302,7 +410,7 @@ function typewrite(el, text, done) {
   const step = Math.max(2, Math.round(text.length / 160));
   const tick = () => {
     i = Math.min(text.length, i + step * 3);
-    el.textContent = text.slice(0, i);
+    renderText(el, text.slice(0, i), true);
     scrollToBottom();
     if (i < text.length) requestAnimationFrame(tick);
     else done?.();

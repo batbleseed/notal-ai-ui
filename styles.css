@@ -14,6 +14,7 @@
   --shadow: 0 1px 2px rgba(31, 30, 29, .05), 0 8px 24px rgba(31, 30, 29, .06);
   --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
   --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
   --radius: 14px;
 }
 
@@ -422,8 +423,34 @@ body.sidebar-hidden .sidebar-open { display: inline-flex; }
 .msg.user .msg-body { flex: 0 1 auto; max-width: 84%; }
 .msg.user .msg-attachments { justify-content: flex-end; }
 .msg-role { font-size: 12px; font-weight: 600; color: var(--text-faint); margin-bottom: 5px; letter-spacing: .3px; }
-.msg-text { font-size: 15px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; }
-.msg-text strong { font-weight: 600; }
+.msg-text { font-size: 15px; line-height: 1.7; word-wrap: break-word; }
+.msg-text > * + * { margin-top: 12px; }
+.msg-text p { margin: 0; }
+.msg-text h3, .msg-text h4, .msg-text h5, .msg-text h6 {
+  font-family: var(--serif); line-height: 1.35; margin: 20px 0 0; font-weight: 600;
+}
+.msg-text h3 { font-size: 19px; }
+.msg-text h4 { font-size: 17px; }
+.msg-text h5, .msg-text h6 { font-size: 15.5px; }
+.msg-text ul, .msg-text ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.msg-text li { padding-left: 2px; }
+.msg-text li::marker { color: var(--text-faint); }
+.msg-text a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.msg-text code, .att-file code {
+  font-family: var(--mono); font-size: .88em;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 5px; padding: 1px 5px;
+}
+.msg-text pre {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 13px 15px; overflow-x: auto; line-height: 1.55;
+}
+.msg-text pre code { background: none; border: 0; padding: 0; font-size: 13px; }
+.msg-text blockquote {
+  margin: 0; padding: 2px 0 2px 14px; border-left: 2px solid var(--accent);
+  color: var(--text-soft); display: grid; gap: 8px;
+}
+.msg-text hr { border: 0; border-top: 1px solid var(--border); margin: 18px 0; }
 
 .msg.user .msg-bubble {
   background: var(--user-bubble); border: 1px solid var(--border);
