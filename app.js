@@ -82,6 +82,7 @@ let state = Object.assign({
   memories: [],
   skills: [],
   activeProject: null,
+  relayUrl: "",
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
@@ -374,10 +375,41 @@ function imageAtts(m) {
   return (m.attachments || []).filter(a => a.dataUrl && (a.type || "").startsWith("image/"));
 }
 
+function relayBase() {
+  return (state.relayUrl || "").trim().replace(/\/+$/, "");
+}
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+function hostOf(u) { try { return new URL(u).hostname.toLowerCase(); } catch { return ""; } }
+
 async function httpJson(url, opts) {
+  // a remote relay cannot reach an Ollama on this machine, so local targets
+  // only go through the relay when the relay itself is local
+  const relay = LOCAL_HOSTS.has(hostOf(url)) && !LOCAL_HOSTS.has(hostOf(relayBase()))
+    ? "" : relayBase();
+  let target = url, init = opts;
+  if (relay) {
+    // the relay forwards on our behalf, so the browser never touches the
+    // provider origin and CORS never applies
+    target = `${relay}/relay`;
+    init = {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        url,
+        method: opts.method || "POST",
+        headers: opts.headers || {},
+        body: opts.body ? JSON.parse(opts.body) : undefined,
+      }),
+    };
+  }
+
   let res;
-  try { res = await fetch(url, opts); }
-  catch { throw new Error("Could not reach the API — check the base URL, your connection, and CORS."); }
+  try { res = await fetch(target, init); }
+  catch {
+    throw new Error(relay
+      ? `Could not reach the relay at ${relay} — check the URL in Settings → General.`
+      : "Could not reach the API — check the base URL, your connection, and CORS.");
+  }
   if (!res.ok) {
     let detail = "";
     try {
@@ -783,6 +815,45 @@ $("#clearChatsBtn").addEventListener("click", () => {
   save();
   renderHistory(els.search.value);
   renderMessages();
+});
+
+/* ---------- provider relay ---------- */
+els.relayUrlInput = $("#relayUrlInput");
+els.relayStatus = $("#relayStatus");
+els.relayTestBtn = $("#relayTestBtn");
+
+function renderRelayUI(msg) {
+  els.relayUrlInput.value = state.relayUrl || "";
+  els.relayStatus.textContent = msg
+    || (state.relayUrl
+      ? "Set — provider requests go through the relay"
+      : "Not configured — requests leave this browser directly");
+}
+
+els.relayUrlInput.addEventListener("change", () => {
+  let v = els.relayUrlInput.value.trim().replace(/\/+$/, "");
+  if (v && !/^https?:\/\//i.test(v)) v = "https://" + v;
+  state.relayUrl = v;
+  save();
+  renderRelayUI();
+  if (v) els.relayTestBtn.click();
+});
+
+els.relayTestBtn.addEventListener("click", async () => {
+  const base = relayBase();
+  if (!base) { renderRelayUI("Nothing to test — add the relay URL first."); return; }
+  renderRelayUI("Testing…");
+  els.relayTestBtn.disabled = true;
+  try {
+    const res = await fetch(`${base}/health`);
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
+    renderRelayUI(`Reachable — allow-listed ${data.hosts ?? "?"} provider hosts`);
+  } catch (err) {
+    renderRelayUI("Not reachable: " + String(err?.message || err).slice(0, 90));
+  } finally {
+    els.relayTestBtn.disabled = false;
+  }
 });
 
 /* ---------- account ---------- */
@@ -1517,6 +1588,7 @@ renderProviders();
 renderAuthUI();
 renderNotifUI();
 renderSecurityUI();
+renderRelayUI();
 if (state.pinHash) lockApp(); else resetIdleTimer();
 setView("chats");
 setGreeting();

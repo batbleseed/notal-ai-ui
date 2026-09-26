@@ -1,4 +1,6 @@
 node_modules/
+dist/
+.Notal AI.qoder.site
 .DS_Store
 Thumbs.db
 *.log

@@ -261,6 +261,13 @@
                 <button type="button" data-theme-val="dark">Dark</button>
               </div>
             </div>
+            <div class="setting-row stack">
+              <div class="setting-info"><span class="setting-name">Provider relay</span><small id="relayStatus">Not configured — requests leave this browser directly</small></div>
+              <div class="relay-line">
+                <input type="url" id="relayUrlInput" class="text-input" placeholder="https://notal-relay.your-name.workers.dev" autocomplete="off" />
+                <button class="ghost-btn" id="relayTestBtn" type="button">Test</button>
+              </div>
+            </div>
             <div class="setting-row">
               <div class="setting-info"><span class="setting-name">Chat history</span><small>Stored only in this browser</small></div>
               <button class="danger-btn" id="clearChatsBtn" type="button">Clear all chats</button>
