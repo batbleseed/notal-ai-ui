@@ -71,7 +71,7 @@ let state = Object.assign({
   conversations: [],
   activeId: null,
   theme: "light",
-  displayName: "batbleseed",
+  displayName: "",
   models: [{ id: "notal-generic", name: "notal generic", provider: "Notal built-in" }],
   selectedModel: "notal-generic",
   providers: [],
@@ -113,7 +113,7 @@ function activeConv() {
 function setGreeting() {
   const h = new Date().getHours();
   const part = h < 5 ? "Still up" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-  els.greetingTitle.textContent = `${part}, ${state.displayName}`;
+  els.greetingTitle.textContent = `${part}, ${state.displayName || "there"}`;
 }
 
 /* ---------- conversations ---------- */
@@ -219,7 +219,8 @@ function appendMessage(msg) {
     avatar.innerHTML = `<svg class="stare-logo" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M5 7h14l-7 10.5z"/><g class="eyes"><circle cx="9.5" cy="10.2" r="1.3" fill="var(--bg)"/><circle cx="12.5" cy="10.2" r="1.3" fill="var(--bg)"/></g></svg>`;
     stareTargets.push(avatar.querySelector(".eyes"));
   } else {
-    avatar.textContent = "B";
+    const src = currentUser?.displayName || currentUser?.email || state.displayName;
+    avatar.textContent = (src?.trim().charAt(0) || "Y").toUpperCase();
   }
 
   const body = document.createElement("div");
@@ -860,7 +861,7 @@ els.relayTestBtn.addEventListener("click", async () => {
 els.displayNameInput = $("#displayNameInput");
 els.displayNameInput.value = state.displayName;
 els.displayNameInput.addEventListener("input", () => {
-  state.displayName = els.displayNameInput.value.trim() || "there";
+  state.displayName = els.displayNameInput.value.trim();
   save();
   setGreeting();
   if (!currentUser) renderAuthUI();
