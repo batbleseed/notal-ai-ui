@@ -208,36 +208,31 @@ function appendMessage(msg) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${msg.role}`;
 
-  const avatar = document.createElement("div");
-  avatar.className = "msg-avatar";
-  if (msg.role === "user" && currentUser?.photoURL) {
-    const img = document.createElement("img");
-    img.src = currentUser.photoURL;
-    img.alt = "";
-    avatar.append(img);
-  } else if (msg.role === "assistant") {
-    avatar.innerHTML = `<svg class="stare-logo" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M5 7h14l-7 10.5z"/><g class="eyes"><circle cx="9.5" cy="10.2" r="1.3" fill="var(--bg)"/><circle cx="12.5" cy="10.2" r="1.3" fill="var(--bg)"/></g></svg>`;
-    stareTargets.push(avatar.querySelector(".eyes"));
-  } else {
-    const src = currentUser?.displayName || currentUser?.email || state.displayName;
-    avatar.textContent = (src?.trim().charAt(0) || "Y").toUpperCase();
-  }
-
   const body = document.createElement("div");
   body.className = "msg-body";
-
-  const roleName = document.createElement("div");
-  roleName.className = "msg-role";
-  roleName.textContent = msg.role === "user" ? "You" : "Notal";
-
   if (msg.attachments?.length) body.append(renderAttachments(msg.attachments));
 
   const content = document.createElement("div");
   content.className = msg.role === "user" ? "msg-bubble" : "msg-text";
   content.textContent = msg.text || "";
-  body.append(roleName, content);
 
-  wrap.append(avatar, body);
+  if (msg.role === "assistant") {
+    const avatar = document.createElement("div");
+    avatar.className = "msg-avatar";
+    avatar.innerHTML = `<svg class="stare-logo" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M5 7h14l-7 10.5z"/><g class="eyes"><circle cx="9.5" cy="10.2" r="1.3" fill="var(--bg)"/><circle cx="12.5" cy="10.2" r="1.3" fill="var(--bg)"/></g></svg>`;
+    stareTargets.push(avatar.querySelector(".eyes"));
+
+    const roleName = document.createElement("div");
+    roleName.className = "msg-role";
+    roleName.textContent = "Notal";
+
+    body.append(roleName, content);
+    wrap.append(avatar, body);
+  } else {
+    body.append(content);
+    wrap.append(body);
+  }
+
   els.messages.append(wrap);
   return content;
 }

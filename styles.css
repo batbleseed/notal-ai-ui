@@ -353,7 +353,6 @@ input, textarea { font: inherit; color: inherit; }
 .auth-actions { display: flex; gap: 8px; align-items: center; }
 button:disabled { opacity: .5; cursor: default; }
 .user-photo { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.msg-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 
 /* ---------------- Main ---------------- */
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
@@ -409,6 +408,7 @@ body.sidebar-hidden .sidebar-open { display: inline-flex; }
 }
 
 .msg { display: flex; gap: 13px; animation: rise .25s ease both; }
+.msg.user { justify-content: flex-end; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 .msg-avatar {
@@ -416,17 +416,19 @@ body.sidebar-hidden .sidebar-open { display: inline-flex; }
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 12.5px; font-weight: 600;
 }
-.msg.user .msg-avatar { background: var(--text); color: var(--bg); }
 .msg.assistant .msg-avatar { background: var(--accent); color: #fff; }
 
 .msg-body { min-width: 0; flex: 1; }
+.msg.user .msg-body { flex: 0 1 auto; max-width: 84%; }
+.msg.user .msg-attachments { justify-content: flex-end; }
 .msg-role { font-size: 12px; font-weight: 600; color: var(--text-faint); margin-bottom: 5px; letter-spacing: .3px; }
 .msg-text { font-size: 15px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; }
 .msg-text strong { font-weight: 600; }
 
 .msg.user .msg-bubble {
   background: var(--user-bubble); border: 1px solid var(--border);
-  padding: 11px 16px; border-radius: 4px 14px 14px 14px;
+  padding: 11px 16px; border-radius: 14px 4px 14px 14px;
+  font-size: 15px; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word;
   display: inline-block; max-width: 100%;
 }
 
