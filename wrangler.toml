@@ -1,4 +1,7 @@
-name = "notal-relay"
+# Must match the deployed Worker name — the first label of its URL:
+# https://<name>.<subdomain>.workers.dev
+# Run `npx wrangler deploy` from this file to update that Worker in place.
+name = "rapid-frost-ad64"
 main = "worker/notal-relay.mjs"
 compatibility_date = "2026-09-01"
 
@@ -8,4 +11,4 @@ RELAY_ALLOWED_HOSTS = ""
 # Comma-separated site origins allowed to call this relay.
 # localhost, *.github.io and *.pages.dev are already allowed by default.
 # "*" opens it to any site — the relay still only forwards to allow-listed hosts.
-RELAY_ALLOWED_ORIGINS = ""
+RELAY_ALLOWED_ORIGINS = "https://notal-ai-m5xsn29jraa.qoder.website"
