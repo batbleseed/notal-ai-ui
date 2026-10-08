@@ -7,7 +7,8 @@
   "scripts": {
     "start": "electron .",
     "smoke": "electron . --smoke",
-    "probe": "electron . --probe"
+    "probe": "electron . --probe",
+    "check-auth": "electron . --auth"
   },
   "devDependencies": {
     "electron": "^31.7.7"

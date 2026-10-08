@@ -1,24 +1,55 @@
-const { app, BrowserWindow, Menu, shell, session } = require("electron");
-const path = require("path");
+const { app, BrowserWindow, Menu, shell, dialog } = require("electron");
+const http = require("http");
 const fs = require("fs");
+const path = require("path");
 
 const WEB_DIR = path.resolve(__dirname, "..");
-const ENTRY = path.join(WEB_DIR, "chat.html");
-const DIAG_PROBES = { "--smoke": smokeProbe, "--probe": probeProviders };
+const DIAG_PROBES = { "--smoke": smokeProbe, "--probe": probeProviders, "--auth": probeAuth };
 const DIAG_MODE = Object.keys(DIAG_PROBES).find(flag => process.argv.includes(flag)) || null;
 
-// Providers check the Origin header before answering. A file:// window sends
-// "file://", which they refuse, so the header is rewritten to the origin the
-// keys already work from. Override with NOTAL_WEB_ORIGIN for another host.
-const WEB_ORIGIN = process.env.NOTAL_WEB_ORIGIN || "https://batbleseed.github.io";
+const PORT = 4178;
 
-function installOriginFix() {
-  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    const headers = details.requestHeaders;
-    for (const key of Object.keys(headers)) {
-      if (key.toLowerCase() === "origin" && headers[key] === "file://") headers[key] = WEB_ORIGIN;
-    }
-    callback({ requestHeaders: headers });
+// Firebase authorizes sign-in by origin and refuses file://, and the app keeps
+// its whole state in localStorage, which is keyed to the origin. Serving over a
+// fixed loopback port gives the desktop app a real origin that stays the same
+// across launches, so history and keys survive restarts.
+const MIME = {
+  ".html": "text/html",
+  ".css": "text/css",
+  ".js": "text/javascript",
+  ".json": "application/json",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".ico": "image/x-icon",
+  ".webmanifest": "application/manifest+json"
+};
+
+function startServer() {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      let wanted;
+      try {
+        wanted = decodeURIComponent(new URL(req.url, "http://localhost").pathname).replace(/^\/+/, "");
+      } catch {
+        res.writeHead(400).end("Bad request path");
+        return;
+      }
+      const file = path.resolve(WEB_DIR, wanted || "chat.html");
+      if (!file.startsWith(WEB_DIR + path.sep)) {
+        res.writeHead(403).end("Outside the app folder");
+        return;
+      }
+      fs.readFile(file, (err, data) => {
+        if (err) {
+          res.writeHead(404).end("Not found");
+          return;
+        }
+        res.writeHead(200, { "content-type": MIME[path.extname(file)] || "application/octet-stream" });
+        res.end(data);
+      });
+    });
+    server.on("error", reject);
+    server.listen(PORT, "127.0.0.1", () => resolve(server));
   });
 }
 
@@ -65,6 +96,8 @@ function smokeProbe() {
   out.theme = document.documentElement.dataset.theme ?? null;
   out.standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   out.dictation = "SpeechRecognition" in window || "webkitSpeechRecognition" in window;
+  out.secureContext = window.isSecureContext === true;
+  out.webCrypto = !!window.crypto?.subtle;
   try {
     localStorage.setItem("notal.smoke", "1");
     out.storagePersists = localStorage.getItem("notal.smoke") === "1";
@@ -78,7 +111,7 @@ function smokeProbe() {
 
 // Runs inside the page with deliberately invalid keys: a 401/400 means the
 // provider accepted the request far enough to answer (CORS passed), while
-// "Failed to fetch" means the browser blocked it before it left the window.
+// "Failed to fetch" means the window blocked it before it left the app.
 function probeProviders() {
   const bad = "notal-desktop-cors-probe";
   const targets = [
@@ -100,8 +133,19 @@ function probeProviders() {
   )).then(r => Object.assign({}, ...r));
 }
 
+// Starts the real Google sign-in flow but never enters credentials: the point
+// is to see whether Firebase accepts this origin at all.
+function probeAuth() {
+  return ensureAuth().then(({ auth, mods }) => {
+    const settled = mods.signInWithPopup(auth, new mods.GoogleAuthProvider())
+      .then(() => ({ auth: "signed in without anyone typing a password, which should not happen" }))
+      .catch(err => ({ auth: "rejected: " + (err && err.code || err) }));
+    return Promise.race([settled, new Promise(r => setTimeout(() => r({ auth: "popup stayed open, so the origin was accepted" }), 9000))]);
+  }).catch(err => ({ auth: "could not start: " + (err && err.message || err) }));
+}
+
 async function runDiagnostics(win, probe) {
-  const report = { entry: ENTRY, exists: fs.existsSync(ENTRY) };
+  const report = { url: win.webContents.getURL() };
   try {
     Object.assign(report, await win.webContents.executeJavaScript(`(${probe.toString()})()`, true));
     const png = await win.webContents.capturePage();
@@ -115,7 +159,19 @@ async function runDiagnostics(win, probe) {
   app.exit(0);
 }
 
-function createWindow() {
+// Firebase's Google sign-in runs through a popup window, so the auth flow has
+// to get through; every other link belongs in the system browser.
+function isAuthPopup(url) {
+  if (url.startsWith("about:")) return true;
+  try {
+    const host = new URL(url).hostname;
+    return host === "accounts.google.com" || host.endsWith(".firebaseapp.com");
+  } catch {
+    return false;
+  }
+}
+
+function createWindow(appUrl) {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -140,19 +196,20 @@ function createWindow() {
     if (DIAG_MODE) setTimeout(() => runDiagnostics(win, DIAG_PROBES[DIAG_MODE]), 1500);
   });
 
-  // Links leave the app; nothing else is allowed to navigate the window.
   win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAuthPopup(url)) return { action: "allow" };
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
+
+  const appOrigin = new URL(appUrl).origin;
   win.webContents.on("will-navigate", (e, url) => {
-    if (!url.startsWith("file://")) {
-      e.preventDefault();
-      if (/^https?:/i.test(url)) shell.openExternal(url);
-    }
+    if (new URL(url).origin === appOrigin) return;
+    e.preventDefault();
+    if (/^https?:/i.test(url)) shell.openExternal(url);
   });
 
-  win.loadFile(ENTRY);
+  win.loadURL(appUrl);
   return win;
 }
 
@@ -167,13 +224,22 @@ if (!app.requestSingleInstanceLock()) {
     win.focus();
   });
 
-  app.whenReady().then(() => {
-    installOriginFix();
+  app.whenReady().then(async () => {
+    let server;
+    try {
+      server = await startServer();
+    } catch (err) {
+      const busy = err.code === "EADDRINUSE";
+      dialog.showErrorBox("Notal AI cannot start", busy
+        ? `Port ${PORT} is already taken by another program, and Notal AI needs it to keep your chats between launches.`
+        : String(err && err.message || err));
+      app.exit(1);
+      return;
+    }
+    const appUrl = `http://localhost:${PORT}/chat.html`;
     buildMenu();
-    createWindow();
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    });
+    createWindow(appUrl);
+    app.on("before-quit", () => server.close());
   });
 
   app.on("window-all-closed", () => app.quit());
