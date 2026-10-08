@@ -77,13 +77,26 @@ input, textarea { font: inherit; color: inherit; }
   border-right: 1px solid var(--border);
   transition: width .34s cubic-bezier(.24, 1.3, .4, 1);
 }
-/* collapsed = an icon rail, not hidden: the mark stays at the top, every
-   button stays reachable, and the same little control folds it back open.
-   Mobile keeps the off-canvas drawer instead, see the 860px query below. */
+/* collapsed = an icon rail, not hidden: the mark stays at the top and doubles
+   as the control that folds the rail open, so the header is one button wide
+   instead of two. Mobile keeps the off-canvas drawer, see the 860px query. */
 @media (min-width: 861px) {
   .sidebar.collapsed { width: 68px; }
+  /* the topbar mark only repeats the rail's */
+  .sidebar.collapsed ~ .main .topbar .brand-logo { display: none; }
   .sidebar.collapsed .sidebar-header {
-    flex-direction: column; align-items: center; gap: 4px; padding: 14px 0 12px;
+    position: relative; flex-direction: column; align-items: center; padding: 14px 0 12px;
+  }
+  .sidebar.collapsed .brand-logo { transition: opacity .12s; }
+  .sidebar.collapsed .sidebar-close {
+    position: absolute; top: 15px; left: 50%; margin-left: -13px;
+    width: 26px; height: 26px; border-radius: 8px;
+    border: 1px solid transparent; opacity: 0; transition: opacity .12s;
+  }
+  .sidebar.collapsed .sidebar-header:hover .brand-logo { opacity: 0; }
+  .sidebar.collapsed .sidebar-header:hover .sidebar-close,
+  .sidebar.collapsed .sidebar-close:focus-visible {
+    opacity: 1; border-color: var(--border); background: var(--surface);
   }
   .sidebar.collapsed .sidebar-nav { padding: 0 10px 10px; }
   .sidebar.collapsed .nav-item,
@@ -99,15 +112,12 @@ input, textarea { font: inherit; color: inherit; }
   .sidebar.collapsed .signin-btn span { display: none; }
   .sidebar.collapsed .sidebar-footer { flex-direction: column; gap: 4px; padding: 12px 10px 14px; }
   .sidebar.collapsed .signin-btn { padding: 8px 10px; }
-  .sidebar.collapsed .signin-btn.signed-in svg { display: inline-block; }
+  /* the account button drops its label in the rail, so it needs a glyph to
+     stand on — but only for an account that has no photo to show */
+  .sidebar.collapsed .signin-btn.signed-in:not(:has(.user-photo)) svg { display: inline-block; }
   .sidebar.collapsed .user-photo { width: 18px; height: 18px; }
   .sidebar.collapsed .account-menu { left: calc(100% - 6px); bottom: 0; }
   .sidebar.collapsed .sidebar-close svg { transform: rotate(180deg); }
-  /* the fold control reads as its own little button once the labels are gone */
-  .sidebar.collapsed .sidebar-close {
-    width: 26px; height: 26px;
-    border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
-  }
 }
 
 .sidebar-header {
