@@ -1,0 +1,15 @@
+{
+  "name": "notal-ai-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Notal AI as a Windows desktop app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "probe": "electron . --probe"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}
