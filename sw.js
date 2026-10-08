@@ -6,6 +6,7 @@ const CORE = [
   "./chat/index.html",
   "./styles.css",
   "./app.js",
+  "./gsap.min.js",
   "./favicon.svg",
   "./manifest.webmanifest",
   "./icons/icon-192.png",

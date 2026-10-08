@@ -36,6 +36,29 @@ function toast(msg) {
   toastTimer = setTimeout(() => els.toast.classList.remove("show"), 2800);
 }
 
+/* ---------- motion ----------
+   GSAP is vendored beside this file and loaded before it. The animations are
+   decoration, so a missing GSAP must never take the chat down with it. */
+const motion = (() => {
+  if (typeof window.gsap !== "object") {
+    return { reveal() {}, settle(el, done) { done?.(); } };
+  }
+  return {
+    reveal(el) {
+      gsap.fromTo(el, { opacity: 0, y: -6, scale: .98 },
+        { opacity: 1, y: 0, scale: 1, duration: .34, ease: "back.out(2.4)" });
+    },
+    /* lets a panel drop away under its own weight, then restores it */
+    settle(el, done) {
+      gsap.to(el, {
+        opacity: 0, y: 18, scale: .97,
+        duration: .24, ease: "power2.in",
+        onComplete: () => { gsap.set(el, { clearProps: "all" }); done?.(); },
+      });
+    },
+  };
+})();
+
 const store = {
   load() {
     try { return JSON.parse(localStorage.getItem("notal.state")) ?? {}; }
@@ -83,6 +106,7 @@ let state = Object.assign({
   skills: [],
   activeProject: null,
   relayUrl: "",
+  showThinking: false,
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
@@ -324,25 +348,64 @@ function appendMessage(msg) {
   content.className = msg.role === "user" ? "msg-bubble" : "msg-text";
   renderText(content, msg.text, msg.role === "assistant");
 
-  if (msg.role === "assistant") {
-    const avatar = document.createElement("div");
-    avatar.className = "msg-avatar";
-    avatar.innerHTML = `<svg class="stare-logo" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M5 7h14l-7 10.5z"/><g class="eyes"><circle cx="9.5" cy="10.2" r="1.3" fill="var(--bg)"/><circle cx="12.5" cy="10.2" r="1.3" fill="var(--bg)"/></g></svg>`;
-    stareTargets.push(avatar.querySelector(".eyes"));
-
-    const roleName = document.createElement("div");
-    roleName.className = "msg-role";
-    roleName.textContent = "Notal";
-
-    body.append(roleName, content);
-    wrap.append(avatar, body);
-  } else {
+  if (msg.role !== "assistant") {
     body.append(content);
     wrap.append(body);
+    els.messages.append(wrap);
+    return { wrap, textEl: content };
   }
 
+  const avatar = document.createElement("div");
+  avatar.className = "msg-avatar";
+  avatar.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg>`;
+
+  const roleName = document.createElement("div");
+  roleName.className = "msg-role";
+  roleName.textContent = "Notal";
+
+  const thinkBox = document.createElement("div");
+  thinkBox.className = "msg-think";
+  thinkBox.hidden = true;
+  const thinkLabel = document.createElement("span");
+  thinkLabel.className = "think-label";
+  const thinkText = document.createElement("div");
+  thinkText.className = "think-text";
+  thinkBox.append(thinkLabel, thinkText);
+
+  body.append(roleName, thinkBox, content);
+  wrap.append(avatar, body);
   els.messages.append(wrap);
-  return content;
+
+  return {
+    wrap,
+    textEl: content,
+    thinkBox,
+    thinkLabel,
+    thinkText,
+    startThinking() {
+      wrap.classList.add("thinking");
+      if (!state.showThinking) return;
+      thinkLabel.textContent = "Thinking";
+      thinkBox.classList.add("live");
+      if (thinkBox.hidden) {
+        thinkBox.hidden = false;
+        motion.reveal(thinkBox);
+      }
+    },
+    addReasoning(chunk) {
+      if (!state.showThinking) return;
+      this.startThinking();
+      thinkText.textContent += chunk;
+      thinkText.scrollTop = thinkText.scrollHeight;
+    },
+    stopThinking() {
+      wrap.classList.remove("thinking");
+      if (thinkBox.hidden) return;
+      thinkLabel.textContent = "Reasoning";
+      thinkBox.classList.remove("live");
+      if (!thinkText.textContent.trim()) thinkBox.hidden = true;
+    },
+  };
 }
 
 function scrollToBottom() {
@@ -377,27 +440,46 @@ async function sendMessage(text) {
   els.input.value = "";
   autoresize();
 
-  const typingEl = appendMessage({ role: "assistant", text: "" });
-  typingEl.innerHTML = `<span class="typing"><i></i><i></i><i></i></span>`;
+  const turn = appendMessage({ role: "assistant", text: "" });
+  turn.startThinking();
   scrollToBottom();
   els.sendBtn.disabled = true;
   els.input.disabled = true;
 
   const model = selectedModel();
+  let answer = "";
+  let frame = 0;
+  const draw = () => {
+    frame = 0;
+    renderText(turn.textEl, answer, true);
+    scrollToBottom();
+  };
+  /* one re-render per animation frame keeps markdown cheap while tokens fly by */
+  const push = (chunk) => {
+    answer += chunk;
+    if (!frame) frame = requestAnimationFrame(draw);
+  };
+
   try {
-    let reply;
     if (model.providerId) {
-      reply = await callProvider(model, conv.messages);
+      await callProvider(model, conv.messages, (delta) => {
+        if (delta.reasoning) turn.addReasoning(delta.reasoning);
+        if (delta.text) push(delta.text);
+      });
     } else {
-      await new Promise(r => setTimeout(r, 600 + Math.random() * 700));
-      reply = craftReply(trimmed, conv.messages.length);
+      await streamBuiltIn(craftReply(trimmed, conv.messages.length), push);
     }
-    conv.messages.push({ role: "assistant", text: reply });
+    if (frame) cancelAnimationFrame(frame);
+    draw();
+    turn.stopThinking();
+    conv.messages.push({ role: "assistant", text: answer });
     save();
-    typewrite(typingEl, reply, () => notifyReply(reply));
+    notifyReply(answer);
   } catch (err) {
-    typingEl.classList.add("msg-error");
-    typingEl.textContent = "⚠ " + (err?.message || "Request failed");
+    if (frame) cancelAnimationFrame(frame);
+    turn.stopThinking();
+    turn.textEl.classList.add("msg-error");
+    turn.textEl.textContent = "⚠ " + (err?.message || "Request failed");
   } finally {
     els.sendBtn.disabled = false;
     els.input.disabled = false;
@@ -405,17 +487,14 @@ async function sendMessage(text) {
   }
 }
 
-function typewrite(el, text, done) {
-  let i = 0;
-  const step = Math.max(2, Math.round(text.length / 160));
-  const tick = () => {
-    i = Math.min(text.length, i + step * 3);
-    renderText(el, text.slice(0, i), true);
-    scrollToBottom();
-    if (i < text.length) requestAnimationFrame(tick);
-    else done?.();
-  };
-  tick();
+/* The built-in model has no server to stream from, so its reply is fed through
+   the same token path at a readable pace. */
+async function streamBuiltIn(fullText, push) {
+  await new Promise(r => setTimeout(r, 350));
+  for (const chunk of fullText.match(/\S+\s*/g) ?? []) {
+    push(chunk);
+    await new Promise(r => setTimeout(r, 26));
+  }
 }
 
 /* ---------- canned replies ---------- */
@@ -485,17 +564,19 @@ function relayBase() {
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 function hostOf(u) { try { return new URL(u).hostname.toLowerCase(); } catch { return ""; } }
 
-async function httpJson(url, opts) {
-  // a remote relay cannot reach an Ollama on this machine, so local targets
-  // only go through the relay when the relay itself is local
+/* ---------- provider transport ---------- */
+// A remote relay cannot reach an Ollama on this machine, so local targets only
+// go through the relay when the relay itself is local.
+function routeFor(url, opts) {
   const relay = LOCAL_HOSTS.has(hostOf(url)) && !LOCAL_HOSTS.has(hostOf(relayBase()))
     ? "" : relayBase();
-  let target = url, init = opts;
-  if (relay) {
-    // the relay forwards on our behalf, so the browser never touches the
-    // provider origin and CORS never applies
-    target = `${relay}/relay`;
-    init = {
+  if (!relay) return { target: url, init: opts, relay: "" };
+  // the relay forwards on our behalf, so the browser never touches the
+  // provider origin and CORS never applies
+  return {
+    target: `${relay}/relay`,
+    relay,
+    init: {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -504,9 +585,12 @@ async function httpJson(url, opts) {
         headers: opts.headers || {},
         body: opts.body ? JSON.parse(opts.body) : undefined,
       }),
-    };
-  }
+    },
+  };
+}
 
+async function openProviderCall(url, opts) {
+  const { target, init, relay } = routeFor(url, opts);
   let res;
   try { res = await fetch(target, init); }
   catch {
@@ -522,10 +606,109 @@ async function httpJson(url, opts) {
     } catch {}
     throw new Error(`${res.status} ${res.statusText}${detail ? " — " + detail : ""}`);
   }
-  return res.json();
+  return res;
 }
 
-async function callProvider(model, messages) {
+async function httpJson(url, opts) {
+  return (await openProviderCall(url, opts)).json();
+}
+
+const sseJson = (line) => {
+  if (!line.startsWith("data:")) return null;
+  const payload = line.slice(5).trim();
+  if (!payload || payload === "[DONE]") return null;
+  try { return JSON.parse(payload); } catch { return null; }
+};
+
+// One line of a live stream in, the pieces of the reply it carried out.
+const STREAM_LINES = {
+  openai(line) {
+    const d = sseJson(line)?.choices?.[0]?.delta;
+    return d
+      ? { text: d.content || "", reasoning: d.reasoning_content || d.reasoning || "" }
+      : null;
+  },
+  anthropic(line) {
+    const j = sseJson(line);
+    if (!j) return null;
+    if (j.type === "error") throw new Error(j.error?.message || "The provider returned an error.");
+    const d = j.delta || {};
+    if (d.type === "text_delta") return { text: d.text || "", reasoning: "" };
+    if (d.type === "thinking_delta") return { text: "", reasoning: d.thinking || "" };
+    return null;
+  },
+  gemini(line) {
+    const j = sseJson(line);
+    if (!j) return null;
+    if (j.error?.message) throw new Error(j.error.message);
+    return splitThoughts(j.candidates?.[0]?.content?.parts);
+  },
+  ollama(line) {
+    if (!line.trim()) return null;
+    let j;
+    try { j = JSON.parse(line); } catch { return null; }
+    if (j.error) throw new Error(String(j.error));
+    return { text: j.message?.content || "", reasoning: j.message?.thinking || "" };
+  },
+};
+
+function splitThoughts(parts = []) {
+  let text = "", reasoning = "";
+  for (const part of parts) {
+    if (part.thought) reasoning += part.text || "";
+    else text += part.text || "";
+  }
+  return { text, reasoning };
+}
+
+// The same reply in its whole-response shape, for servers that ignore
+// "stream" and answer with one JSON body anyway.
+const WHOLE_REPLIES = {
+  openai: (j) => ({ text: j.choices?.[0]?.message?.content || "", reasoning: "" }),
+  anthropic: (j) => ({
+    text: (j.content || []).filter(b => b.type === "text").map(b => b.text).join(""),
+    reasoning: (j.content || []).filter(b => b.type === "thinking").map(b => b.thinking || "").join(""),
+  }),
+  gemini: (j) => splitThoughts(j.candidates?.[0]?.content?.parts),
+  ollama: (j) => ({ text: j.message?.content || "", reasoning: j.message?.thinking || "" }),
+};
+
+async function streamProvider(url, opts, kind, onDelta) {
+  const res = await openProviderCall(url, opts);
+  if ((res.headers.get("content-type") || "").includes("application/json")) {
+    const whole = WHOLE_REPLIES[kind]((await res.json()) || {});
+    if (whole.text || whole.reasoning) onDelta(whole);
+    return;
+  }
+  if (!res.body) throw new Error("The provider sent no response body.");
+
+  const parse = STREAM_LINES[kind];
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const takeLine = (raw) => {
+    const delta = parse(raw);
+    if (delta && (delta.text || delta.reasoning)) onDelta(delta);
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let cut;
+    while ((cut = buffer.indexOf("\n")) >= 0) {
+      takeLine(buffer.slice(0, cut).replace(/\r$/, ""));
+      buffer = buffer.slice(cut + 1);
+    }
+  }
+  if (buffer.trim()) takeLine(buffer);
+}
+
+// How much room to ask Anthropic for its private reasoning. Only sent when the
+// user turns the thinking switch on, because it bills extra tokens.
+const THINKING_BUDGET = 1024;
+
+async function callProvider(model, messages, onDelta) {
   const p = state.providers.find(x => x.id === model.providerId);
   if (!p) throw new Error("Provider settings are missing — re-add the model in Settings → Providers.");
   const base = (p.baseUrl || KIND_DEFAULTS[p.kind] || "").replace(/\/+$/, "");
@@ -533,6 +716,12 @@ async function callProvider(model, messages) {
   if (p.kind !== "ollama" && !p.apiKey) throw new Error("No API key saved — add it in Settings → Providers.");
 
   const history = messages.slice(-13);
+  const wantThinking = !!state.showThinking;
+  let text = "";
+  const emit = (delta) => {
+    if (delta.text) text += delta.text;
+    onDelta?.(delta);
+  };
 
   if (p.kind === "anthropic") {
     const msgs = history.map(m => {
@@ -544,7 +733,15 @@ async function callProvider(model, messages) {
       }
       return { role: m.role, content: blocks.length ? blocks : [{ type: "text", text: "(empty)" }] };
     });
-    const data = await httpJson(`${base}/v1/messages`, {
+    const body = {
+      model: p.name,
+      max_tokens: wantThinking ? 2048 + THINKING_BUDGET : 2048,
+      system: systemPrompt(),
+      messages: msgs,
+      stream: true,
+    };
+    if (wantThinking) body.thinking = { type: "enabled", budget_tokens: THINKING_BUDGET };
+    await streamProvider(`${base}/v1/messages`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -552,14 +749,9 @@ async function callProvider(model, messages) {
         "anthropic-version": "2023-06-01",
         "anthropic-dangerous-direct-browser-access": "true",
       },
-      body: JSON.stringify({ model: p.name, max_tokens: 2048, system: systemPrompt(), messages: msgs }),
-    });
-    const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-    if (!text) throw new Error("The provider returned an empty response.");
-    return text;
-  }
-
-  if (p.kind === "gemini") {
+      body: JSON.stringify(body),
+    }, "anthropic", emit);
+  } else if (p.kind === "gemini") {
     const contents = history.map(m => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [
@@ -570,55 +762,50 @@ async function callProvider(model, messages) {
         }),
       ],
     }));
-    const data = await httpJson(
-      `${base}/v1beta/models/${encodeURIComponent(p.name)}:generateContent`, {
+    const body = { systemInstruction: { parts: [{ text: systemPrompt() }] }, contents };
+    if (wantThinking) body.generationConfig = { thinkingConfig: { includeThoughts: true } };
+    await streamProvider(
+      `${base}/v1beta/models/${encodeURIComponent(p.name)}:streamGenerateContent?alt=sse`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": p.apiKey },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt() }] }, contents }),
-    });
-    if (data.error?.message) throw new Error(data.error.message);
-    const text = (data.candidates?.[0]?.content?.parts || []).map(x => x.text || "").join("");
-    if (!text) throw new Error("The provider returned an empty response.");
-    return text;
-  }
+      body: JSON.stringify(body),
+    }, "gemini", emit);
+  } else {
+    const msgs = [{ role: "system", content: systemPrompt() }];
+    for (const m of history) {
+      const imgs = imageAtts(m);
+      if (p.kind === "openai" && m.role === "user" && imgs.length) {
+        msgs.push({
+          role: "user",
+          content: [
+            { type: "text", text: m.text || "Describe this image." },
+            ...imgs.map(a => ({ type: "image_url", image_url: { url: a.dataUrl } })),
+          ],
+        });
+      } else {
+        const entry = { role: m.role, content: m.text || "(see attachment)" };
+        if (p.kind === "ollama" && imgs.length)
+          entry.images = imgs.map(a => splitDataUrl(a.dataUrl).data);
+        msgs.push(entry);
+      }
+    }
 
-  const msgs = [{ role: "system", content: systemPrompt() }];
-  for (const m of history) {
-    const imgs = imageAtts(m);
-    if (p.kind === "openai" && m.role === "user" && imgs.length) {
-      msgs.push({
-        role: "user",
-        content: [
-          { type: "text", text: m.text || "Describe this image." },
-          ...imgs.map(a => ({ type: "image_url", image_url: { url: a.dataUrl } })),
-        ],
-      });
+    if (p.kind === "ollama") {
+      await streamProvider(`${base}/api/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: p.name, messages: msgs, stream: true }),
+      }, "ollama", emit);
     } else {
-      const entry = { role: m.role, content: m.text || "(see attachment)" };
-      if (p.kind === "ollama" && imgs.length)
-        entry.images = imgs.map(a => splitDataUrl(a.dataUrl).data);
-      msgs.push(entry);
+      await streamProvider(`${base}/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${p.apiKey}` },
+        body: JSON.stringify({ model: p.name, messages: msgs, max_tokens: 2048, stream: true }),
+      }, "openai", emit);
     }
   }
 
-  if (p.kind === "ollama") {
-    const data = await httpJson(`${base}/api/chat`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: p.name, messages: msgs, stream: false }),
-    });
-    const text = data.message?.content;
-    if (!text) throw new Error("Ollama returned an empty response — is the model pulled?");
-    return text;
-  }
-
-  const data = await httpJson(`${base}/chat/completions`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${p.apiKey}` },
-    body: JSON.stringify({ model: p.name, messages: msgs, max_tokens: 2048 }),
-  });
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error(data.error?.message || "The provider returned an empty response.");
+  if (!text.trim()) throw new Error("The provider returned an empty response.");
   return text;
 }
 
@@ -754,14 +941,13 @@ els.suggestions.addEventListener("click", (e) => {
 });
 
 /* ---------- sidebar ---------- */
-els.sidebarClose.addEventListener("click", () => {
-  els.sidebar.classList.toggle("collapsed");
-  document.body.classList.toggle("sidebar-hidden", els.sidebar.classList.contains("collapsed"));
-});
-els.sidebarOpen.addEventListener("click", () => {
-  els.sidebar.classList.remove("collapsed");
-  document.body.classList.remove("sidebar-hidden");
-});
+function setSidebar(open) {
+  els.sidebar.classList.toggle("collapsed", !open);
+  els.sidebarClose.title = open ? "Collapse sidebar" : "Show sidebar";
+  els.sidebarClose.setAttribute("aria-label", els.sidebarClose.title);
+}
+els.sidebarClose.addEventListener("click", () => setSidebar(els.sidebar.classList.contains("collapsed")));
+els.sidebarOpen.addEventListener("click", () => setSidebar(true));
 
 document.querySelectorAll(".nav-item").forEach(btn => {
   btn.addEventListener("click", () => setView(btn.dataset.view));
@@ -824,15 +1010,22 @@ els.modelMenu.addEventListener("click", (e) => {
 
 /* ---------- settings modal ---------- */
 els.overlay = $("#settingsOverlay");
+els.settingsModal = document.querySelector("#settingsOverlay .modal");
 els.settingsClose = $("#settingsClose");
 els.gearBtn = $("#gearBtn");
 
+let settingsOpen = false;
 function openSettings(tab = "general") {
+  settingsOpen = true;
   els.overlay.hidden = false;
+  motion.reveal(els.settingsModal);
   switchTab(tab);
 }
 function closeSettings() {
-  els.overlay.hidden = true;
+  if (!settingsOpen) return;
+  settingsOpen = false;
+  /* a reopen during the drop-in cancels the hide */
+  motion.settle(els.settingsModal, () => { if (!settingsOpen) els.overlay.hidden = true; });
 }
 
 els.gearBtn.addEventListener("click", () => openSettings());
@@ -919,6 +1112,17 @@ $("#clearChatsBtn").addEventListener("click", () => {
   save();
   renderHistory(els.search.value);
   renderMessages();
+});
+
+/* ---------- model reasoning switch ---------- */
+els.thinkingToggle = $("#thinkingToggle");
+els.thinkingToggle.checked = !!state.showThinking;
+els.thinkingToggle.addEventListener("change", () => {
+  state.showThinking = els.thinkingToggle.checked;
+  save();
+  toast(state.showThinking
+    ? "Reasoning on — supported models think in the box beside their reply."
+    : "Reasoning off.");
 });
 
 /* ---------- provider relay ---------- */
@@ -1617,40 +1821,9 @@ $("#skillForm").addEventListener("submit", (e) => {
 /* ---------- global dismiss ---------- */
 document.addEventListener("click", () => { setModelMenu(false); setAccountMenu(false); });
 
-/* ---------- chat logo: eyes that follow the cursor ---------- */
-let stareTargets = [];
-const pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-window.addEventListener("pointermove", (e) => { pointer.x = e.clientX; pointer.y = e.clientY; }, { passive: true });
-
-function updateStare() {
-  stareTargets = stareTargets.filter(eyes => {
-    if (!eyes.isConnected) return false;
-    const svg = eyes.parentNode;
-    const r = svg.getBoundingClientRect();
-    if (!r.width) return true;
-    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-    const dx = pointer.x - cx, dy = pointer.y - cy;
-    const dist = Math.hypot(dx, dy) || 1;
-    const k = Math.min(1.5, dist / 110);      // viewBox units of travel
-    const ux = dx / dist * k, uy = dy / dist * k;
-    const [L, R] = eyes.children;
-    L.setAttribute("cx", 9.5 + ux); L.setAttribute("cy", 10.2 + uy);
-    R.setAttribute("cx", 12.5 + ux); R.setAttribute("cy", 10.2 + uy);
-    return true;
-  });
-}
-setInterval(updateStare, 60);
-
-/* blink: flatten all visible avatars' eyes every few seconds */
-setInterval(() => {
-  const onScreen = stareTargets.filter(eyes => {
-    const b = eyes.parentNode.getBoundingClientRect();
-    return b.top > -30 && b.top < window.innerHeight;
-  });
-  if (!onScreen.length) return;
-  onScreen.forEach(e => e.style.transform = "scaleY(.12)");
-  setTimeout(() => onScreen.forEach(e => e.style.transform = ""), 150);
-}, 4200);
+/* ---------- chat logo ---------- */
+/* The triangle in the Notal mark spins while a reply is in flight; see
+   .msg.thinking in styles.css. */
 
 /* ---------- progressive web app ---------- */
 const THEME_COLORS = { light: "#f5f1ea", dark: "#262624" };
@@ -1686,7 +1859,7 @@ els.amInstallBtn.addEventListener("click", async () => {
 });
 
 /* ---------- init ---------- */
-if (window.innerWidth < 860) els.sidebar.classList.add("collapsed");
+if (window.innerWidth < 860) setSidebar(false);
 applyTheme();
 els.modelName.textContent = selectedModel().name;
 renderModelMenu();

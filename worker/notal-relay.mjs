@@ -1,9 +1,10 @@
 /**
  * Notal AI provider relay — a thin, allow-listed forwarder.
  *
- * Why this exists: browsers cannot call most LLM APIs directly (CORS blocks
- * them), and this way the request shape stays identical, so the app works
- * whether the relay is configured or not.
+ * Why this exists: the big providers answer browser calls directly, but plenty
+ * of OpenAI-compatible servers send no CORS headers at all, and a browser
+ * refuses those. Going through the relay keeps the request shape identical, so
+ * the app works whether the relay is configured or not.
  *
  * The relay never sees an account and never stores anything: it forwards the
  * caller's own key to a host on the allow-list and returns the provider's
@@ -90,6 +91,20 @@ function targetError(url, env) {
   return null;
 }
 
+// The timeout covers only the wait for the provider's headers. Applying it to
+// the whole exchange would cut off a long streamed reply mid-sentence.
+function fetchToHeaders(url, init, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const err = new Error(`upstream did not answer within ${ms}ms`);
+      err.name = "TimeoutError";
+      reject(err);
+    }, ms);
+    const stop = (fn) => (arg) => { clearTimeout(timer); fn(arg); };
+    fetch(url, init).then(stop(resolve), stop(reject));
+  });
+}
+
 async function handleRelay(request, env, cors) {
   let envelope;
   try { envelope = await request.json(); }
@@ -117,26 +132,27 @@ async function handleRelay(request, env, cors) {
 
   let upstream;
   try {
-    upstream = await fetch(url, {
+    upstream = await fetchToHeaders(url, {
       method,
       headers: upstreamHeaders,
       body: method === "GET" ? undefined : payload,
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-    });
+    }, UPSTREAM_TIMEOUT_MS);
   } catch (err) {
     const reason = err?.name === "TimeoutError" ? "timed out" : "could not be reached";
     return json({ error: { message: `Provider ${reason}` } }, { status: 502, headers: cors });
   }
 
-  const text = await upstream.text();
-  return new Response(text, {
-    status: upstream.status,
-    headers: {
-      "content-type": upstream.headers.get("content-type") || "application/json; charset=utf-8",
-      ...cors,
-      "x-relay": "notal",
-    },
-  });
+  // The body goes through untouched. Buffering it here would hold a streamed
+  // reply until the end and the caller would see the whole answer at once.
+  const headers = { ...cors, "x-relay": "notal" };
+  const contentType = upstream.headers.get("content-type");
+  if (contentType) headers["content-type"] = contentType;
+  for (const name of ["cache-control", "retry-after", "x-request-id"]) {
+    const value = upstream.headers.get(name);
+    if (value) headers[name] = value;
+  }
+  const empty = upstream.status === 204 || upstream.status === 304;
+  return new Response(empty ? null : upstream.body, { status: upstream.status, headers });
 }
 
 export default {

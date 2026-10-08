@@ -32,32 +32,32 @@
       </div>
 
       <nav class="sidebar-nav">
-        <button class="nav-item active" data-view="chats">
+        <button class="nav-item active" data-view="chats" title="Chats" aria-label="Chats">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 01-9 8.3 8.6 8.6 0 01-3.8-.9L3 20l1.1-4.9a8.4 8.4 0 01-.9-3.6 8.4 8.4 0 018.3-9 8.4 8.4 0 019.5 9z"/></svg>
           <span>Chats</span>
         </button>
-        <button class="nav-item" data-view="projects">
+        <button class="nav-item" data-view="projects" title="Projects" aria-label="Projects">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
           <span>Projects</span>
         </button>
-        <button class="nav-item" data-view="memory">
+        <button class="nav-item" data-view="memory" title="Memory" aria-label="Memory">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4a4 4 0 00-4 4v1a4 4 0 00-2 7 4 4 0 006 4h0a4 4 0 006-4 4 4 0 00-2-7V8a4 4 0 00-4-4z"/><path d="M12 4v16"/></svg>
           <span>Memory</span>
         </button>
-        <button class="nav-item" data-view="skills">
+        <button class="nav-item" data-view="skills" title="Skills" aria-label="Skills">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 4l8 14H4z"/></svg>
           <span>Skills</span>
         </button>
       </nav>
 
       <div class="new-chat-wrap">
-        <button class="new-chat-btn" id="newChatBtn">
+        <button class="new-chat-btn" id="newChatBtn" title="New chat" aria-label="New chat">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
           <span>New chat</span>
         </button>
         <div class="search-wrap">
           <svg class="search-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          <input type="text" id="searchChats" placeholder="Search chats…" />
+          <input type="text" id="searchChats" placeholder="Search chats…" aria-label="Search chats" />
         </div>
       </div>
 
@@ -68,7 +68,7 @@
 
       <div class="sidebar-footer">
         <div class="account-wrap">
-          <button class="signin-btn" id="signinBtn" aria-haspopup="true" aria-expanded="false" aria-controls="accountMenu">
+          <button class="signin-btn" id="signinBtn" title="Account" aria-haspopup="true" aria-expanded="false" aria-controls="accountMenu">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0115 0"/></svg>
             <span>Sign in</span>
           </button>
@@ -269,6 +269,10 @@
               </div>
             </div>
             <div class="setting-row">
+              <div class="setting-info"><span class="setting-name">Model reasoning</span><small>Show Claude's and Gemini's thinking as it happens. Uses extra tokens</small></div>
+              <label class="switch"><input type="checkbox" id="thinkingToggle" /><span class="sl track"></span></label>
+            </div>
+            <div class="setting-row">
               <div class="setting-info"><span class="setting-name">Chat history</span><small>Stored only in this browser</small></div>
               <button class="danger-btn" id="clearChatsBtn" type="button">Clear all chats</button>
             </div>
@@ -393,6 +397,7 @@
   <div class="toast" id="toast" role="status"></div>
   <div class="lightbox" id="lightbox" hidden><img id="lightboxImg" alt="Attached image, full size" /></div>
 
+  <script src="../gsap.min.js"></script>
   <script src="../app.js"></script>
 </body>
 </html>

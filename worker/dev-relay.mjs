@@ -19,7 +19,13 @@ http.createServer(async (req, res) => {
   try {
     const out = await worker.fetch(request, env, {});
     res.writeHead(out.status, Object.fromEntries(out.headers.entries()));
-    res.end(await out.text());
+    if (!out.body) {
+      res.end();
+      return;
+    }
+    // written chunk by chunk so a streamed reply arrives as it is produced
+    for await (const chunk of out.body) res.write(chunk);
+    res.end();
   } catch (err) {
     res.writeHead(500, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: { message: String(err?.message || err) } }));
