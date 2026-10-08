@@ -107,6 +107,7 @@ let state = Object.assign({
   activeProject: null,
   relayUrl: "",
   showThinking: false,
+  sidebarOpen: true,
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
@@ -357,7 +358,7 @@ function appendMessage(msg) {
 
   const avatar = document.createElement("div");
   avatar.className = "msg-avatar";
-  avatar.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg>`;
+  avatar.innerHTML = `<span class="notal-mark" aria-hidden="true"></span>`;
 
   const roleName = document.createElement("div");
   roleName.className = "msg-role";
@@ -368,13 +369,33 @@ function appendMessage(msg) {
   thinkBox.hidden = true;
   const thinkLabel = document.createElement("span");
   thinkLabel.className = "think-label";
+  const thinkChevron = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  thinkChevron.setAttribute("class", "think-chevron");
+  thinkChevron.setAttribute("viewBox", "0 0 24 24");
+  thinkChevron.setAttribute("width", "13");
+  thinkChevron.setAttribute("height", "13");
+  thinkChevron.setAttribute("aria-hidden", "true");
+  thinkChevron.innerHTML = `<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6"/>`;
+  const thinkHead = document.createElement("button");
+  thinkHead.type = "button";
+  thinkHead.className = "think-head";
+  thinkHead.setAttribute("aria-expanded", "false");
+  thinkHead.append(thinkLabel, thinkChevron);
   const thinkText = document.createElement("div");
   thinkText.className = "think-text";
-  thinkBox.append(thinkLabel, thinkText);
+  thinkBox.append(thinkHead, thinkText);
+  const setReasoningOpen = (open) => {
+    thinkBox.classList.toggle("open", open);
+    thinkHead.setAttribute("aria-expanded", String(open));
+  };
+  thinkHead.addEventListener("click", () => setReasoningOpen(!thinkBox.classList.contains("open")));
 
   body.append(roleName, thinkBox, content);
   wrap.append(avatar, body);
   els.messages.append(wrap);
+
+  let reasoningOn = false;
+  let reasoningStartedAt = 0;
 
   return {
     wrap,
@@ -384,11 +405,15 @@ function appendMessage(msg) {
     thinkText,
     startThinking() {
       wrap.classList.add("thinking");
+      if (reasoningOn) return;
+      reasoningOn = true;
+      reasoningStartedAt = Date.now();
       if (!state.showThinking) return;
       thinkLabel.textContent = "Thinking";
       thinkBox.classList.add("live");
       if (thinkBox.hidden) {
         thinkBox.hidden = false;
+        setReasoningOpen(true);
         motion.reveal(thinkBox);
       }
     },
@@ -400,12 +425,20 @@ function appendMessage(msg) {
     },
     stopThinking() {
       wrap.classList.remove("thinking");
+      if (!reasoningOn) return;
+      reasoningOn = false;
       if (thinkBox.hidden) return;
-      thinkLabel.textContent = "Reasoning";
       thinkBox.classList.remove("live");
-      if (!thinkText.textContent.trim()) thinkBox.hidden = true;
+      if (!thinkText.textContent.trim()) { thinkBox.hidden = true; return; }
+      thinkLabel.textContent = "Thought for " + elapsedWords(Date.now() - reasoningStartedAt);
+      setReasoningOpen(false);
     },
   };
+}
+
+function elapsedWords(ms) {
+  const s = Math.max(1, Math.round(ms / 1000));
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
 function scrollToBottom() {
@@ -945,6 +978,8 @@ function setSidebar(open) {
   els.sidebar.classList.toggle("collapsed", !open);
   els.sidebarClose.title = open ? "Collapse sidebar" : "Show sidebar";
   els.sidebarClose.setAttribute("aria-label", els.sidebarClose.title);
+  state.sidebarOpen = open;
+  save();
 }
 els.sidebarClose.addEventListener("click", () => setSidebar(els.sidebar.classList.contains("collapsed")));
 els.sidebarOpen.addEventListener("click", () => setSidebar(true));
@@ -1859,7 +1894,9 @@ els.amInstallBtn.addEventListener("click", async () => {
 });
 
 /* ---------- init ---------- */
-if (window.innerWidth < 860) setSidebar(false);
+/* Narrow screens always start on the drawer; desktop keeps whichever width
+   you left the sidebar at. */
+setSidebar(window.innerWidth < 860 ? false : state.sidebarOpen !== false);
 applyTheme();
 els.modelName.textContent = selectedModel().name;
 renderModelMenu();

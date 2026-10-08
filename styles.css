@@ -50,6 +50,23 @@ input, textarea { font: inherit; color: inherit; }
 
 .app { display: flex; height: 100vh; overflow: hidden; }
 
+/* ---------------- Brand mark ----------------
+   Three petals around a core, drawn as two stacked layers so the petals can
+   spin while the core holds still. Size it from the parent box. The spin
+   origin is the artwork's three-fold balance point rather than the middle of
+   the square; make-brand-icons.js prints that number when it builds the PNGs. */
+.notal-mark { position: relative; display: inline-block; width: 100%; height: 100%; }
+.notal-mark::before, .notal-mark::after {
+  content: ""; position: absolute; inset: 0;
+  background-size: contain; background-repeat: no-repeat; background-position: center;
+}
+.notal-mark::before {
+  background-image: url("icons/notal-petals.png");
+  transform-origin: 50.1% 55.8%;
+}
+.notal-mark::after { background-image: url("icons/notal-core.png"); }
+@keyframes notal-spin { to { transform: rotate(360deg); } }
+
 /* ---------------- Sidebar ---------------- */
 .sidebar {
   width: 268px;
@@ -60,28 +77,37 @@ input, textarea { font: inherit; color: inherit; }
   border-right: 1px solid var(--border);
   transition: width .34s cubic-bezier(.24, 1.3, .4, 1);
 }
-/* collapsed = an icon rail, not hidden: every button stays reachable.
+/* collapsed = an icon rail, not hidden: the mark stays at the top, every
+   button stays reachable, and the same little control folds it back open.
    Mobile keeps the off-canvas drawer instead, see the 860px query below. */
 @media (min-width: 861px) {
-  .sidebar.collapsed { width: 60px; }
-  .sidebar.collapsed .sidebar-header { padding: 18px 14px 12px; justify-content: center; }
-  .sidebar.collapsed .brand { display: none; }
-  .sidebar.collapsed .sidebar-nav { padding: 4px 8px 10px; }
+  .sidebar.collapsed { width: 68px; }
+  .sidebar.collapsed .sidebar-header {
+    flex-direction: column; align-items: center; gap: 4px; padding: 14px 0 12px;
+  }
+  .sidebar.collapsed .sidebar-nav { padding: 0 10px 10px; }
   .sidebar.collapsed .nav-item,
   .sidebar.collapsed .new-chat-btn { justify-content: center; gap: 0; padding-left: 0; padding-right: 0; }
-  .sidebar.collapsed .new-chat-wrap { padding: 4px 10px 14px; }
+  /* a full-width block would be too heavy for a 68px rail */
+  .sidebar.collapsed .new-chat-btn { width: 40px; height: 40px; margin: 0 auto; border-radius: 12px; }
+  .sidebar.collapsed .new-chat-wrap { padding: 0 10px 14px; }
   .sidebar.collapsed .search-wrap,
   .sidebar.collapsed .history,
   .sidebar.collapsed .brand-name,
   .sidebar.collapsed .nav-item span,
   .sidebar.collapsed .new-chat-btn span,
   .sidebar.collapsed .signin-btn span { display: none; }
-  .sidebar.collapsed .sidebar-footer { flex-direction: column; padding: 12px 8px 14px; }
+  .sidebar.collapsed .sidebar-footer { flex-direction: column; gap: 4px; padding: 12px 10px 14px; }
   .sidebar.collapsed .signin-btn { padding: 8px 10px; }
   .sidebar.collapsed .signin-btn.signed-in svg { display: inline-block; }
   .sidebar.collapsed .user-photo { width: 18px; height: 18px; }
   .sidebar.collapsed .account-menu { left: calc(100% - 6px); bottom: 0; }
   .sidebar.collapsed .sidebar-close svg { transform: rotate(180deg); }
+  /* the fold control reads as its own little button once the labels are gone */
+  .sidebar.collapsed .sidebar-close {
+    width: 26px; height: 26px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+  }
 }
 
 .sidebar-header {
@@ -94,11 +120,7 @@ input, textarea { font: inherit; color: inherit; }
   display: flex; align-items: center; gap: 10px;
   text-decoration: none; color: var(--text);
 }
-.brand-logo {
-  width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--text); color: var(--bg);
-}
+.brand-logo { width: 28px; height: 28px; flex-shrink: 0; }
 .brand-name { font-family: var(--sans); font-size: 17px; font-weight: 600; letter-spacing: -.2px; }
 
 .icon-btn {
@@ -385,6 +407,7 @@ button:disabled { opacity: .5; cursor: default; }
   display: flex; align-items: center; gap: 10px;
   padding: 12px 20px;
 }
+.topbar .brand-logo { width: 20px; height: 20px; }
 /* the topbar hamburger is a mobile affordance; on desktop the rail's own
    chevron opens and closes the sidebar */
 .sidebar-open { display: none; }
@@ -440,14 +463,11 @@ button:disabled { opacity: .5; cursor: default; }
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 12.5px; font-weight: 600;
 }
-.msg.assistant .msg-avatar { background: var(--text); color: var(--bg); }
-.msg.thinking .msg-avatar svg path {
-  transform-box: fill-box; transform-origin: center;
-  animation: tri-spin 1.1s linear infinite;
-}
-@keyframes tri-spin { to { transform: rotate(360deg); } }
+.msg.assistant .msg-avatar { padding: 1px; }
+/* while the model works the petals turn in place and the core holds still */
+.msg.thinking .msg-avatar .notal-mark::before { animation: notal-spin 1.15s linear infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .msg.thinking .msg-avatar svg path { animation-duration: 4s; }
+  .msg.thinking .msg-avatar .notal-mark::before { animation-duration: 5s; }
 }
 
 .msg-body { min-width: 0; flex: 1; }
@@ -491,24 +511,28 @@ button:disabled { opacity: .5; cursor: default; }
 }
 
 /* reasoning box — appears beside the spinning mark while the model thinks */
-.msg-think {
-  display: grid; gap: 5px; align-content: start;
-  margin-bottom: 12px; padding: 10px 13px;
-  border: 1px solid var(--border); border-left: 2px solid var(--accent);
-  border-radius: 3px 12px 12px 3px;
-  background: var(--surface);
-}
+/* Model reasoning folds into a one-line row once the answer is ready. */
+.msg-think { display: grid; gap: 3px; align-content: start; margin-bottom: 10px; }
 .msg-think[hidden] { display: none; }
-.think-label {
-  font-size: 11px; font-weight: 600; letter-spacing: .7px;
-  text-transform: uppercase; color: var(--text-faint);
+.think-head {
+  display: inline-flex; align-items: center; gap: 5px; align-self: start;
+  padding: 3px 7px 3px 0; border-radius: 8px; background: none; border: 0;
+  font-family: var(--sans); color: var(--text-faint); cursor: pointer;
+  transition: color .15s, background .15s;
 }
+.think-head:hover { color: var(--text-soft); background: var(--surface-2); }
+.think-label { font-size: 12.5px; font-weight: 600; }
 .msg-think.live .think-label { color: var(--accent); }
+.think-chevron { flex-shrink: 0; transition: transform .2s cubic-bezier(.24, 1.3, .4, 1); }
+.msg-think.open .think-chevron { transform: rotate(90deg); }
 .think-text {
+  display: none; margin-top: 3px; padding-left: 12px;
+  border-left: 1px solid var(--border);
   font-size: 13px; line-height: 1.6; color: var(--text-soft);
   white-space: pre-wrap; word-wrap: break-word;
   max-height: 168px; overflow-y: auto;
 }
+.msg-think.open .think-text { display: block; }
 
 /* ---------------- Composer ---------------- */
 .composer-wrap { padding: 8px 24px 14px; }
@@ -555,7 +579,7 @@ button:disabled { opacity: .5; cursor: default; }
 }
 .model-picker:hover { background: var(--surface-2); }
 .model-picker.open { border-color: var(--text-faint); }
-.mp-star { color: var(--text); }
+.mp-star { width: 14px; height: 14px; flex-shrink: 0; }
 .mp-chevron { transition: transform .18s; color: var(--text-soft); }
 .model-picker.open .mp-chevron { transform: rotate(180deg); }
 .model-menu {
@@ -673,11 +697,7 @@ kbd {
   border-radius: 18px; box-shadow: var(--shadow, 0 18px 50px rgba(0,0,0,.16));
   display: grid; gap: 10px; justify-items: center;
 }
-.lock-logo {
-  width: 44px; height: 44px; border-radius: 13px; background: var(--text);
-  display: grid; place-items: center;
-}
-.lock-logo::after { content: ""; width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 16px solid var(--bg); }
+.lock-logo { width: 46px; height: 46px; }
 .lock-card h2 { font-family: var(--serif); font-size: 19px; font-weight: 600; }
 .lock-hint { font-size: 13px; color: var(--text-soft); margin-top: -4px; }
 .pin-input {

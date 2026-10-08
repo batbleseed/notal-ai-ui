@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Notal AI — your own AI workspace</title>
   <meta name="description" content="Notal AI is a calm AI workspace where you bring your own models: projects, memory, reusable skills, attachments, dictation and Google sign-in. Everything stays in your browser." />
-  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#f5f1ea" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Notal AI" />
-  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -43,9 +43,19 @@
       padding: 22px 0;
     }
     .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 600; }
-    .tile {
-      width: 30px; height: 30px; border-radius: 9px; background: var(--text); color: var(--bg);
-      display: grid; place-items: center;
+    /* the Notal mark: three petals around a core, built from the brand PNGs */
+    .notal-mark { position: relative; display: inline-block; width: 100%; height: 100%; }
+    .notal-mark::before, .notal-mark::after {
+      content: ""; position: absolute; inset: 0;
+      background-size: contain; background-repeat: no-repeat; background-position: center;
+    }
+    .notal-mark::before { background-image: url("icons/notal-petals.png"); }
+    .notal-mark::after { background-image: url("icons/notal-core.png"); }
+    .tile { width: 30px; height: 30px; flex-shrink: 0; }
+    /* the feature grid is not a logo wall — each card gets its own line icon */
+    .feature .tile {
+      width: 34px; height: 34px; border-radius: 10px; margin-bottom: 14px;
+      display: grid; place-items: center; background: var(--surface-2); color: var(--accent);
     }
     .nav-links { display: flex; align-items: center; gap: 22px; font-size: 14.5px; }
     .nav-links a { text-decoration: none; color: var(--text-soft); }
@@ -101,8 +111,7 @@
     .row { display: flex; gap: 12px; align-items: flex-start; }
     .row.me { justify-content: flex-end; }
     .mark {
-      width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
-      display: grid; place-items: center; background: var(--accent); color: #fff;
+      width: 26px; height: 26px; flex-shrink: 0;
     }
     .bubble {
       max-width: 46ch; padding: 11px 15px; border-radius: 14px; font-size: 14.5px;
@@ -121,7 +130,6 @@
       transition: transform .16s ease, border-color .16s ease;
     }
     .feature:hover { transform: translateY(-3px); border-color: var(--text-faint); }
-    .feature .tile { width: 28px; height: 28px; border-radius: 8px; margin-bottom: 14px; }
     .feature h3 { font-family: var(--serif); font-size: 18px; font-weight: 600; margin-bottom: 6px; }
     .feature p { font-size: 14.5px; color: var(--text-soft); }
 
@@ -162,7 +170,7 @@
   <div class="wrap">
     <nav class="nav">
       <a class="brand" href="index.html">
-        <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+        <span class="tile notal-mark"></span>
         <span>Notal AI</span>
       </a>
       <div class="nav-links">
@@ -198,7 +206,7 @@
           <div class="bubble">Review this idea: an app that turns meeting notes into tasks</div>
         </div>
         <div class="row">
-          <span class="mark"><svg viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <span class="mark notal-mark"></span>
           <div class="bubble">
             Good seed. Strengths — it solves a pain people already feel, and the value is visible
             immediately. Risks — the magic moment depends entirely on extraction quality.<br><br>
@@ -216,32 +224,32 @@
       <p class="section-sub">Every part of the workspace is real and usable on day one — no locked features, no upgrade wall.</p>
       <div class="grid">
         <article class="feature">
-          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <span class="tile"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="16" r="3.5"/><path d="M10.4 13.6L19 5M16.5 7.5l2 2"/></svg></span>
           <h3>Bring your own model</h3>
           <p>Add OpenAI-compatible, Anthropic, Google Gemini or a local Ollama model in Settings → Providers. Keys are typed once, kept in your browser, and sent only to that provider.</p>
         </article>
         <article class="feature">
-          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <span class="tile"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg></span>
           <h3>Projects</h3>
           <p>Group related chats under a project. Open one and your sidebar, new chats and memories all switch to that context.</p>
         </article>
         <article class="feature">
-          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <span class="tile"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4a4 4 0 00-4 4v1a4 4 0 00-2 7 4 4 0 006 4h0a4 4 0 006-4 4 4 0 00-2-7V8a4 4 0 00-4-4z"/><path d="M12 4v16"/></svg></span>
           <h3>Memory</h3>
           <p>Write down the facts you're tired of repeating. Switchable per project, and everything you leave on goes into the prompt of every real model call.</p>
         </article>
         <article class="feature">
-          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <span class="tile"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg></span>
           <h3>Skills</h3>
           <p>Save the prompts you use all the time. One click sends them, or drops them in the message box so you can fill in the blanks first.</p>
         </article>
         <article class="feature">
-          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <span class="tile"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L15 4.5a3.3 3.3 0 014.7 4.7L10.4 18.5a1.7 1.7 0 01-2.4-2.4l7.8-7.8"/></svg></span>
           <h3>Files &amp; voice</h3>
           <p>Attach images and files to a message, click any image to see it full size, and dictate with the mic instead of typing.</p>
         </article>
         <article class="feature">
-          <span class="tile"><svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 7h14l-7 10.5z"/></svg></span>
+          <span class="tile"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0115 0"/></svg></span>
           <h3>Sign in, switch, lock</h3>
           <p>Google sign-in with your photo next to your messages, a switch-account picker, and an optional PIN that locks the app on this device.</p>
         </article>

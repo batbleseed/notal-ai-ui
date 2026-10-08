@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="favicon.svg" alt="Notal AI" width="120">
+  <img src="icons/notal-mark.png" alt="Notal AI" width="120">
   <h1>Notal AI Workspace</h1>
   <p><strong>Your intelligent AI workspace — memory, projects, skills, and multi-model chat.</strong></p>
   <p>
