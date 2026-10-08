@@ -34,18 +34,21 @@ function startServer() {
         res.writeHead(400).end("Bad request path");
         return;
       }
-      const file = path.resolve(WEB_DIR, wanted || "chat.html");
+      const file = path.resolve(WEB_DIR, wanted || "index.html");
       if (!file.startsWith(WEB_DIR + path.sep)) {
         res.writeHead(403).end("Outside the app folder");
         return;
       }
-      fs.readFile(file, (err, data) => {
-        if (err) {
-          res.writeHead(404).end("Not found");
-          return;
-        }
-        res.writeHead(200, { "content-type": MIME[path.extname(file)] || "application/octet-stream" });
-        res.end(data);
+      fs.stat(file, (statErr, stats) => {
+        const target = !statErr && stats.isDirectory() ? path.join(file, "index.html") : file;
+        fs.readFile(target, (err, data) => {
+          if (err) {
+            res.writeHead(404).end("Not found");
+            return;
+          }
+          res.writeHead(200, { "content-type": MIME[path.extname(target)] || "application/octet-stream" });
+          res.end(data);
+        });
       });
     });
     server.on("error", reject);
@@ -77,7 +80,7 @@ function buildMenu() {
 }
 
 // Runs inside the page, so it cannot touch Node. Returned facts are printed by --smoke.
-function smokeProbe() {
+async function smokeProbe() {
   const out = {};
   const shown = (sel) => {
     const el = document.querySelector(sel);
@@ -86,6 +89,7 @@ function smokeProbe() {
   };
   out.title = document.title;
   out.appLoaded = typeof window.relayBase === "function";
+  out.stylesApplied = getComputedStyle(document.querySelector(".app")).display === "flex";
   out.stateLoaded = typeof state === "object" && state !== null;
   out.sidebarVisible = shown("#sidebar");
   out.composerVisible = shown("#composer");
@@ -106,6 +110,7 @@ function smokeProbe() {
     out.storagePersists = false;
     out.storageError = String(err && err.message);
   }
+  out.swScope = (await navigator.serviceWorker.getRegistration())?.scope ?? null;
   return out;
 }
 
@@ -236,7 +241,7 @@ if (!app.requestSingleInstanceLock()) {
       app.exit(1);
       return;
     }
-    const appUrl = `http://localhost:${PORT}/chat.html`;
+    const appUrl = `http://localhost:${PORT}/chat/`;
     buildMenu();
     createWindow(appUrl);
     app.on("before-quit", () => server.close());

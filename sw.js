@@ -3,7 +3,7 @@ const CACHE = "notal-ai-v2";
 const CORE = [
   "./",
   "./index.html",
-  "./chat.html",
+  "./chat/index.html",
   "./styles.css",
   "./app.js",
   "./favicon.svg",
@@ -37,7 +37,7 @@ self.addEventListener("fetch", (e) => {
         c.put(req, res.clone());
         return res;
       } catch {
-        return (await caches.match(req)) || (await caches.match("./chat.html")) || Response.error();
+        return (await caches.match(req)) || (await caches.match("./chat/index.html")) || Response.error();
       }
     })());
     return;

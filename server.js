@@ -14,15 +14,24 @@ const types = {
 };
 
 http.createServer((req, res) => {
-  const file = path.join(__dirname, req.url === "/" ? "index.html" : decodeURIComponent(req.url.slice(1)));
-  fs.readFile(file, (err, data) => {
-    if (err) {
-      res.writeHead(404);
-      res.end("Not found");
-      return;
-    }
-    res.writeHead(200, { "Content-Type": types[path.extname(file)] || "application/octet-stream" });
-    res.end(data);
+  const route = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+  let file = path.resolve(__dirname, "." + (route === "/" ? "/index.html" : route));
+  if (!file.startsWith(__dirname + path.sep)) {
+    res.writeHead(403);
+    res.end("Outside the app folder");
+    return;
+  }
+  fs.stat(file, (statErr, stats) => {
+    if (!statErr && stats.isDirectory()) file = path.join(file, "index.html");
+    fs.readFile(file, (err, data) => {
+      if (err) {
+        res.writeHead(404);
+        res.end("Not found");
+        return;
+      }
+      res.writeHead(200, { "Content-Type": types[path.extname(file)] || "application/octet-stream" });
+      res.end(data);
+    });
   });
 }).listen(PORT, () => {
   console.log(`Notal AI running at http://127.0.0.1:${PORT}/  (close this window to stop)`);

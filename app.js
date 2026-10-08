@@ -1659,7 +1659,9 @@ let installPrompt = null;
 const isStandalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js", { scope: "./" })
+  // The worker stays at the site root so one registration covers both the
+  // landing page and /chat/; its default scope is its own folder.
+  navigator.serviceWorker.register("../sw.js")
     .catch(err => console.warn("Offline support did not start:", err?.message));
 }
 

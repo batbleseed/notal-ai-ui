@@ -3,7 +3,7 @@
   "short_name": "Notal AI",
   "description": "A calm AI workspace where you bring your own models: projects, memory, reusable skills, attachments, dictation and Google sign-in.",
   "id": "notal-ai",
-  "start_url": "./chat.html",
+  "start_url": "./chat/",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
