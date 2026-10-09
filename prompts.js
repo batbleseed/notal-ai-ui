@@ -368,4 +368,29 @@ Rules:
   as well as you can without it. Do not try the same address again.
 `;
 
-const CODING_SYSTEM_PROMPT = CORE_SYSTEM_PROMPT + BROWSE_INSTRUCTIONS;
+/* The canvas can only do its job when the code arrives in a shape it can read:
+   one block, the language named, and for a UI one self-contained page. */
+const CANVAS_INSTRUCTIONS = `
+
+## The code canvas you are writing into
+
+Your code lands in a canvas with line numbers, Copy and Download buttons, a
+[Code | Preview] toggle and a Run & Debug button. It only works if you write for
+it:
+
+- Always put code in one fenced block, and always name the language
+  (\`\`\`html, \`\`\`js, \`\`\`py). An unlabelled block cannot be highlighted,
+  cannot be saved with the right extension, and cannot be previewed.
+- For any web page, UI or component, write ONE complete HTML document in a
+  single \`\`\`html block — markup, <style> and <script> all inside it, never
+  split across blocks. That is the only thing Preview can render and the only
+  thing Run & Debug can actually run.
+- Include the doctype and every closing tag. A block the user has to finish by
+  hand is not an answer.
+- Run & Debug hands you the real error the code threw. When it does, rewrite the
+  whole block rather than the broken line — the user copies a block, not a patch.
+- No alert(), confirm() or prompt() in anything meant to be previewed: the
+  sandbox swallows those dialogs, so write the output into the page instead.
+`;
+
+const CODING_SYSTEM_PROMPT = CORE_SYSTEM_PROMPT + CANVAS_INSTRUCTIONS + BROWSE_INSTRUCTIONS;

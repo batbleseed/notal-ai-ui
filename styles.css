@@ -23,6 +23,25 @@
   --radius-lg: 18px;
   --radius-hero: 22px;
   --ring: 0 0 0 3px var(--accent-soft);
+  /* the code surface keeps its own small palette: paper in the light, the
+     editor's colours in the dark, so a reply of code reads like a file */
+  --code-bg: #f7f4ed;
+  --code-edge: #e0dbd0;
+  --tk-plain: #2b2a27;
+  --tk-comment: #93908a;
+  --tk-key: #a8532a;
+  --tk-str: #3d6b3a;
+  --tk-num: #7a5a12;
+  --tk-lit: #6b4fa8;
+  --tk-built: #2f6b8a;
+  --tk-title: #2d5c9e;
+  --tk-attr: #6b4fa8;
+  --tk-type: #1f6f6b;
+  --tk-meta: #7a5a12;
+  --tk-var: #a3541f;
+  --tk-param: #5e5d59;
+  --tk-tag: #8d8b84;
+  --tk-name: #a8532a;
 }
 
 [data-theme="dark"] {
@@ -38,6 +57,23 @@
   --border: #3d3c39;
   --user-bubble: #3a3a37;
   --shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 8px 24px rgba(0, 0, 0, .25);
+  --code-bg: #201f1d;
+  --code-edge: #383733;
+  --tk-plain: #e8e6e3;
+  --tk-comment: #7d7a72;
+  --tk-key: #569cd6;
+  --tk-str: #ce9178;
+  --tk-num: #b5cea8;
+  --tk-lit: #9cdcfe;
+  --tk-built: #4ec9b0;
+  --tk-title: #dcdcaa;
+  --tk-attr: #9cdcfe;
+  --tk-type: #4ec9b0;
+  --tk-meta: #c586c0;
+  --tk-var: #9cdcfe;
+  --tk-param: #b4b1a9;
+  --tk-tag: #83817a;
+  --tk-name: #569cd6;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -625,6 +661,100 @@ button:disabled { opacity: .5; cursor: default; }
   display: inline-block; max-width: 100%;
 }
 
+/* ---------------- Code cards ----------------
+   Generated code gets its own raised surface: a gutter of line numbers, the
+   language named, a toolbar, and for HTML or JavaScript a Preview that runs it
+   in a sandboxed frame. Class names match highlight.js so the token colours read
+   like every editor a developer has used. */
+.code-card {
+  margin: 6px 0 16px;
+  border: 1px solid var(--code-edge); border-radius: var(--radius-sm);
+  background: var(--code-bg); overflow: hidden;
+}
+.code-card.has-error { border-color: color-mix(in srgb, var(--accent) 55%, var(--code-edge)); }
+/* The reply's own <pre> styling would win over a single class, so the reset
+   gives up only what never belongs inside a card, and each part then sets its
+   own padding at the same weight, later in the file. */
+.msg-text .code-card pre { margin: 0; border: 0; border-radius: 0; background: none; }
+.cc-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 5px 7px 5px 11px;
+  border-bottom: 1px solid var(--code-edge);
+  background: color-mix(in srgb, var(--code-bg) 55%, var(--surface));
+}
+.cc-lang {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+.cc-tools { display: flex; gap: 3px; margin-left: auto; }
+.cc-btn {
+  font-size: 11.5px; font-weight: 600; color: var(--text-soft);
+  padding: 4px 8px; border-radius: 7px; border: 1px solid transparent;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.cc-btn:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
+.cc-btn:disabled { opacity: .45; cursor: default; }
+
+/* [ Code | Preview ] — the same two halves of one pill the mode switch uses */
+.cc-tabs {
+  display: inline-flex; overflow: hidden;
+  border: 1px solid var(--code-edge); border-radius: 999px;
+}
+.cc-tab {
+  padding: 3px 11px; font-size: 11.5px; font-weight: 600; color: var(--text-soft);
+  transition: background-color .15s, color .15s;
+}
+.cc-tab + .cc-tab { border-left: 1px solid var(--code-edge); }
+.cc-tab:hover { color: var(--text); }
+.cc-tab.active { background: var(--accent); color: #fff; }
+
+.code-card .cc-source {
+  display: flex; font-family: var(--mono); font-size: 13px; line-height: 1.55;
+}
+.code-card .cc-source[hidden] { display: none; }
+/* the gutter never scrolls and never shrinks; the code beside it does */
+.code-card pre.cc-gutter {
+  flex: none; min-width: 2.7em; padding: 11px 8px 11px 10px; text-align: right;
+  color: color-mix(in srgb, var(--tk-tag) 80%, transparent);
+  border-right: 1px solid var(--code-edge);
+  overflow: hidden;
+  user-select: none; -webkit-user-select: none;
+}
+.code-card pre.cc-main { flex: 1; min-width: 0; padding: 11px 14px; overflow-x: auto; }
+.code-card .cc-main code {
+  display: block; font: inherit; background: none; border: 0; padding: 0;
+  color: var(--tk-plain); white-space: pre;
+}
+.cc-preview { display: block; width: 100%; height: 340px; border: 0; background: #fff; }
+.cc-preview[hidden] { display: none; }
+.cc-foot {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 10px; border-top: 1px solid var(--code-edge);
+}
+.cc-run {
+  color: var(--accent); font-weight: 700;
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+}
+.cc-run:hover { background: var(--accent-soft); color: var(--accent); }
+.cc-status { font-size: 11.5px; color: var(--text-faint); overflow-wrap: anywhere; }
+.code-card.has-error .cc-status { color: var(--accent); }
+
+.code-card .hljs-comment, .code-card .hljs-quote { color: var(--tk-comment); font-style: italic; }
+.code-card .hljs-keyword, .code-card .hljs-section, .code-card .hljs-selector-tag { color: var(--tk-key); font-weight: 600; }
+.code-card .hljs-string, .code-card .hljs-regexp, .code-card .hljs-addition { color: var(--tk-str); }
+.code-card .hljs-number, .code-card .hljs-color { color: var(--tk-num); }
+.code-card .hljs-literal, .code-card .hljs-constant { color: var(--tk-lit); }
+.code-card .hljs-built_in { color: var(--tk-built); }
+.code-card .hljs-title, .code-card .hljs-function { color: var(--tk-title); }
+.code-card .hljs-attr, .code-card .hljs-attribute { color: var(--tk-attr); }
+.code-card .hljs-type, .code-card .hljs-selector-pseudo { color: var(--tk-type); }
+.code-card .hljs-meta { color: var(--tk-meta); }
+.code-card .hljs-variable { color: var(--tk-var); }
+.code-card .hljs-params { color: var(--tk-param); }
+.code-card .hljs-tag { color: var(--tk-tag); }
+.code-card .hljs-name { color: var(--tk-name); font-weight: 600; }
+
 /* The wait given a shape: while a reply is being produced, the words beside the
    spinning mark hop one after another — up, past the line, back to rest. Pure
    CSS, so nothing has to tick it and it survives a background tab. */
@@ -802,6 +932,61 @@ button:disabled { opacity: .5; cursor: default; }
 .mode-btn + .mode-btn { border-left: 1px solid var(--border); }
 .mode-btn:hover { color: var(--text); }
 .mode-btn.active { background: var(--accent); color: #fff; }
+
+/* ---------------- Coding mode ----------------
+   Coding is a different head space, and the page says so out loud: the message
+   box grows a rainbow edge that slides and glows, and the mark by the switch
+   turns once each time the mode changes. Decoration only — the composer works
+   exactly the same with the animation switched off. */
+.main[data-mode="coding"] .composer {
+  border-color: transparent;
+  animation: rainbow-halo 7s linear infinite;
+}
+.main[data-mode="coding"] .composer::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 2;
+  padding: 1.5px;
+  border-radius: calc(var(--radius-hero) + 1.5px);
+  background: linear-gradient(90deg,
+    #ff4d4d, #ff9500, #ffd60a, #30d158, #00c7be, #409cff, #bf5af2, #ff2d95, #ff4d4d);
+  background-size: 300% 100%;
+  animation: rainbow-slide 7s linear infinite;
+  /* two copies of the box, cut away from each other, leave only the ring */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  transition: padding .15s;
+}
+/* the halo animation owns box-shadow, so the usual focus ring cannot show here.
+   The rainbow edge thickens instead — focus stays visible in every mode. */
+.main[data-mode="coding"] .composer:focus-within::before {
+  padding: 2.5px;
+  border-radius: calc(var(--radius-hero) + 2.5px);
+}
+/* 300% of a 300%-wide strip is two full turns, so the loop has no seam */
+@keyframes rainbow-slide { to { background-position: 300% 0; } }
+@keyframes rainbow-halo {
+  0%, 100% { box-shadow: var(--shadow), 0 0 20px -6px rgba(255, 77, 77, .6); }
+  17% { box-shadow: var(--shadow), 0 0 20px -6px rgba(255, 149, 0, .6); }
+  33% { box-shadow: var(--shadow), 0 0 20px -6px rgba(48, 209, 88, .6); }
+  50% { box-shadow: var(--shadow), 0 0 20px -6px rgba(0, 199, 190, .6); }
+  67% { box-shadow: var(--shadow), 0 0 20px -6px rgba(64, 156, 255, .6); }
+  83% { box-shadow: var(--shadow), 0 0 20px -6px rgba(191, 90, 242, .6); }
+}
+.topbar .brand-logo.mark-spin::before {
+  animation: notal-spin .8s cubic-bezier(.25, .9, .25, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* slowed rather than dropped, the same deal as the hopping thinking words: a
+     machine that dials motion back still gets a coding mode that looks like one */
+  .main[data-mode="coding"] .composer,
+  .main[data-mode="coding"] .composer::before { animation-duration: 26s; }
+  .topbar .brand-logo.mark-spin::before { animation-duration: 2.4s; }
+}
 
 /* ---------------- Responsive ---------------- */
 @media (max-width: 860px) {

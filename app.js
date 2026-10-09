@@ -20,6 +20,8 @@ const els = {
   modelMenu: $("#modelMenu"),
   modelName: $(".model-name"),
   modeSeg: $("#modeSeg"),
+  main: $(".main"),
+  topMark: $(".topbar .brand-logo"),
   shareBtn: $("#shareBtn"),
   fileInput: $("#fileInput"),
   attachTray: $("#attachTray"),
@@ -199,6 +201,9 @@ function renderHistory(filter = "") {
 function renderMessages() {
   const conv = activeConv();
   els.messages.innerHTML = "";
+  /* the preview frames went away with the old nodes, so those cards are no
+     longer anything to route messages to */
+  liveCards.clear();
   const showGreeting = !conv || conv.messages.length === 0;
   els.greeting.hidden = !showGreeting;
   if (showGreeting) return;
@@ -263,7 +268,7 @@ function mdInline(str, into) {
   return into;
 }
 
-function renderMarkdown(src) {
+function renderMarkdown(src, decorate) {
   const frag = document.createDocumentFragment();
   const lines = String(src ?? "").replace(/\r\n?/g, "\n").split("\n");
   const block = (tag, text) => {
@@ -278,13 +283,21 @@ function renderMarkdown(src) {
     if (!line.trim()) { i++; continue; }
 
     if (/^ {0,3}```/.test(line)) {
+      const info = line.replace(/^ {0,3}```/, "").trim();
       const code = [];
       i++;
       while (i < lines.length && !/^ {0,3}```/.test(lines[i])) code.push(lines[i++]);
       i++;
-      const pre = document.createElement("pre");
-      pre.append(block("code", code.join("\n")));
-      frag.append(pre);
+      const text = code.join("\n");
+      if (decorate) {
+        frag.append(codeCard(text, info));
+      } else {
+        /* mid-stream the block is still growing, so it stays a plain <pre> —
+           highlighting a half-typed line would flash the wrong colour */
+        const pre = document.createElement("pre");
+        pre.append(block("code", text));
+        frag.append(pre);
+      }
       continue;
     }
 
@@ -339,8 +352,276 @@ function renderMarkdown(src) {
   return frag;
 }
 
-function renderText(el, text, asMarkdown) {
-  if (asMarkdown) el.replaceChildren(renderMarkdown(text));
+/* ---------- code cards ----------
+   A fenced block in an answer is a thing you can act on, not text you select by
+   hand: line numbers down the left, the language named, Copy / Download /
+   Insert, and for HTML and JavaScript a Preview that really runs the code. */
+
+/* Loaded before the model's code in every preview. It catches what that code
+   throws and posts it back up, which is what makes Run & Debug a fact rather
+   than a guess. `allow-modals` is deliberately absent: one alert() in generated
+   code would freeze this tab.
+   Built as one line on purpose: every line the app adds before the user's code
+   would push the browser's line numbers away from the ones the gutter shows,
+   and an error pointing at line 31 of a 15-line block helps nobody. */
+const PREVIEW_HARNESS = "<script>" + [
+  "(function(){",
+  "var send=function(k,t){try{parent.postMessage({notalPreview:1,kind:k,text:String(t).slice(0,500)},'*')}catch(e){}};",
+  "window.addEventListener('error',function(e){send('error',e.message+(e.lineno?' (line '+e.lineno+')':''));});",
+  "window.addEventListener('unhandledrejection',function(e){var r=e.reason;send('error','Unhandled rejection: '+((r&&r.message)||r));});",
+  "['error','warn','log'].forEach(function(m){var b=console[m];console[m]=function(){send(m==='error'?'error':'log',Array.prototype.join.call(arguments,' '));if(b)b.apply(console,arguments);};});",
+  "window.addEventListener('load',function(){send('ready','');});",
+  "})()",
+].join("") + "</script>";
+
+const liveCards = new Set();
+
+function reportCard(card, d) {
+  if (d.kind === "error") {
+    if (card.errors.length < 8) card.errors.push(d.text);
+    card.el.classList.add("has-error");
+    card.status.hidden = false;
+    card.status.textContent = card.errors.length > 1
+      ? `${card.errors.length} errors — last: ${d.text}`
+      : d.text;
+    return;
+  }
+  if (d.kind === "log") { card.logs++; return; }
+  if (d.kind === "ready" && card.status.hidden) {
+    card.status.hidden = false;
+    card.status.textContent = card.logs
+      ? `Ran — ${card.logs} console line${card.logs > 1 ? "s" : ""}, nothing thrown.`
+      : "Ran — nothing thrown.";
+  }
+}
+
+window.addEventListener("message", (e) => {
+  const d = e.data;
+  if (!d || d.notalPreview !== 1) return;
+  for (const card of liveCards) {
+    if (card.frame && card.frame.contentWindow === e.source) { reportCard(card, d); return; }
+  }
+});
+
+/* The harness has to sit after the doctype or the page renders in quirks mode,
+   and it has to sit before the page's own scripts to catch their errors. */
+function insertHarness(html) {
+  const doctype = /^\s*<!DOCTYPE[^>]*>/i.exec(html);
+  const at = doctype ? doctype.index + doctype[0].length : 0;
+  return html.slice(0, at) + PREVIEW_HARNESS + html.slice(at);
+}
+
+function previewDocument(raw, mode) {
+  if (mode === "document") return insertHarness(raw);
+  /* a loose script needs a page to live in. </script> inside one of its strings
+     would otherwise end the tag early, so it is broken apart first. */
+  return '<!DOCTYPE html><html><head><meta charset="utf-8">'
+    + "<style>body{font-family:system-ui,sans-serif;margin:14px;color:#1f1e1d}</style>"
+    + "</head><body>" + PREVIEW_HARNESS
+    + "<script>" + raw.replace(/<\/script/gi, "<\\/script") + "</script>"
+    + "</body></html>";
+}
+
+function runCard(card) {
+  card.errors = [];
+  card.logs = 0;
+  card.loaded = true;
+  card.runId++;
+  card.el.classList.remove("has-error");
+  card.status.hidden = true;
+  /* the marker makes every run a real reload even when the code has not moved */
+  card.frame.srcdoc = previewDocument(card.raw, card.mode) + `\n<!--run ${card.runId}-->`;
+}
+
+function showTab(card, which) {
+  card.tab = which;
+  for (const t of card.tabs.querySelectorAll(".cc-tab")) {
+    const on = t.dataset.tab === which;
+    t.classList.toggle("active", on);
+    t.setAttribute("aria-selected", String(on));
+  }
+  card.source.hidden = which !== "code";
+  card.frame.hidden = which !== "preview";
+  if (which === "preview") runCard(card);
+}
+
+/* The whole point of the loop: run it, take what actually broke, and hand that
+   back to the model in the words a developer would type. */
+async function debugCard(card) {
+  if (turnController) { toast("Wait for the reply in flight to finish."); return; }
+  if (card.tab !== "preview") showTab(card, "preview");
+  else runCard(card);
+  card.runBtn.disabled = true;
+  card.status.hidden = false;
+  card.status.textContent = "running…";
+  await new Promise((done) => setTimeout(done, 1400));
+  card.runBtn.disabled = false;
+  if (!card.errors.length) {
+    card.status.textContent = card.logs
+      ? `Ran clean — ${card.logs} console line${card.logs > 1 ? "s" : ""}, nothing thrown.`
+      : "Ran clean — nothing was thrown, so there is no error to send.";
+    toast("No error came back from the preview.");
+    return;
+  }
+  const joined = card.errors.slice(0, 3).join(" | ");
+  card.status.textContent = joined;
+  sendMessage("The code threw this error: " + joined
+    + ". Fix it and rewrite the code block.");
+}
+
+function ccButton(cls, text, title, onClick) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "cc-btn cc-" + cls;
+  b.textContent = text;
+  b.title = title;
+  b.addEventListener("click", () => onClick(b));
+  return b;
+}
+
+async function writeClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (err) {
+    /* a page opened from file://, or a browser that refuses the async API, still
+       gets a copy rather than an error */
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.append(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+}
+
+async function copyCode(card) {
+  toast(await writeClipboard(card.raw) ? "Code copied." : "The browser would not take the clipboard.");
+}
+
+function downloadCode(card) {
+  const ext = langExt(card.info);
+  const name = "notal-code." + ext;
+  const url = URL.createObjectURL(new Blob([card.raw], { type: "text/plain;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast("Saved as " + name);
+}
+
+/* There is no file system behind a web page, so the code goes to the one place
+   the user is definitely working in: the box they are typing into. */
+function insertCode(card) {
+  const current = els.input.value;
+  els.input.value = current.trim() ? current.replace(/\s+$/, "") + "\n\n" + card.raw : card.raw;
+  autoresize();
+  els.input.focus();
+  toast("Code put in the message box.");
+}
+
+function codeCard(raw, info) {
+  const mode = previewMode(info);
+  const card = { raw, info, mode, errors: [], logs: 0, runId: 0, loaded: false, tab: "code" };
+
+  const el = document.createElement("div");
+  el.className = "code-card";
+  el.dataset.kind = langKind(info);
+  card.el = el;
+
+  const bar = document.createElement("div");
+  bar.className = "cc-bar";
+  const badge = document.createElement("span");
+  badge.className = "cc-lang";
+  badge.textContent = langLabel(info);
+  bar.append(badge);
+
+  if (mode) {
+    const tabs = document.createElement("div");
+    tabs.className = "cc-tabs";
+    tabs.setAttribute("role", "tablist");
+    for (const [key, label] of [["code", "Code"], ["preview", "Preview"]]) {
+      const t = document.createElement("button");
+      t.type = "button";
+      t.className = "cc-tab" + (key === "code" ? " active" : "");
+      t.dataset.tab = key;
+      t.setAttribute("role", "tab");
+      t.setAttribute("aria-selected", String(key === "code"));
+      t.textContent = label;
+      tabs.append(t);
+    }
+    tabs.addEventListener("click", (e) => {
+      const t = e.target.closest(".cc-tab");
+      if (t) showTab(card, t.dataset.tab);
+    });
+    card.tabs = tabs;
+    bar.append(tabs);
+  }
+
+  const tools = document.createElement("div");
+  tools.className = "cc-tools";
+  tools.append(
+    ccButton("copy", "Copy", "Copy this code to the clipboard", () => copyCode(card)),
+    ccButton("save", "Download ." + langExt(info), "Save this code as a file", () => downloadCode(card)),
+    ccButton("insert", "Insert", "Put this code in the message box", () => insertCode(card))
+  );
+  bar.append(tools);
+  el.append(bar);
+
+  const body = document.createElement("div");
+  body.className = "cc-body";
+
+  const source = document.createElement("div");
+  source.className = "cc-source";
+  const gutter = document.createElement("pre");
+  gutter.className = "cc-gutter";
+  gutter.setAttribute("aria-hidden", "true");
+  gutter.textContent = Array.from({ length: raw.split("\n").length }, (_, n) => n + 1).join("\n");
+  const main = document.createElement("pre");
+  main.className = "cc-main";
+  const codeEl = document.createElement("code");
+  codeEl.className = "language-" + (langToken(info) || "plain");
+  codeEl.append(...syntaxNodes(raw, info));
+  main.append(codeEl);
+  source.append(gutter, main);
+  card.source = source;
+  body.append(source);
+
+  if (mode) {
+    const frame = document.createElement("iframe");
+    frame.className = "cc-preview";
+    frame.setAttribute("sandbox", "allow-scripts allow-forms allow-popups");
+    frame.setAttribute("title", "Preview of " + langLabel(info) + " code");
+    frame.hidden = true;
+    card.frame = frame;
+    body.append(frame);
+
+    const foot = document.createElement("div");
+    foot.className = "cc-foot";
+    card.runBtn = ccButton("run", "Run & Debug", "Run this and send any error back to Notal", () => debugCard(card));
+    card.status = document.createElement("p");
+    card.status.className = "cc-status";
+    card.status.hidden = true;
+    foot.append(card.runBtn, card.status);
+    el.append(body, foot);
+  } else {
+    el.append(body);
+  }
+
+  liveCards.add(card);
+  return el;
+}
+
+function renderText(el, text, asMarkdown, decorate) {
+  if (asMarkdown) el.replaceChildren(renderMarkdown(text, decorate));
   else el.textContent = text || "";
 }
 
@@ -357,7 +638,7 @@ function appendMessage(msg) {
 
   const content = document.createElement("div");
   content.className = msg.role === "user" ? "msg-bubble" : "msg-text";
-  renderText(content, msg.text, msg.role === "assistant");
+  renderText(content, msg.text, msg.role === "assistant", msg.role === "assistant");
 
   if (msg.role !== "assistant") {
     body.append(content);
@@ -603,17 +884,20 @@ async function sendMessage(text) {
   const model = selectedModel();
   let answer = "";
   let frame = 0;
-  const draw = () => {
+  const draw = (final) => {
     frame = 0;
     /* a [browse] tag streams in before the page does, so the markup must never
-       reach the visible answer */
-    renderText(turn.textEl, cleanAnswer(answer), true);
+       reach the visible answer. Code only gets coloured once the reply is
+       whole — a half-written line would flash the wrong token every frame. */
+    renderText(turn.textEl, cleanAnswer(answer), true, !!final);
     scrollToBottom();
   };
-  /* one re-render per animation frame keeps markdown cheap while tokens fly by */
+  /* one re-render per animation frame keeps markdown cheap while tokens fly by.
+     The arrow matters: rAF hands draw a timestamp, and a timestamp would read as
+     "finished" and re-highlight the block on every frame. */
   const push = (chunk) => {
     answer += chunk;
-    if (!frame) frame = requestAnimationFrame(draw);
+    if (!frame) frame = requestAnimationFrame(() => draw());
   };
   const onDelta = (delta) => {
     if (delta.reasoning) turn.addReasoning(delta.reasoning);
@@ -658,7 +942,7 @@ async function sendMessage(text) {
       await streamBuiltIn(craftReply(trimmed, conv.messages.length), push, ac.signal);
     }
     if (frame) cancelAnimationFrame(frame);
-    draw();
+    draw(true);
     turn.stopThinking();
     const reply = cleanAnswer(answer);
     conv.messages.push({ role: "assistant", text: reply });
@@ -669,7 +953,7 @@ async function sendMessage(text) {
     turn.stopThinking();
     if (ac.signal.aborted) {
       /* stopping is not a failure: keep whatever already arrived */
-      draw();
+      draw(true);
       const partial = cleanAnswer(answer);
       if (partial) {
         conv.messages.push({ role: "assistant", text: partial });
@@ -1315,7 +1599,7 @@ const SUGGESTIONS = {
    only knowable from the system prompt. */
 const PLACEHOLDER_BY_MODE = {
   chat: "Message Notal AI… or hand me a page: [browse]https://…[/browse]",
-  coding: "Describe a bug, paste your code… or [browse]https://…[/browse]",
+  coding: "Let's code — paste a bug, or hand me a page: [browse]https://…[/browse]",
 };
 
 function renderSuggestions() {
@@ -1346,8 +1630,22 @@ function renderSuggestions() {
   }));
 }
 
+/* One turn of the topbar mark when the mode changes: the app switched minds and
+   says so. The reflow read restarts the animation even when you flip Chat and
+   Coding faster than a frame, and animationend — not a timer — clears the class,
+   so a browser that dials motion back still gets its own longer spin. */
+function spinMark() {
+  const mark = els.topMark;
+  if (!mark) return;
+  mark.classList.remove("mark-spin");
+  void mark.offsetWidth;
+  mark.classList.add("mark-spin");
+}
+els.topMark?.addEventListener("animationend", () => els.topMark.classList.remove("mark-spin"));
+
 function setMode(mode) {
   if (!SUGGESTIONS[mode]) return;
+  const changed = state.mode !== mode;
   state.mode = mode;
   save();
   els.modeSeg.querySelectorAll(".mode-btn").forEach((b) => {
@@ -1356,7 +1654,11 @@ function setMode(mode) {
     b.setAttribute("aria-pressed", String(on));
   });
   els.input.placeholder = PLACEHOLDER_BY_MODE[mode];
+  /* the rainbow edge belongs to the whole main column, so coding reads as a
+     different room and not just a different prompt */
+  if (els.main) els.main.dataset.mode = mode;
   renderSuggestions();
+  if (changed) spinMark();
 }
 
 els.modeSeg.addEventListener("click", (e) => {
