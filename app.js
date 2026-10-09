@@ -418,7 +418,30 @@ function appendMessage(msg) {
   els.messages.append(wrap);
 
   let reasoningOn = false;
+  let reasoningStreamed = false;
   let reasoningStartedAt = 0;
+  /* The trail is a list of steps in the order they happened, so a page read
+     sits visibly between two pieces of reasoning. `notesEl` is the block the
+     model's current thinking streams into; it resets whenever something else
+     happens, so thinking after a browse starts a new block. */
+  let notesEl = null;
+
+  const openBox = () => {
+    if (thinkBox.hidden) {
+      thinkBox.hidden = false;
+      setReasoningOpen(true);
+      motion.reveal(thinkBox);
+    }
+  };
+
+  function notesBlock() {
+    if (!notesEl) {
+      notesEl = document.createElement("p");
+      notesEl.className = "think-notes";
+      thinkText.append(notesEl);
+    }
+    return notesEl;
+  }
 
   return {
     wrap,
@@ -434,27 +457,87 @@ function appendMessage(msg) {
       if (!state.showThinking) return;
       thinkLabel.textContent = "Reasoning";
       thinkBox.classList.add("live");
-      if (thinkBox.hidden) {
-        thinkBox.hidden = false;
-        setReasoningOpen(true);
-        motion.reveal(thinkBox);
-      }
+      openBox();
     },
     addReasoning(chunk) {
       if (!state.showThinking) return;
       this.startThinking();
-      thinkText.textContent += chunk;
+      reasoningStreamed = true;
+      notesBlock().textContent += chunk;
       thinkText.scrollTop = thinkText.scrollHeight;
+    },
+    /* What the model wrote next to a [browse] tag is it still working, not an
+       answer, so it goes into the trail and off the page. */
+    addNote(text) {
+      if (!text) return;
+      openBox();
+      const p = document.createElement("p");
+      p.className = "think-notes";
+      p.textContent = text;
+      thinkText.append(p);
+      notesEl = null;
+    },
+    /* Returns the callback that closes the step, so the caller keeps the pair
+       together: start when the fetch begins, finish with what came back. */
+    startBrowse(url) {
+      openBox();
+      thinkBox.classList.add("busy");
+      thinkLabel.textContent = "Browsing " + shortUrl(url);
+      const row = document.createElement("p");
+      row.className = "think-browse";
+      const parts = {
+        kind: document.createElement("span"),
+        where: document.createElement("span"),
+        state: document.createElement("span"),
+      };
+      parts.kind.className = "tb-kind";
+      parts.kind.textContent = "Browsing";
+      parts.where.className = "tb-url";
+      parts.where.textContent = shortUrl(url);
+      parts.state.className = "tb-state";
+      parts.state.textContent = "opening…";
+      row.append(parts.kind, parts.where, parts.state);
+      thinkText.append(row);
+      notesEl = null;
+      thinkText.scrollTop = thinkText.scrollHeight;
+      return (result) => {
+        thinkBox.classList.remove("busy");
+        if (result.ok) {
+          parts.state.textContent = result.title ? `read — ${result.title}` : "read";
+        } else {
+          parts.state.textContent = "did not open";
+          row.classList.add("failed");
+        }
+        thinkLabel.textContent = "Reasoning";
+        thinkText.scrollTop = thinkText.scrollHeight;
+      };
     },
     stopThinking() {
       wrap.classList.remove("thinking");
-      if (!reasoningOn) return;
-      reasoningOn = false;
-      if (thinkBox.hidden) return;
+      if (!thinkBox.hidden) {
+        if (!thinkText.childElementCount) {
+          thinkBox.hidden = true;
+        } else {
+          /* the thinking switch can be off while a page read still shows, so
+             the resting line says what the trail actually holds */
+          const browses = thinkText.querySelectorAll(".think-browse").length;
+          const reads = thinkText.querySelectorAll(".think-browse:not(.failed)").length;
+          if (reasoningStreamed) {
+            thinkLabel.textContent = "Thought for " + elapsedWords(Date.now() - reasoningStartedAt);
+          } else if (browses) {
+            thinkLabel.textContent = reads
+              ? (reads === browses
+                ? `Read ${reads} page${reads > 1 ? "s" : ""}`
+                : `Read ${reads} of ${browses} pages`)
+              : "No page opened";
+          } else {
+            thinkLabel.textContent = "Reasoning";
+          }
+          setReasoningOpen(false);
+        }
+      }
       thinkBox.classList.remove("live");
-      if (!thinkText.textContent.trim()) { thinkBox.hidden = true; return; }
-      thinkLabel.textContent = "Thought for " + elapsedWords(Date.now() - reasoningStartedAt);
-      setReasoningOpen(false);
+      reasoningOn = false;
     },
   };
 }
@@ -522,7 +605,9 @@ async function sendMessage(text) {
   let frame = 0;
   const draw = () => {
     frame = 0;
-    renderText(turn.textEl, answer, true);
+    /* a [browse] tag streams in before the page does, so the markup must never
+       reach the visible answer */
+    renderText(turn.textEl, cleanAnswer(answer), true);
     scrollToBottom();
   };
   /* one re-render per animation frame keeps markdown cheap while tokens fly by */
@@ -530,13 +615,52 @@ async function sendMessage(text) {
     answer += chunk;
     if (!frame) frame = requestAnimationFrame(draw);
   };
+  const onDelta = (delta) => {
+    if (delta.reasoning) turn.addReasoning(delta.reasoning);
+    if (delta.text) push(delta.text);
+  };
 
   try {
     if (model.providerId) {
-      await callProvider(model, conv.messages, (delta) => {
-        if (delta.reasoning) turn.addReasoning(delta.reasoning);
-        if (delta.text) push(delta.text);
-      }, ac.signal);
+      /* Browsing is a loop, not a side quest: the model asks for one page, this
+         tab reads it, the page text comes back as context for the next turn,
+         and only the final tag-free reply lands on the page. The pages go into
+         `context`, never into `conv.messages`, so a lookup does not live in the
+         chat history forever. */
+      let context = conv.messages;
+      let hops = 0;
+      for (;;) {
+        const raw = await callProvider(model, context, onDelta, ac.signal);
+        const url = hops < MAX_BROWSES ? findBrowseRequest(raw) : null;
+        if (!url) { answer = raw; break; }
+        const note = cleanAnswer(raw);
+        turn.addNote(note);
+        /* the words that came with the tag are now a step in the trail, so the
+           answer body starts over — otherwise a stop during the fetch would
+           leave the same paragraph twice in one message */
+        answer = "";
+        if (frame) cancelAnimationFrame(frame);
+        draw();
+        const closeStep = turn.startBrowse(url);
+        const question = {
+          role: "assistant",
+          text: note || "(I need to check something before answering.)",
+        };
+        try {
+          const page = await fetchPage(url, ac.signal);
+          closeStep({ ok: true, title: page.title });
+          context = [...context, question,
+            { role: "user", text: `[page contents] ${url}\n\n${page.text}` }];
+        } catch (err) {
+          if (err?.name === "AbortError") throw err;
+          closeStep({ ok: false });
+          /* say so plainly — a model that does not know the lookup failed will
+             ask for the same page again */
+          context = [...context, question,
+            { role: "user", text: `[browse failed] ${url} — ${err?.message || "the page could not be read"}` }];
+        }
+        hops++;
+      }
       /* a finished reply is better evidence than any test button */
       recordProviderResult(model.providerId, true, "Answered a real message");
     } else {
@@ -545,17 +669,19 @@ async function sendMessage(text) {
     if (frame) cancelAnimationFrame(frame);
     draw();
     turn.stopThinking();
-    conv.messages.push({ role: "assistant", text: answer });
+    const reply = cleanAnswer(answer);
+    conv.messages.push({ role: "assistant", text: reply });
     save();
-    notifyReply(answer);
+    notifyReply(reply);
   } catch (err) {
     if (frame) cancelAnimationFrame(frame);
     turn.stopThinking();
     if (ac.signal.aborted) {
       /* stopping is not a failure: keep whatever already arrived */
       draw();
-      if (answer.trim()) {
-        conv.messages.push({ role: "assistant", text: answer });
+      const partial = cleanAnswer(answer);
+      if (partial) {
+        conv.messages.push({ role: "assistant", text: partial });
         save();
       } else {
         turn.wrap.remove();
@@ -604,7 +730,7 @@ function craftReply(prompt, depth) {
   /* the built-in model has no system prompt to follow, so coding mode has to be
      handled here too or the switch would look dead on the default model */
   if (state.mode === "coding") {
-    return `Here's how I'd work through "${prompt.slice(0, 60)}${prompt.length > 60 ? "…" : ""}":\n\n1. Reproduce — the smallest case that shows the problem.\n2. Cause — what the code assumes, and where that assumption breaks.\n3. Fix — the minimal change, not a rewrite.\n4. Guard — something that fails before the fix and passes after.\n\nPaste the code or the error and I'll take it line by line. This is the built-in model, so it is working from a template — add a provider in Settings for real code answers.`;
+    return `Here's how I'd work through "${prompt.slice(0, 60)}${prompt.length > 60 ? "…" : ""}":\n\n1. Reproduce — the smallest case that shows the problem.\n2. Cause — what the code assumes, and where that assumption breaks.\n3. Fix — the minimal change, not a rewrite.\n4. Guard — something that fails before the fix and passes after.\n\nPaste the code or the error and I'll take it line by line. This is the built-in model, so it is working from a template, and it cannot open web pages — add a provider in Settings for real code answers and browsing.`;
   }
   if (p.includes("write") || p.includes("draft") || p.includes("brief")) {
     return `Here's a strong starting point for "${prompt.slice(0, 60)}${prompt.length > 60 ? "…" : ""}":\n\n1. Purpose — open with one sentence that states what this is and why it matters.\n2. Context — two or three lines the reader needs before diving in.\n3. The ask — what you want to happen, by when, and who owns it.\n4. Details — the supporting points, ordered by importance.\n\nWant me to fill this in with real content, adjust the tone, or make it shorter?`;
@@ -634,9 +760,20 @@ const KIND_DEFAULTS = {
   gemini: "https://generativelanguage.googleapis.com",
   ollama: "http://localhost:11434",
 };
+/* Prompts live in prompts.js so they read as text, not as code. `typeof` keeps
+   the app working if that file ever fails to load — coding mode falls back to
+   the one-line brief rather to no system prompt at all. */
 const SYSTEM_BY_MODE = {
-  chat: "You are Notal, a calm, clear assistant in the Notal AI workspace.",
-  coding: "You are Notal in coding mode: a precise engineering partner. Lead with working code, keep prose short, name the language and version you assumed, point out edge cases and failure modes, and say how to test the change. Prefer the minimal fix over a rewrite.",
+  /* A page read is not a coding-only need — "what is the newest model" is a
+     chat question — so both modes get the browse brief. Coding mode carries
+     the owner's full core instruction doc, which already ends with it. */
+  chat: (typeof CHAT_SYSTEM_PROMPT === "string"
+    ? CHAT_SYSTEM_PROMPT
+    : "You are Notal, a calm, clear assistant in the Notal AI workspace.")
+    + (typeof BROWSE_INSTRUCTIONS === "string" ? BROWSE_INSTRUCTIONS : ""),
+  coding: typeof CODING_SYSTEM_PROMPT === "string"
+    ? CODING_SYSTEM_PROMPT
+    : "You are Notal in coding mode: a precise engineering partner. Lead with working code, keep prose short, name the language and version you assumed, point out edge cases and failure modes, and say how to test the change. Prefer the minimal fix over a rewrite.",
 };
 
 function systemPrompt() {
@@ -808,6 +945,102 @@ async function streamProvider(url, opts, kind, onDelta) {
 // How much room to ask Anthropic for its private reasoning. Only sent when the
 // user turns the thinking switch on, because it bills extra tokens.
 const THINKING_BUDGET = 1024;
+
+/* ---------- browsing the web ----------
+   In coding mode the model may ask for one page with
+   [browse]https://example.com/page[/browse] and stop. This tab fetches the page
+   for real, pulls the readable text out of it, and sends that back so the
+   answer comes from what the page actually says rather than from memory. */
+const BROWSE_RE = /\[browse\]\s*(https?:\/\/[^\s[]+)\s*\[\/browse\]/i;
+const BROWSE_RE_ALL = /\[browse\]\s*(https?:\/\/[^\s[]+)\s*(?:\[\/browse\])?/gi;
+/* Three lookups per question is enough for real research and still bounds a
+   model that decides to keep browsing forever. */
+const MAX_BROWSES = 3;
+const PAGE_TEXT_LIMIT = 6000;
+
+function findBrowseRequest(text) {
+  BROWSE_RE_ALL.lastIndex = 0;
+  const m = BROWSE_RE_ALL.exec(text || "");
+  return m ? m[1] : null;
+}
+
+function withoutBrowseTags(text) {
+  return (text || "").replace(BROWSE_RE_ALL, "");
+}
+
+/* A tag streams in piece by piece, so hide a half-arrived one too — otherwise
+   the raw markup flashes in the answer before the page is even asked for. */
+function hidePartialTag(text) {
+  const lower = text.toLowerCase();
+  for (let i = lower.lastIndexOf("["); i >= 0; i = lower.lastIndexOf("[", i - 1)) {
+    const rest = lower.slice(i);
+    if ("[browse]".startsWith(rest) || "[/browse]".startsWith(rest)) return text.slice(0, i);
+  }
+  return text;
+}
+
+function cleanAnswer(text) {
+  return hidePartialTag(withoutBrowseTags(text)).trim();
+}
+
+function shortUrl(url) {
+  try {
+    const u = new URL(url);
+    const path = u.pathname === "/" ? "" : u.pathname;
+    return `${u.hostname}${path}`.slice(0, 64);
+  } catch { return url.slice(0, 64); }
+}
+
+/* Stripping the chrome off a page before it reaches the model: scripts and
+   styles carry nothing useful and cost tokens. */
+function readableText(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("script,style,noscript,template,svg,iframe,canvas").forEach(n => n.remove());
+  const title = (doc.querySelector("title")?.textContent || "").trim();
+  const main = doc.querySelector("main,article,[role=main]") || doc.body;
+  const text = (main?.textContent || "")
+    .replace(/\r/g, "")
+    .split("\n").map(l => l.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n");
+  return { title, text: text.slice(0, PAGE_TEXT_LIMIT) };
+}
+
+async function fetchPage(url, signal) {
+  const relay = relayBase();
+  let html = "";
+  if (relay) {
+    let res;
+    try { res = await fetch(`${relay}/browse`, {
+      method: "POST", signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url }),
+    }); }
+    catch (e) {
+      if (e?.name === "AbortError") throw e;
+      throw new Error(`The relay at ${relay} did not answer — check Settings → General.`);
+    }
+    const data = await res.json().catch(() => null);
+    /* an older deployed Worker has no /browse route at all, and the relay's own
+       errors arrive as {error:{message}} while browse sends a plain string */
+    const detail = typeof data?.error === "string" ? data.error : data?.error?.message;
+    if (res.status === 404 && !data?.ok)
+      throw new Error("this relay predates browsing — redeploy the Worker to update it");
+    if (!res.ok || !data?.ok) throw new Error(detail || `${res.status} ${res.statusText}`);
+    html = data.html || "";
+  } else {
+    /* no relay: the tab asks the site itself, which most sites refuse */
+    let res;
+    try { res = await fetch(url, { signal, redirect: "follow" }); }
+    catch (e) {
+      if (e?.name === "AbortError") throw e;
+      throw new Error("the site does not let a browser page read it — set a relay in Settings → General to browse");
+    }
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    html = await res.text();
+  }
+  const { title, text } = readableText(html);
+  if (!text) throw new Error("the page had no readable text");
+  return { title, text };
+}
 
 async function callProvider(model, messages, onDelta, signal) {
   const p = state.providers.find(x => x.id === model.providerId);

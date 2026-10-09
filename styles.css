@@ -669,6 +669,44 @@ button:disabled { opacity: .5; cursor: default; }
 }
 .msg-think.open .think-text { display: block; }
 
+/* The opened panel is a trail of steps in the order they really happened:
+   reasoning, a page lookup, then the thinking that used what it read. */
+.think-notes { margin: 0 0 8px; }
+.think-notes:last-child { margin-bottom: 0; }
+.think-browse {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  margin: 0 0 8px; padding: 5px 8px;
+  border-radius: var(--radius-xs);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+.think-browse:last-child { margin-bottom: 0; }
+.tb-kind {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--accent);
+}
+.tb-url {
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+  overflow-wrap: anywhere;
+}
+.tb-state { font-size: 12px; color: var(--text-faint); }
+.think-browse.failed {
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+.think-browse.failed .tb-kind { color: var(--text-faint); }
+/* the lookup in flight breathes, so the trail shows which step is current */
+.msg-think.busy .think-browse:last-child .tb-state {
+  animation: browse-breathe 1.5s ease-in-out infinite;
+}
+@keyframes browse-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg-think.busy .think-browse:last-child .tb-state { animation-duration: 4s; }
+}
+
 /* ---------------- Composer ---------------- */
 .composer-wrap { padding: 8px 24px 14px; }
 .composer {
