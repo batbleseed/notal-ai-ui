@@ -446,17 +446,27 @@ button:disabled { opacity: .5; cursor: default; }
 .greeting h1 .accent-word { color: var(--accent); }
 .greeting-sub { margin-top: 8px; color: var(--text-soft); font-size: 16px; }
 
-.suggestions { margin-top: 34px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+/* bento: two wide cards and two squares, offset so the row below mirrors the
+   one above. 3 columns, wide cards take 2 of them. */
+.suggestions { margin-top: 34px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .suggestion {
   display: flex; align-items: center; gap: 10px;
-  padding: 13px 15px; text-align: left; font-size: 13.5px; font-weight: 500;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  color: var(--text-soft);
-  transition: border-color .15s, color .15s, transform .1s, box-shadow .15s;
+  padding: 14px 15px; text-align: left;
+  background: var(--accent-soft); border: 1px solid transparent; border-radius: var(--radius);
+  color: var(--text);
+  transition: border-color .15s, transform .1s, box-shadow .15s, background-color .15s;
 }
-.suggestion:hover { border-color: var(--accent); color: var(--text); box-shadow: var(--shadow); }
+.suggestion.wide { grid-column: span 2; }
+.suggestion:hover { border-color: var(--accent); box-shadow: var(--shadow); }
 .suggestion:active { transform: translateY(1px); }
-.s-icon { color: var(--accent); font-size: 15px; }
+.s-icon {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 9px;
+  background: var(--surface); color: var(--accent); font-size: 15px;
+}
+.s-text { display: grid; gap: 2px; min-width: 0; }
+.s-title { font-size: 13.5px; font-weight: 600; }
+.s-desc { font-size: 12px; line-height: 1.45; color: var(--text-soft); }
 
 .messages {
   max-width: 720px; margin: 0 auto;
@@ -608,6 +618,21 @@ button:disabled { opacity: .5; cursor: default; }
 .model-option span { font-weight: 600; font-size: 13.5px; }
 .model-option small { color: var(--text-faint); font-size: 12px; }
 
+/* Chat / Coding switch: two halves of one pill, the chosen half filled with the
+   accent. It picks which system prompt the answer comes from. */
+.mode-seg {
+  display: inline-flex; align-items: stretch; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--accent-soft);
+}
+.mode-btn {
+  padding: 6px 12px; font-size: 12.5px; font-weight: 600; color: var(--text-soft);
+  transition: background-color .15s, color .15s;
+}
+.mode-btn + .mode-btn { border-left: 1px solid var(--border); }
+.mode-btn:hover { color: var(--text); }
+.mode-btn.active { background: var(--accent); color: #fff; }
+
 /* ---------------- Responsive ---------------- */
 @media (max-width: 860px) {
   .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; box-shadow: var(--shadow);
@@ -615,6 +640,7 @@ button:disabled { opacity: .5; cursor: default; }
   .sidebar.collapsed { transform: translateX(-100%); }
   .sidebar-open { display: inline-flex; }
   .suggestions { grid-template-columns: 1fr; }
+  .suggestion.wide { grid-column: auto; }
 }
 
 ::-webkit-scrollbar { width: 9px; }

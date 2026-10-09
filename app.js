@@ -19,6 +19,7 @@ const els = {
   modelPicker: $("#modelPicker"),
   modelMenu: $("#modelMenu"),
   modelName: $(".model-name"),
+  modeSeg: $("#modeSeg"),
   shareBtn: $("#shareBtn"),
   fileInput: $("#fileInput"),
   attachTray: $("#attachTray"),
@@ -108,6 +109,7 @@ let state = Object.assign({
   relayUrl: "",
   showThinking: false,
   sidebarOpen: true,
+  mode: "chat",
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
@@ -123,6 +125,7 @@ if (typeof state.idleLock !== "number") state.idleLock = 0;
 for (const k of ["projects", "memories", "skills"])
   if (!Array.isArray(state[k])) state[k] = [];
 if (!state.projects.some(p => p.id === state.activeProject)) state.activeProject = null;
+if (state.mode !== "chat" && state.mode !== "coding") state.mode = "chat";
 
 function selectedModel() {
   return state.models.find(m => m.id === state.selectedModel) ?? state.models[0];
@@ -541,6 +544,14 @@ function craftReply(prompt, depth) {
   if (p.includes("who are you")) {
     return "I'm Notal AI — a calm, capable assistant built into this workspace. I keep a memory of our chats in this browser, let you switch between models, and try to give thoughtful, well-structured answers.";
   }
+  if (p.includes("thank")) {
+    return "You're welcome — glad I could help. Anything else you'd like to work through?";
+  }
+  /* the built-in model has no system prompt to follow, so coding mode has to be
+     handled here too or the switch would look dead on the default model */
+  if (state.mode === "coding") {
+    return `Here's how I'd work through "${prompt.slice(0, 60)}${prompt.length > 60 ? "…" : ""}":\n\n1. Reproduce — the smallest case that shows the problem.\n2. Cause — what the code assumes, and where that assumption breaks.\n3. Fix — the minimal change, not a rewrite.\n4. Guard — something that fails before the fix and passes after.\n\nPaste the code or the error and I'll take it line by line. This is the built-in model, so it is working from a template — add a provider in Settings for real code answers.`;
+  }
   if (p.includes("write") || p.includes("draft") || p.includes("brief")) {
     return `Here's a strong starting point for "${prompt.slice(0, 60)}${prompt.length > 60 ? "…" : ""}":\n\n1. Purpose — open with one sentence that states what this is and why it matters.\n2. Context — two or three lines the reader needs before diving in.\n3. The ask — what you want to happen, by when, and who owns it.\n4. Details — the supporting points, ordered by importance.\n\nWant me to fill this in with real content, adjust the tone, or make it shorter?`;
   }
@@ -553,10 +564,6 @@ function craftReply(prompt, depth) {
   if (p.includes("idea") || p.includes("review")) {
     return "Good seed. Here's my honest read:\n\nStrengths — it solves a pain people already feel, and the value is visible immediately.\nRisks — the magic moment depends entirely on extraction quality; if the output needs heavy editing, people revert to manual notes.\nFirst test — try it on ten real meetings before writing any code. Ask users: \"did this save you more time than it took to fix?\"\n\nWant me to sketch a one-page concept doc around this?";
   }
-  if (p.includes("thank")) {
-    return "You're welcome — glad I could help. Anything else you'd like to work through?";
-  }
-
   const openers = [
     `That's a good question. Let me think it through with you.`,
     `Here's how I'd approach that.`,
@@ -573,10 +580,15 @@ const KIND_DEFAULTS = {
   gemini: "https://generativelanguage.googleapis.com",
   ollama: "http://localhost:11434",
 };
+const SYSTEM_BY_MODE = {
+  chat: "You are Notal, a calm, clear assistant in the Notal AI workspace.",
+  coding: "You are Notal in coding mode: a precise engineering partner. Lead with working code, keep prose short, name the language and version you assumed, point out edge cases and failure modes, and say how to test the change. Prefer the minimal fix over a rewrite.",
+};
+
 function systemPrompt() {
   const facts = state.memories.filter(m => m.enabled).map(m => m.text);
   const proj = state.projects.find(p => p.id === state.activeProject);
-  let s = "You are Notal, a calm, clear assistant in the Notal AI workspace.";
+  let s = SYSTEM_BY_MODE[state.mode] || SYSTEM_BY_MODE.chat;
   if (proj) s += ` The current project is "${proj.name}".`;
   if (facts.length) s += `\nThings the user wants you to remember:\n- ${facts.join("\n- ")}`;
   return s;
@@ -965,7 +977,83 @@ els.micBtn.addEventListener("click", () => {
   rec.start();
 });
 
-/* ---------- suggestions ---------- */
+/* ---------- suggestions & mode ----------
+   Four cards laid out wide / square / square / wide. Each mode has its own set
+   and its own system prompt; the set follows the mode so the cards stay useful. */
+const SUGGESTIONS = {
+  chat: [
+    { wide: true, icon: "✎", title: "Draft a brief",
+      prompt: "Write a project brief for a weekly team newsletter" },
+    { icon: "◎", title: "Explain a concept",
+      prompt: "Explain the difference between RAG and fine-tuning, simply" },
+    { icon: "☼", title: "Plan a trip",
+      prompt: "Help me plan a 3-day trip to Kyoto in autumn" },
+    { wide: true, icon: "✓", title: "Review an idea",
+      prompt: "Review this idea: an app that turns meeting notes into tasks" },
+  ],
+  coding: [
+    { wide: true, icon: "⌗", title: "Debug an error",
+      prompt: "Here is a stack trace, walk me through what is breaking and how to fix it: [paste]" },
+    { icon: "▸", title: "Write a test",
+      prompt: "Write a test for this function, including the edge cases: [paste]" },
+    { icon: "↺", title: "Refactor",
+      prompt: "Refactor this for clarity without changing what it does: [paste]" },
+    { wide: true, icon: "⌕", title: "Explain this code",
+      prompt: "Explain what this code does line by line, then tell me what could go wrong with it: [paste]" },
+  ],
+};
+
+const PLACEHOLDER_BY_MODE = {
+  chat: "Message Notal AI...",
+  coding: "Describe a bug or paste your code...",
+};
+
+function renderSuggestions() {
+  const cards = SUGGESTIONS[state.mode] || SUGGESTIONS.chat;
+  els.suggestions.replaceChildren(...cards.map((c) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "suggestion" + (c.wide ? " wide" : "");
+    btn.dataset.prompt = c.prompt;
+    const icon = document.createElement("span");
+    icon.className = "s-icon";
+    icon.textContent = c.icon;
+    const text = document.createElement("span");
+    text.className = "s-text";
+    const title = document.createElement("span");
+    title.className = "s-title";
+    title.textContent = c.title;
+    text.append(title);
+    /* the wide cards have room to show the actual prompt they send */
+    if (c.wide) {
+      const desc = document.createElement("span");
+      desc.className = "s-desc";
+      desc.textContent = c.prompt;
+      text.append(desc);
+    }
+    btn.append(icon, text);
+    return btn;
+  }));
+}
+
+function setMode(mode) {
+  if (!SUGGESTIONS[mode]) return;
+  state.mode = mode;
+  save();
+  els.modeSeg.querySelectorAll(".mode-btn").forEach((b) => {
+    const on = b.dataset.mode === mode;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+  els.input.placeholder = PLACEHOLDER_BY_MODE[mode];
+  renderSuggestions();
+}
+
+els.modeSeg.addEventListener("click", (e) => {
+  const btn = e.target.closest(".mode-btn");
+  if (btn) setMode(btn.dataset.mode);
+});
+
 els.suggestions.addEventListener("click", (e) => {
   const btn = e.target.closest(".suggestion");
   if (!btn) return;
@@ -1908,6 +1996,7 @@ renderRelayUI();
 if (state.pinHash) lockApp(); else resetIdleTimer();
 setView("chats");
 setGreeting();
+setMode(state.mode);
 renderHistory();
 renderMessages();
 ensureAuth().catch(() => {});

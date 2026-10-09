@@ -134,20 +134,9 @@
         <div class="greeting" id="greeting">
           <h1 id="greetingTitle">Welcome back</h1>
           <p class="greeting-sub">What are you thinking about today?</p>
-          <div class="suggestions" id="suggestions">
-            <button class="suggestion" data-prompt="Write a project brief for a weekly team newsletter">
-              <span class="s-icon">✎</span> Write a project brief
-            </button>
-            <button class="suggestion" data-prompt="Explain the difference between RAG and fine-tuning, simply">
-              <span class="s-icon">◎</span> Explain a concept
-            </button>
-            <button class="suggestion" data-prompt="Help me plan a 3-day trip to Kyoto in autumn">
-              <span class="s-icon">☼</span> Plan a trip
-            </button>
-            <button class="suggestion" data-prompt="Review this idea: an app that turns meeting notes into tasks">
-              <span class="s-icon">✓</span> Review an idea
-            </button>
-          </div>
+          <!-- filled by renderSuggestions() in app.js: the set follows the
+               Chat / Coding mode, so it is data and not markup -->
+          <div class="suggestions" id="suggestions"></div>
         </div>
         <div class="messages" id="messages"></div>
       </section>
@@ -208,6 +197,12 @@
                 <span class="model-name">Notal AI</span>
                 <svg class="mp-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
                 <div class="model-menu" id="modelMenu" hidden></div>
+              </div>
+              <div class="mode-seg" id="modeSeg" role="group" aria-label="Answer style">
+                <button type="button" class="mode-btn active" data-mode="chat" aria-pressed="true"
+                        title="General conversation">Chat</button>
+                <button type="button" class="mode-btn" data-mode="coding" aria-pressed="false"
+                        title="Code, bugs and technical answers">Coding</button>
               </div>
               <input type="file" id="fileInput" multiple hidden />
               <label class="icon-btn" for="fileInput" title="Attach file" aria-label="Attach file">
