@@ -586,6 +586,11 @@ button:disabled { opacity: .5; cursor: default; }
 .send-btn:hover { filter: brightness(1.2); }
 .send-btn:active { transform: scale(.95); }
 .send-btn:disabled { opacity: .3; cursor: default; }
+/* while a reply is streaming the same round button is the stop control */
+.send-btn .i-stop { display: none; }
+.send-btn.stop .i-send { display: none; }
+.send-btn.stop .i-stop { display: inline-block; }
+.send-btn.stop { background: var(--accent); color: #fff; }
 .fineprint { text-align: center; font-size: 11.5px; color: var(--text-faint); margin-top: 10px; }
 
 /* model picker pill (inside composer) */

@@ -448,6 +448,20 @@ function scrollToBottom() {
   els.chat.scrollTop = els.chat.scrollHeight;
 }
 
+/* A turn in flight, so the composer's round button can cancel it. */
+let turnController = null;
+
+function setStreaming(on) {
+  els.sendBtn.classList.toggle("stop", on);
+  els.sendBtn.title = on ? "Stop generating" : "Send";
+  els.sendBtn.setAttribute("aria-label", els.sendBtn.title);
+  els.input.disabled = on;
+}
+
+function stopTurn() {
+  turnController?.abort();
+}
+
 async function sendMessage(text) {
   const trimmed = text.trim();
   if (!trimmed && !pendingAtts.length) return;
@@ -479,8 +493,9 @@ async function sendMessage(text) {
   const turn = appendMessage({ role: "assistant", text: "" });
   turn.startThinking();
   scrollToBottom();
-  els.sendBtn.disabled = true;
-  els.input.disabled = true;
+  const ac = new AbortController();
+  turnController = ac;
+  setStreaming(true);
 
   const model = selectedModel();
   let answer = "";
@@ -501,9 +516,9 @@ async function sendMessage(text) {
       await callProvider(model, conv.messages, (delta) => {
         if (delta.reasoning) turn.addReasoning(delta.reasoning);
         if (delta.text) push(delta.text);
-      });
+      }, ac.signal);
     } else {
-      await streamBuiltIn(craftReply(trimmed, conv.messages.length), push);
+      await streamBuiltIn(craftReply(trimmed, conv.messages.length), push, ac.signal);
     }
     if (frame) cancelAnimationFrame(frame);
     draw();
@@ -514,20 +529,33 @@ async function sendMessage(text) {
   } catch (err) {
     if (frame) cancelAnimationFrame(frame);
     turn.stopThinking();
+    if (ac.signal.aborted) {
+      /* stopping is not a failure: keep whatever already arrived */
+      draw();
+      if (answer.trim()) {
+        conv.messages.push({ role: "assistant", text: answer });
+        save();
+      } else {
+        turn.wrap.remove();
+      }
+      toast("Stopped.");
+      return;
+    }
     turn.textEl.classList.add("msg-error");
     turn.textEl.textContent = "⚠ " + (err?.message || "Request failed");
   } finally {
-    els.sendBtn.disabled = false;
-    els.input.disabled = false;
+    turnController = null;
+    setStreaming(false);
     els.input.focus();
   }
 }
 
 /* The built-in model has no server to stream from, so its reply is fed through
    the same token path at a readable pace. */
-async function streamBuiltIn(fullText, push) {
+async function streamBuiltIn(fullText, push, signal) {
   await new Promise(r => setTimeout(r, 350));
   for (const chunk of fullText.match(/\S+\s*/g) ?? []) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     push(chunk);
     await new Promise(r => setTimeout(r, 26));
   }
@@ -623,6 +651,7 @@ function routeFor(url, opts) {
     relay,
     init: {
       method: "POST",
+      signal: opts.signal,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         url,
@@ -638,7 +667,8 @@ async function openProviderCall(url, opts) {
   const { target, init, relay } = routeFor(url, opts);
   let res;
   try { res = await fetch(target, init); }
-  catch {
+  catch (e) {
+    if (e?.name === "AbortError") throw e;
     throw new Error(relay
       ? `Could not reach the relay at ${relay} — check the URL in Settings → General.`
       : "Could not reach the API — check the base URL, your connection, and CORS.");
@@ -753,7 +783,7 @@ async function streamProvider(url, opts, kind, onDelta) {
 // user turns the thinking switch on, because it bills extra tokens.
 const THINKING_BUDGET = 1024;
 
-async function callProvider(model, messages, onDelta) {
+async function callProvider(model, messages, onDelta, signal) {
   const p = state.providers.find(x => x.id === model.providerId);
   if (!p) throw new Error("Provider settings are missing — re-add the model in Settings → Providers.");
   const base = (p.baseUrl || KIND_DEFAULTS[p.kind] || "").replace(/\/+$/, "");
@@ -788,6 +818,7 @@ async function callProvider(model, messages, onDelta) {
     if (wantThinking) body.thinking = { type: "enabled", budget_tokens: THINKING_BUDGET };
     await streamProvider(`${base}/v1/messages`, {
       method: "POST",
+      signal,
       headers: {
         "content-type": "application/json",
         "x-api-key": p.apiKey,
@@ -812,6 +843,7 @@ async function callProvider(model, messages, onDelta) {
     await streamProvider(
       `${base}/v1beta/models/${encodeURIComponent(p.name)}:streamGenerateContent?alt=sse`, {
       method: "POST",
+      signal,
       headers: { "content-type": "application/json", "x-goog-api-key": p.apiKey },
       body: JSON.stringify(body),
     }, "gemini", emit);
@@ -838,12 +870,14 @@ async function callProvider(model, messages, onDelta) {
     if (p.kind === "ollama") {
       await streamProvider(`${base}/api/chat`, {
         method: "POST",
+        signal,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ model: p.name, messages: msgs, stream: true }),
       }, "ollama", emit);
     } else {
       await streamProvider(`${base}/chat/completions`, {
         method: "POST",
+        signal,
         headers: { "content-type": "application/json", authorization: `Bearer ${p.apiKey}` },
         body: JSON.stringify({ model: p.name, messages: msgs, max_tokens: 2048, stream: true }),
       }, "openai", emit);
@@ -864,6 +898,8 @@ function autoresize() {
 
 els.composer.addEventListener("submit", (e) => {
   e.preventDefault();
+  /* the same button is the stop control while a reply is coming in */
+  if (turnController) { stopTurn(); return; }
   sendMessage(els.input.value);
 });
 
@@ -1057,8 +1093,10 @@ els.modeSeg.addEventListener("click", (e) => {
 els.suggestions.addEventListener("click", (e) => {
   const btn = e.target.closest(".suggestion");
   if (!btn) return;
+  /* fills the box for editing — the card is a starting point, not a send */
   els.input.value = btn.dataset.prompt;
-  sendMessage(btn.dataset.prompt);
+  autoresize();
+  els.input.focus();
 });
 
 /* ---------- sidebar ---------- */
