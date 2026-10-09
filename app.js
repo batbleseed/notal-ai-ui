@@ -1702,6 +1702,7 @@ document.addEventListener("keydown", (e) => {
     setModelMenu(false);
     setAccountMenu(false);
     if (!els.overlay.hidden) closeSettings();
+    else if (panelOpen) setView("chats");
     return;
   }
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
@@ -1714,29 +1715,55 @@ document.addEventListener("keydown", (e) => {
   else if (k === "f" && e.shiftKey) { e.preventDefault(); lockScreenSafe(() => els.search.focus()); }
 });
 
-/* ---------- views (projects / memory / skills) ---------- */
+/* ---------- projects / memory / skills panels ----------
+   These three open on top of the chat instead of swapping it out, so the chat
+   stays the main event and whatever you were typing is still there when the
+   panel closes. The sidebar nav is the quick access to each one. */
 els.chatTitle = $(".chat-title");
-els.composerWrap = $(".composer-wrap");
-const VIEWS = ["chats", "projects", "memory", "skills"];
-const VIEW_LABELS = { chats: "Notal AI", projects: "Projects", memory: "Memory", skills: "Skills" };
+const PANELS = ["projects", "memory", "skills"];
+let panelOpen = null;
+
+function renderPanel(name) {
+  if (name === "projects") renderProjects();
+  else if (name === "memory") renderMemory();
+  else renderSkills();
+}
+
+function openPanel(name) {
+  const overlay = $(`#view-${name}`);
+  overlay.hidden = false;
+  renderPanel(name);
+  motion.reveal(overlay.querySelector(".panel-modal"));
+}
+
+/* hidden synchronously: an overlay that fades out but never finishes would
+   sit invisible on top of the chat and swallow every click */
+function closePanel(name) {
+  $(`#view-${name}`).hidden = true;
+}
 
 function setView(name) {
-  document.querySelectorAll(".nav-item").forEach(b =>
-    b.classList.toggle("active", b.dataset.view === name));
-  els.chat.hidden = name !== "chats";
-  els.composerWrap.hidden = name !== "chats";
-  for (const v of VIEWS) {
-    if (v === "chats") continue;
-    const el = $(`#view-${v}`);
-    if (el) el.hidden = v !== name;
+  const panel = PANELS.includes(name) ? name : null;
+  if (panel !== panelOpen) {
+    if (panelOpen) closePanel(panelOpen);
+    panelOpen = panel;
+    if (panel) openPanel(panel);
+  } else if (panel) {
+    renderPanel(panel);
   }
-  els.chatTitle.textContent = name === "chats"
-    ? (activeConv()?.title || (state.activeProject ? projectName(state.activeProject) : "Notal AI"))
-    : VIEW_LABELS[name];
-  if (name === "projects") renderProjects();
-  if (name === "memory") renderMemory();
-  if (name === "skills") renderSkills();
+  document.querySelectorAll(".nav-item").forEach(b =>
+    b.classList.toggle("active", b.dataset.view === (panel ?? "chats")));
+  els.chatTitle.textContent = activeConv()?.title
+    || (state.activeProject ? projectName(state.activeProject) : "Notal AI");
 }
+
+for (const p of PANELS) {
+  $(`#view-${p}`).addEventListener("click", (e) => {
+    if (e.target === $(`#view-${p}`)) setView("chats");
+  });
+}
+document.querySelectorAll("[data-panel-close]").forEach(b =>
+  b.addEventListener("click", () => setView("chats")));
 
 function projectName(id) {
   return state.projects.find(p => p.id === id)?.name || "Notal AI";

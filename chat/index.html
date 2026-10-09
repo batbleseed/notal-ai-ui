@@ -123,6 +123,13 @@
         </button>
         <span class="brand-logo notal-mark" aria-hidden="true"></span>
         <span class="chat-title">Notal AI</span>
+        <!-- picks which system prompt the answer comes from -->
+        <div class="mode-seg" id="modeSeg" role="group" aria-label="Answer style">
+          <button type="button" class="mode-btn active" data-mode="chat" aria-pressed="true"
+                  title="General conversation">Chat</button>
+          <button type="button" class="mode-btn" data-mode="coding" aria-pressed="false"
+                  title="Code, bugs and technical answers">Coding</button>
+        </div>
         <div class="topbar-spacer"></div>
         <button class="ghost-btn" id="shareBtn">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.5l6.8-4M8.6 13.5l6.8 4"/></svg>
@@ -141,51 +148,6 @@
         <div class="messages" id="messages"></div>
       </section>
 
-      <!-- Views for Projects / Memory / Skills -->
-      <section class="view" id="view-projects" hidden>
-        <header class="view-header">
-          <div>
-            <h1>Projects</h1>
-            <p class="view-sub">Group chats into a project. Anything you add to Memory for a project is shared with the AI in its chats.</p>
-          </div>
-          <form class="inline-add" id="projectForm">
-            <input type="text" id="projNameInput" placeholder="New project name" required />
-            <button type="submit" class="primary-btn">Create</button>
-          </form>
-        </header>
-        <ul class="card-grid" id="projectGrid"></ul>
-      </section>
-
-      <section class="view" id="view-memory" hidden>
-        <header class="view-header">
-          <div>
-            <h1>Memory</h1>
-            <p class="view-sub">Facts the AI should remember when it answers.</p>
-          </div>
-        </header>
-        <form class="inline-add" id="memoryForm">
-          <select id="memProjectSel"></select>
-          <input type="text" id="memInput" placeholder="e.g. I'm building Notal AI, a v2 of my chat app" style="flex:1" required />
-          <button type="submit" class="primary-btn">Add</button>
-        </form>
-        <ul class="item-list" id="memoryList"></ul>
-      </section>
-
-      <section class="view" id="view-skills" hidden>
-        <header class="view-header">
-          <div>
-            <h1>Skills</h1>
-            <p class="view-sub">Reusable prompts. Click Use and the prompt lands in your message box, ready to edit.</p>
-          </div>
-          <form class="inline-add" id="skillForm">
-            <input type="text" id="skillNameInput" placeholder="Skill name" required />
-            <input type="text" id="skillPromptInput" placeholder="Prompt template, e.g. Review this code for bugs: [paste code]" style="flex:2" required />
-            <button type="submit" class="primary-btn">Add skill</button>
-          </form>
-        </header>
-        <ul class="card-grid" id="skillGrid"></ul>
-      </section>
-
       <footer class="composer-wrap">
         <form class="composer" id="composer">
           <div class="attach-tray" id="attachTray" hidden></div>
@@ -196,13 +158,7 @@
                 <span class="mp-star notal-mark" aria-hidden="true"></span>
                 <span class="model-name">Notal AI</span>
                 <svg class="mp-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
-                <div class="model-menu" id="modelMenu" hidden></div>
-              </div>
-              <div class="mode-seg" id="modeSeg" role="group" aria-label="Answer style">
-                <button type="button" class="mode-btn active" data-mode="chat" aria-pressed="true"
-                        title="General conversation">Chat</button>
-                <button type="button" class="mode-btn" data-mode="coding" aria-pressed="false"
-                        title="Code, bugs and technical answers">Coding</button>
+                  <div class="model-menu" id="modelMenu" hidden></div>
               </div>
               <input type="file" id="fileInput" multiple hidden />
               <label class="icon-btn" for="fileInput" title="Attach file" aria-label="Attach file">
@@ -224,6 +180,74 @@
         <p class="fineprint">Notal AI can make mistakes. Double-check important information.</p>
       </footer>
     </main>
+  </div>
+
+  <!-- Projects / Memory / Skills open over the chat rather than replacing it,
+       so the conversation and the composer stay exactly where you left them.
+       The sidebar nav is the quick access to all three. -->
+  <div class="modal-overlay" id="view-projects" hidden>
+    <div class="modal panel-modal" role="dialog" aria-modal="true" aria-labelledby="projectsTitle">
+      <header class="modal-header">
+        <div class="panel-heading">
+          <h2 id="projectsTitle">Projects</h2>
+          <p class="panel-sub">Group chats into a project. Anything you add to Memory for a project is shared with the AI in its chats.</p>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="projects" aria-label="Close projects">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="panel-body">
+        <form class="inline-add" id="projectForm">
+          <input type="text" id="projNameInput" placeholder="New project name" required />
+          <button type="submit" class="primary-btn">Create</button>
+        </form>
+        <ul class="card-grid" id="projectGrid"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="view-memory" hidden>
+    <div class="modal panel-modal" role="dialog" aria-modal="true" aria-labelledby="memoryTitle">
+      <header class="modal-header">
+        <div class="panel-heading">
+          <h2 id="memoryTitle">Memory</h2>
+          <p class="panel-sub">Facts the AI should remember when it answers.</p>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="memory" aria-label="Close memory">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="panel-body">
+        <form class="inline-add" id="memoryForm">
+          <select id="memProjectSel"></select>
+          <input type="text" id="memInput" placeholder="e.g. I'm building Notal AI, a v2 of my chat app" style="flex:1" required />
+          <button type="submit" class="primary-btn">Add</button>
+        </form>
+        <ul class="item-list" id="memoryList"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="view-skills" hidden>
+    <div class="modal panel-modal" role="dialog" aria-modal="true" aria-labelledby="skillsTitle">
+      <header class="modal-header">
+        <div class="panel-heading">
+          <h2 id="skillsTitle">Skills</h2>
+          <p class="panel-sub">Reusable prompts. Insert puts one in your message box, ready to edit.</p>
+        </div>
+        <button class="icon-btn" type="button" data-panel-close="skills" aria-label="Close skills">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="panel-body">
+        <form class="inline-add" id="skillForm">
+          <input type="text" id="skillNameInput" placeholder="Skill name" required />
+          <input type="text" id="skillPromptInput" placeholder="Prompt template, e.g. Review this code for bugs: [paste code]" style="flex:2" required />
+          <button type="submit" class="primary-btn">Add skill</button>
+        </form>
+        <ul class="card-grid" id="skillGrid"></ul>
+      </div>
+    </div>
   </div>
 
   <!-- Settings modal -->
