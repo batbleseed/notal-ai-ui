@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quick Chat — Notal AI Studio</title>
+  <!-- the same sheet the chat window uses, so the mark, the theme tokens and the
+       colours here cannot drift from the app it is answering for -->
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/studio/quick/quick.css" />
+</head>
+<body>
+  <div class="q-panel" id="qPanel">
+    <header class="q-head" id="qHead">
+      <span class="q-mark" aria-hidden="true"><span class="notal-mark"></span></span>
+      <div class="q-titles">
+        <h1>Quick Chat</h1>
+        <p class="q-sub" id="qSub">Answers go into the chat you have open</p>
+      </div>
+      <div class="q-tools">
+        <button type="button" class="q-btn" id="qPin" title="Keep this window on top of everything" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3l6 6-4 1-4 4-1 4-6-6 4-4 4-4z"/><path d="M10 14l-4 4M13 11l-4 4"/></svg>
+        </button>
+        <button type="button" class="q-btn" id="qOpen" title="Open in the main window" aria-label="Open in the main window">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H5a1 1 0 00-1 1v14a1 1 0 001 1h14a1 1 0 001-1v-4"/><path d="M14 4h6v6M20 4l-9 9"/></svg>
+        </button>
+        <button type="button" class="q-btn" id="qClose" title="Close (Esc)" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="q-thread" id="qThread" aria-live="polite">
+      <p class="q-empty">Ask something without opening the app. <kbd>Enter</kbd> sends, <kbd>Shift</kbd>+<kbd>Enter</kbd> starts a new line, <kbd>Esc</kbd> gets out of the way.</p>
+    </section>
+
+    <form class="q-composer" id="qForm">
+      <textarea id="qInput" rows="1" placeholder="Ask Notal…" spellcheck="true"></textarea>
+      <div class="q-bar">
+        <span class="q-model" id="qModel"></span>
+        <button type="button" class="q-stop" id="qStop" hidden>Stop</button>
+        <button type="submit" class="q-send" id="qSend" title="Send" aria-label="Send">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script src="/studio/quick/quick.js"></script>
+</body>
+</html>

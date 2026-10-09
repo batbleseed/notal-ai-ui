@@ -267,6 +267,7 @@
           <button class="settings-tab" data-tab="notifications">Notifications</button>
           <button class="settings-tab" data-tab="security">Security</button>
           <button class="settings-tab" data-tab="shortcuts">Shortcuts</button>
+          <button class="settings-tab" data-tab="desktop" id="desktopTab" hidden>Desktop</button>
         </nav>
         <div class="settings-panels">
           <section class="settings-panel" id="panel-general">
@@ -379,7 +380,8 @@
                   <small>Requests go here, direct from this browser tab. Only set it when the provider gives you a different address, or when you are using a service not listed above.</small>
                 </label>
                 <div class="setting-row stack">
-                  <div class="setting-info"><span class="setting-name">Provider relay</span><small id="relayStatus">Not configured — requests leave this browser directly</small></div>
+                  <div class="setting-info"><span class="setting-name">Provider relay</span><small id="relayStatus">Not configured — requests leave this browser directly</small>
+                    <small id="studioRelayNote" hidden></small></div>
                   <div class="relay-line">
                     <input type="url" id="relayUrlInput" class="text-input" placeholder="https://notal-relay.your-name.workers.dev" autocomplete="off" />
                     <button class="ghost-btn" id="relayTestBtn" type="button">Test</button>
@@ -446,6 +448,42 @@
               <li><span>New line</span><kbd>Shift</kbd><kbd>Enter</kbd></li>
               <li><span>Close menu / settings</span><kbd>Esc</kbd></li>
             </ul>
+          </section>
+
+          <!-- only Notal AI Studio shows this tab; in a browser tab it stays
+               hidden, because there is no tray, no shortcut table and no file on
+               disk to speak of there -->
+          <section class="settings-panel" id="panel-desktop" hidden>
+            <p class="panel-note">This is <strong id="studioName">Notal AI Studio</strong> <span id="studioVersion"></span>. Everything below happens on this machine — nothing is forwarded through a server you do not run.</p>
+            <div class="setting-row stack">
+              <div class="setting-info"><span class="setting-name">Relay</span>
+                <small id="studioRelayLine">Checking…</small></div>
+            </div>
+            <div class="setting-row stack">
+              <div class="setting-info"><span class="setting-name">Quick Chat</span>
+                <small>Alt+Space opens an overlay you can ask from any program. Its answers are produced by this app and saved into the chat you have open, so nothing asked there is a side thread.</small></div>
+              <button class="ghost-btn" type="button" id="studioQuickBtn">Open Quick Chat</button>
+            </div>
+            <div class="setting-row stack">
+              <div class="setting-info"><span class="setting-name">Global shortcuts</span>
+                <small id="studioHotkeys">Not registered yet.</small></div>
+            </div>
+            <div class="setting-row stack">
+              <div class="setting-info"><span class="setting-name">Skills file</span>
+                <small id="studioSkills">Not read yet.</small></div>
+              <button class="ghost-btn" type="button" id="studioSkillsBtn">Open skills.md</button>
+            </div>
+            <div class="setting-row stack">
+              <div class="setting-info"><span class="setting-name">Local models</span>
+                <small id="studioOllama">Not looked for yet. Ollama answers on 127.0.0.1:11434 when it is running.</small></div>
+              <button class="ghost-btn" type="button" id="studioOllamaBtn">Look again</button>
+            </div>
+            <div class="setting-row stack">
+              <div class="setting-info"><span class="setting-name">Updates</span>
+                <small id="studioUpdate">Not checked yet.</small></div>
+              <button class="ghost-btn" type="button" id="studioUpdateBtn">Check now</button>
+            </div>
+            <p class="adv-lead" id="studioPaths"></p>
           </section>
         </div>
       </div>

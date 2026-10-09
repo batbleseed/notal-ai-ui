@@ -840,6 +840,8 @@ function setStreaming(on) {
   els.sendBtn.title = on ? "Stop generating" : "Send";
   els.sendBtn.setAttribute("aria-label", els.sendBtn.title);
   els.input.disabled = on;
+  /* the tray and Quick Chat show this, so a busy app looks busy from anywhere */
+  if (DESKTOP) window.notal.engineBusy(on);
 }
 
 function stopTurn() {
@@ -882,6 +884,8 @@ async function sendMessage(text) {
   setStreaming(true);
 
   const model = selectedModel();
+  /* captured before anything awaits, so a second question cannot steal the turn */
+  const quick = quickJob;
   let answer = "";
   let frame = 0;
   const draw = (final) => {
@@ -897,21 +901,31 @@ async function sendMessage(text) {
      "finished" and re-highlight the block on every frame. */
   const push = (chunk) => {
     answer += chunk;
+    /* the Quick Chat overlay watches this same reply, so the tokens go to it as
+       they arrive rather than only at the end */
+    if (quick) window.notal.quickChunk(quick.id, chunk);
     if (!frame) frame = requestAnimationFrame(() => draw());
   };
   const onDelta = (delta) => {
     if (delta.reasoning) turn.addReasoning(delta.reasoning);
     if (delta.text) push(delta.text);
   };
+  const finishQuick = (payload) => {
+    if (quick && quickJobs.has(quick.id)) window.notal.quickDone(quick.id, payload);
+  };
 
   try {
     if (model.providerId) {
+      /* The desktop brief and the owner's skills.md live on disk, so they are
+         read again per send — editing skills.md takes effect on the next
+         message, not on the next restart. */
+      if (DESKTOP) await refreshStudioBrief();
       /* Browsing is a loop, not a side quest: the model asks for one page, this
          tab reads it, the page text comes back as context for the next turn,
          and only the final tag-free reply lands on the page. The pages go into
          `context`, never into `conv.messages`, so a lookup does not live in the
-         chat history forever. */
-      let context = conv.messages;
+         chat history forever. Attached documents join that same context. */
+      let context = withDocuments(conv.messages);
       let hops = 0;
       /* An address the user typed themselves is read first, so a page lookup
          never depends on the model volunteering to ask for one. */
@@ -948,6 +962,7 @@ async function sendMessage(text) {
     conv.messages.push({ role: "assistant", text: reply });
     save();
     notifyReply(reply);
+    finishQuick({ text: reply });
   } catch (err) {
     if (frame) cancelAnimationFrame(frame);
     turn.stopThinking();
@@ -962,6 +977,7 @@ async function sendMessage(text) {
         turn.wrap.remove();
       }
       toast("Stopped.");
+      finishQuick(partial ? { text: partial } : { error: "Stopped before anything arrived." });
       return;
     }
     if (model.providerId) {
@@ -970,6 +986,7 @@ async function sendMessage(text) {
     }
     turn.textEl.classList.add("msg-error");
     turn.textEl.textContent = "⚠ " + (err?.message || "Request failed");
+    finishQuick({ error: err?.message || "Request failed" });
   } finally {
     turnController = null;
     setStreaming(false);
@@ -1057,6 +1074,9 @@ function systemPrompt() {
   let s = SYSTEM_BY_MODE[state.mode] || SYSTEM_BY_MODE.chat;
   if (proj) s += ` The current project is "${proj.name}".`;
   if (facts.length) s += `\nThings the user wants you to remember:\n- ${facts.join("\n- ")}`;
+  /* in the desktop app this carries the Studio brief and the owner's skills.md,
+     both read from disk moments ago — see refreshStudioBrief() */
+  if (studioBrief) s += studioBrief;
   return s;
 }
 
@@ -1070,10 +1090,262 @@ function imageAtts(m) {
 }
 
 function relayBase() {
+  /* Inside Notal AI Studio the app has a relay of its own on this machine, and
+     it wins over an address typed in Settings: keys never leave the computer, a
+     streamed reply arrives token by token instead of all at once, a page can be
+     read without a CORS header existing, and a local Ollama is reachable. In a
+     browser tab window.notal is absent, so this changes nothing there. */
+  if (DESKTOP) return window.notal.relayOrigin.replace(/\/+$/, "");
   return (state.relayUrl || "").trim().replace(/\/+$/, "");
 }
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 function hostOf(u) { try { return new URL(u).hostname.toLowerCase(); } catch { return ""; } }
+
+/* ---------- Notal AI Studio (the Windows app) ----------
+   Everything in this section is idle in a browser tab: window.notal only exists
+   when the preload script of the desktop shell put it there. */
+const DESKTOP = Boolean(window.notal && window.notal.desktop);
+let studioBrief = "";
+
+async function studioGet(pathname) {
+  const res = await fetch(pathname, { signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined });
+  if (!res.ok) throw new Error(`${pathname} answered ${res.status}`);
+  return res.json();
+}
+
+/* skills.md and the desktop brief are read from disk by the app, so an edit to
+   the file is in the next message without a restart. Fetched per send rather
+   than once at boot for exactly that reason. */
+async function refreshStudioBrief() {
+  if (!DESKTOP) return false;
+  try {
+    const data = await studioGet("/studio/prompt");
+    studioBrief = data.prompt || "";
+    return true;
+  } catch { return false; }
+}
+
+/* ---------- documents ----------
+   An attached file only counts as read if the model is given its text. Images
+   already travel to the provider as images; everything made of characters is
+   now read into the message, which is what "analyse this file" has always meant. */
+const DOC_LIMIT = 12_000;         // characters per file
+const DOC_TOTAL_LIMIT = 30_000;    // characters per message, so a folder drop is not a flood
+const DOC_TYPES = /^(text\/|application\/(json|x-sh|xml|yaml|x-yaml|toml|javascript|x-javascript))/i;
+const DOC_EXT = /\.(md|markdown|txt|text|csv|tsv|json|jsonl|ndjson|ya?ml|toml|xml|html?|css|scss|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|kt|c|h|cpp|hpp|cs|php|swift|sh|bat|ps1|sql|r|lua|pl|ini|cfg|conf|env|log|tex|srt|vtt|graphql)$/i;
+
+function looksLikeText(file) {
+  if ((file.type || "").startsWith("image/")) return false;
+  if (DOC_TYPES.test(file.type || "")) return true;
+  return DOC_EXT.test(file.name || "");
+}
+
+function docAtts(m) {
+  return (m.attachments || []).filter(a => a.text);
+}
+
+function withDocuments(messages) {
+  const last = messages[messages.length - 1];
+  const docs = last && docAtts(last);
+  if (!docs || !docs.length) return messages;
+  let left = DOC_TOTAL_LIMIT;
+  const blocks = docs.map(a => {
+    const body = (a.text || "").slice(0, Math.max(0, left));
+    left -= body.length;
+    const cut = (a.text || "").length > body.length ? "\n…(the file is longer than the app will read)" : "";
+    return `--- BEGIN FILE ${a.name} ---\n${body}${cut}\n--- END FILE ${a.name} ---`;
+  });
+  return [...messages.slice(0, -1), { ...last, text: `${last.text || ""}\n\nThe user attached these files.\n\n${blocks.join("\n\n")}` }];
+}
+
+/* ---------- export ----------
+   The Share button used to print "Link copied" and copy nothing. In the desktop
+   app it opens a real Save dialog; in a browser it puts the same Markdown on the
+   clipboard, which is the honest version of the same promise. */
+function conversationMarkdown(conv) {
+  const proj = state.projects.find(p => p.id === conv.projectId);
+  const lines = [`# ${conv.title || "Notal AI chat"}`, ""];
+  if (proj) lines.push(`*Project: ${proj.name}*`, "");
+  lines.push(`*Exported ${new Date().toLocaleString()} from Notal AI*`, "", "---");
+  for (const m of conv.messages) {
+    lines.push("", `## ${m.role === "user" ? "You" : "Notal"}`, "", m.text || "(no text)");
+    for (const a of m.attachments || []) {
+      lines.push(a.text || a.dataUrl
+        ? `\n*Attached: ${a.name} — read into the message*`
+        : `\n*Attached: ${a.name} (${Math.round((a.size || 0) / 1024)} KB — stored as a name only)*`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+function conversationJson(conv) {
+  return JSON.stringify({
+    exportedAt: new Date().toISOString(), app: "notal-ai", version: 2,
+    title: conv.title, mode: state.mode, messages: conv.messages,
+  }, null, 2);
+}
+
+function safeFileName(s) {
+  return (s || "notal-chat").replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").slice(0, 60).trim() || "notal-chat";
+}
+
+async function exportConversation(conv, format = "markdown") {
+  conv = conv || activeConv();
+  if (!conv || !conv.messages.length) { toast("Start a chat first."); return false; }
+  const json = format === "json";
+  const text = json ? conversationJson(conv) : conversationMarkdown(conv);
+  const name = safeFileName(conv.title) + (json ? ".json" : ".md");
+  if (DESKTOP) {
+    const out = await window.notal.saveFile({ suggestedName: name, text, format: json ? "json" : "md",
+      title: "Save this chat" });
+    if (out && out.saved) { toast("Saved to " + out.path); return true; }
+    if (out && out.error) toast("Could not save: " + out.error);
+    return false;
+  }
+  /* a tab has no Save dialog of its own, so the clipboard carries the text */
+  if (await writeClipboard(text)) { toast(json ? "Chat copied as JSON." : "Chat copied as Markdown."); return true; }
+  const url = URL.createObjectURL(new Blob([text], { type: json ? "application/json" : "text/markdown" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast("Saved as " + name);
+  return true;
+}
+
+/* ---------- what the tray and the keyboard shortcuts ask for ---------- */
+const quickJobs = new Map();   // id -> a question the overlay is waiting on
+let quickJob = null;           // the one the current turn belongs to
+
+function studioAction(name) {
+  if (name === "new-chat") { newConversation(); els.input.focus(); return; }
+  if (name === "toggle-theme") {
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    applyTheme(); save(); return;
+  }
+  if (name === "export-request") {
+    window.notal.sendExport({ text: conversationMarkdown(activeConv() || { messages: [] }),
+      title: safeFileName((activeConv() || {}).title), format: "markdown" });
+  }
+}
+
+function installStudioBridge() {
+  if (!DESKTOP) return;
+  const tab = document.getElementById("desktopTab");
+  if (tab) tab.hidden = false;
+  const note = document.getElementById("studioRelayNote");
+  if (note) {
+    note.textContent = "In this app that address is the one it runs for itself on "
+      + window.notal.relayOrigin.replace(/^http:\/\//, "") + " — requests, page reads and local models all go "
+      + "through it, and your keys never leave this machine.";
+    note.hidden = false;
+  }
+  window.notal.onAction(studioAction);
+  window.notal.onQuickRun((job) => {
+    if (turnController) {
+      window.notal.quickDone(job.id, { error: "Notal is still answering something else. Wait for it, then ask again." });
+      return;
+    }
+    /* the overlay has no engine of its own — the question goes through exactly
+       the same send path as if it had been typed in the composer, so the answer
+       lands in history with the rest of the chat */
+    quickJob = job;
+    quickJobs.set(job.id, job);
+    sendMessage(job.text).finally(() => {
+      if (quickJob === job) quickJob = null;
+      quickJobs.delete(job.id);
+    });
+  });
+  window.notal.onQuickCancel(() => stopTurn());
+  studioLine("studioQuickBtn")?.addEventListener("click", () => window.notal.openQuick());
+  studioLine("studioSkillsBtn")?.addEventListener("click", () => {
+    window.notal.skillsInfo().then(s => window.notal.openPath(s.path));
+  });
+  studioLine("studioUpdateBtn")?.addEventListener("click", studioCheckUpdates);
+  studioLine("studioOllamaBtn")?.addEventListener("click", readOllama);
+  window.notal.quickState().then((s) => { if (s && typeof s.busy === "boolean") window.notal.engineBusy(Boolean(turnController)); }).catch(() => {});
+}
+installStudioBridge();
+
+/* The Desktop tab in Settings is where the shell's features live, the same way
+   every other feature of this app is configured there. Each line reports what it
+   actually found rather than what should be true, so a shortcut another program
+   grabbed, or an Ollama that is not running, reads as a fact and not as a lie.
+   These are function declarations on purpose: installStudioBridge() above runs
+   at load and reaches them, and a const here would not exist yet. */
+function studioLine(id) { return document.getElementById(id); }
+function setLine(id, text) { const el = studioLine(id); if (el) el.textContent = text; }
+
+async function renderStudioSettings() {
+  if (!DESKTOP) return;
+  try {
+    const info = await window.notal.info();
+    setLine("studioName", info.name);
+    setLine("studioVersion", "v" + info.version);
+    setLine("studioPaths", "Chats, models and keys are kept by this app alone, in " + info.userData);
+  } catch { /* the lines below still answer on their own */ }
+
+  try {
+    const h = await studioGet("/studio/health");
+    setLine("studioRelayLine", h.ok
+      ? `Built into this app at ${window.notal.relayOrigin}. It forwards provider calls, reads web pages, and reaches a local Ollama — all on this machine, all streaming as it goes.`
+      : "The app's own relay did not answer. Set a relay in the field above to route around it.");
+  } catch (err) {
+    setLine("studioRelayLine", "The app's own relay is not answering: " + (err?.message || err));
+  }
+
+  try {
+    const list = await window.notal.hotkeys();
+    setLine("studioHotkeys", list.map(h => `${h.accel} — ${h.label}: `
+      + (h.ok ? "registered" : `not yours right now, because ${h.error}`)).join("   ·   "));
+  } catch { setLine("studioHotkeys", "Could not read the shortcut list."); }
+
+  try {
+    const s = await window.notal.skillsInfo();
+    const chars = (s.content || "").trim().length;
+    setLine("studioSkills", chars
+      ? `${chars.toLocaleString()} characters, read from ${s.path}. The next message already uses it.`
+      : `Nothing in it yet. Write your instructions into ${s.path} and the next message uses them.`);
+  } catch (err) { setLine("studioSkills", "Could not find skills.md: " + (err?.message || err)); }
+
+  readOllama();
+  setLine("studioUpdate", "Not checked yet.");
+  try { showUpdate(await studioGet("/studio/health").then(h => h.update)); } catch { /* untouched */ }
+}
+
+function showUpdate(u) {
+  if (!u) return;
+  const current = u.current || "";
+  if (u.error) setLine("studioUpdate", "Last check failed: " + u.error);
+  else if (u.note) setLine("studioUpdate", "Nothing to check against yet — " + u.note + ".");
+  else if (u.checkedAt) {
+    const when = new Date(u.checkedAt).toLocaleString();
+    setLine("studioUpdate", u.latest && u.latest !== current
+      ? `v${u.latest} has been published; this app is v${current}. Check now opens the release.`
+      : `Last checked ${when}. This is the newest build there is.`);
+  }
+}
+
+async function studioCheckUpdates() {
+  setLine("studioUpdate", "Asking GitHub…");
+  try { showUpdate(await window.notal.checkUpdates()); }
+  catch (err) { setLine("studioUpdate", "Could not ask the app: " + (err?.message || err)); }
+}
+
+async function readOllama() {
+  const line = studioLine("studioOllama");
+  if (!line) return;
+  line.textContent = "Looking…";
+  try {
+    const r = await studioGet("/studio/ollama");
+    line.textContent = r.running
+      ? (r.models.length
+        ? `Ollama is running with ${r.models.length} model${r.models.length === 1 ? "" : "s"}: ` + r.models.map(m => m.name).slice(0, 6).join(", ")
+          + " — add one in Settings → Providers with the address http://localhost:11434."
+        : "Ollama is running but has no models pulled yet. Run `ollama pull llama3.2` and look again.")
+      : "Ollama is not answering on 127.0.0.1:11434. Start it, then look again.";
+  } catch (err) { line.textContent = "Could not ask: " + (err?.message || err); }
+}
 
 /* ---------- provider transport ---------- */
 // A remote relay cannot reach an Ollama on this machine, so local targets only
@@ -1489,12 +1761,30 @@ els.fileInput.addEventListener("change", async () => {
     if ((f.type || "").startsWith("image/")) {
       try { item.dataUrl = await readAsDataURL(f); }
       catch (err) { toast(err.message); continue; }
+    } else if (looksLikeText(f)) {
+      /* a file the model never sees is not an attachment, it is a filename. Read
+         the characters in, and "analyse this" becomes something that happens. */
+      try {
+        item.text = (await readAsText(f)).replace(/\r\n/g, "\n").slice(0, DOC_LIMIT);
+        if (item.text.trim()) item.kind = "text";
+        else delete item.text;
+      }
+      catch (err) { toast(err.message); continue; }
     }
     pendingAtts.push(item);
   }
   els.fileInput.value = "";
   renderPending();
 });
+
+function readAsText(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || ""));
+    r.onerror = () => reject(new Error(`Could not read ${file.name} as text`));
+    r.readAsText(file);
+  });
+}
 
 function renderPending() {
   els.attachTray.innerHTML = "";
@@ -1532,11 +1822,17 @@ els.lightbox.addEventListener("click", () => {
   els.lightboxImg.src = "";
 });
 
-/* ---------- mic (Web Speech API) ---------- */
+/* ---------- mic ----------
+   In a browser tab, dictation is Chromium's own speech service. Inside the
+   desktop app that service has no backend to talk to — it starts, then answers
+   `error:network` — so Studio records the audio and has the model you already
+   configured write it out. Gemini is the one provider kind that accepts an audio
+   part, so the button says so when something else is selected. */
 const SRClass = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, recOn = false;
 
 els.micBtn.addEventListener("click", () => {
+  if (DESKTOP) { toggleDesktopDictation(); return; }
   if (!SRClass) {
     toast("Dictation needs Chrome or Edge.");
     return;
@@ -1563,11 +1859,109 @@ els.micBtn.addEventListener("click", () => {
   rec.onerror = (e) => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed")
       toast("Microphone permission denied.");
+    else if (e.error === "network")
+      toast("Dictation could not reach the speech service — try again, or type it.");
   };
   recOn = true;
   els.micBtn.classList.add("recording");
   rec.start();
 });
+
+/* The recording never leaves the machine until the transcribe request goes out,
+   and that goes to the same provider every other message goes to. */
+let dictation = null;
+const DICTATION_CAP_MS = 90_000;
+
+function toggleDesktopDictation() {
+  if (dictation) { dictation.stop(); return; }
+
+  const model = selectedModel();
+  const provider = model && state.providers.find(x => x.id === model.providerId);
+  if (!provider) {
+    toast("Desktop dictation transcribes with your own model — add a provider in Settings, then pick it here.");
+    return;
+  }
+  if (provider.kind !== "gemini") {
+    toast(`${provider.name} takes text only. Pick a Gemini model to dictate with — it reads audio.`);
+    return;
+  }
+
+  startDictation(provider).catch(err => {
+    dictation = null;
+    els.micBtn.classList.remove("recording");
+    toast(err?.message || "The microphone could not be opened.");
+  });
+}
+
+async function startDictation(provider) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const recorder = new MediaRecorder(stream);
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
+
+  const session = { stream, recorder, stopped: false };
+  session.stop = () => {
+    if (session.stopped) return;
+    session.stopped = true;
+    clearTimeout(cap);
+    dictation = null;
+    els.micBtn.classList.remove("recording");
+    if (recorder.state !== "inactive") recorder.stop();
+  };
+  dictation = session;
+  const cap = setTimeout(session.stop, DICTATION_CAP_MS);
+
+  els.micBtn.classList.add("recording");
+  recorder.onstop = async () => {
+    const mime = recorder.mimeType || "audio/webm";
+    const blob = new Blob(chunks, { type: mime.split(";")[0] });
+    for (const track of stream.getTracks()) track.stop();
+    if (!blob.size) { toast("Nothing was recorded."); return; }
+    await transcribe(provider, blob, mime.split(";")[0]);
+  };
+  recorder.start();
+}
+
+async function transcribe(provider, blob, mime) {
+  toast("Transcribing the recording…");
+  els.micBtn.disabled = true;
+  try {
+    const apiBase = (provider.baseUrl || KIND_DEFAULTS[provider.kind] || "").replace(/\/+$/, "");
+    if (!apiBase) throw new Error("No base URL set — add it in Settings → Providers.");
+    const data = await httpJson(
+      `${apiBase}/v1beta/models/${encodeURIComponent(provider.name)}:generateContent`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": provider.apiKey },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [
+          { inline_data: { mime_type: mime, data: await blobToBase64(blob) } },
+          { text: "Transcribe this recording exactly as spoken. Reply with the transcript only — no preamble, no commentary." },
+        ] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 2048 },
+      }),
+    });
+    const text = (data.candidates?.[0]?.content?.parts || [])
+      .map(part => part.text || "").join("").trim();
+    if (!text) { toast("The model returned no transcript."); return; }
+    const already = els.input.value.trim();
+    els.input.value = (already ? already + " " : "") + text;
+    autoresize();
+    els.input.focus();
+  } catch (err) {
+    toast(err?.message || "Transcription failed.");
+  } finally {
+    els.micBtn.disabled = false;
+  }
+}
+
+/* btoa over the whole file at once blows the argument limit on long recordings. */
+async function blobToBase64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
 
 /* ---------- suggestions & mode ----------
    Four cards laid out wide / square / square / wide. Each mode has its own set
@@ -1827,6 +2221,7 @@ function switchTab(name) {
     t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(".settings-panel").forEach(p =>
     p.hidden = p.id !== `panel-${name}`);
+  if (name === "desktop" && DESKTOP) renderStudioSettings();
 }
 
 /* ---------- general ---------- */
@@ -2254,12 +2649,25 @@ document.querySelectorAll(".adv[data-adv]").forEach(d => {
   });
 });
 
-/* ---------- share ---------- */
+/* ---------- share / export ----------
+   This used to write "Link copied ✓" on a button that copied nothing, which is
+   the worst kind of UI: a lie with good timing. One click now produces the chat
+   itself — a Save dialog in the desktop app, the Markdown on the clipboard in a
+   browser tab, where there is no dialog to open. */
 els.shareBtn.addEventListener("click", () => {
   const conv = activeConv();
-  els.shareBtn.querySelector("span").textContent =
-    conv ? "Link copied ✓" : "Start a chat first";
-  setTimeout(() => els.shareBtn.querySelector("span").textContent = "Share", 1600);
+  const label = els.shareBtn.querySelector("span");
+  if (!conv || !conv.messages.length) {
+    label.textContent = "Start a chat first";
+  } else {
+    label.textContent = "Saving…";
+    /* the reset waits for the answer, not the clock — in the desktop app a Save
+       dialog can stay open far longer than any timeout would be sane */
+    exportConversation(conv, "markdown")
+      .then((done) => { label.textContent = done ? "Saved ✓" : "Nothing saved"; })
+      .catch(() => { label.textContent = "Could not save"; })
+      .finally(() => setTimeout(() => { label.textContent = "Share"; }, 1800));
+  }
 });
 
 /* ---------- firebase google sign-in ---------- */
@@ -2425,7 +2833,17 @@ function chime() {
 }
 
 function notifyReply(text) {
-  if (!state.notifications.enabled || !("Notification" in window)) return;
+  if (!state.notifications.enabled) return;
+  if (DESKTOP) {
+    /* Windows owns the notification centre here, and the main process can say
+       whether the window is actually in front — document.hidden lies for an
+       Electron window that is hidden to the tray but still "visible". */
+    if (document.hasFocus()) return;
+    window.notal.notify("Notal AI", (text || "").slice(0, 120) || "Reply ready");
+    if (state.notifications.sound) chime();
+    return;
+  }
+  if (!("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
   if (!document.hidden) return;
   new Notification("Notal AI", { body: text.slice(0, 120) || "Reply ready" });
@@ -2865,10 +3283,19 @@ let installPrompt = null;
 const isStandalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 
 if ("serviceWorker" in navigator) {
-  // The worker stays at the site root so one registration covers both the
-  // landing page and /chat/; its default scope is its own folder.
-  navigator.serviceWorker.register("../sw.js")
-    .catch(err => console.warn("Offline support did not start:", err?.message));
+  if (DESKTOP) {
+    /* The files are already on this disk and nothing else lives on this origin,
+       so a cache here can only do one thing: keep serving the previous version
+       of itself after an update. Unregister whatever an earlier launch left. */
+    navigator.serviceWorker.getRegistrations()
+      .then(list => list.forEach(r => r.unregister()))
+      .catch(() => {});
+  } else {
+    // The worker stays at the site root so one registration covers both the
+    // landing page and /chat/; its default scope is its own folder.
+    navigator.serviceWorker.register("../sw.js")
+      .catch(err => console.warn("Offline support did not start:", err?.message));
+  }
 }
 
 window.addEventListener("beforeinstallprompt", (e) => {

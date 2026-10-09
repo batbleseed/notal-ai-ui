@@ -1,0 +1,53 @@
+{
+  "name": "notal-ai-studio",
+  "productName": "Notal AI Studio",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Notal AI Studio v2 — the Windows desktop app: chat, Quick Chat, tray, web research, code canvas, export",
+  "main": "main.js",
+  "scripts": {
+    "sync": "node sync-web.js",
+    "prestart": "node sync-web.js",
+    "start": "electron .",
+    "smoke": "node sync-web.js && electron . --smoke",
+    "probe": "node sync-web.js && electron . --relay",
+    "quick": "node sync-web.js && electron . --quick",
+    "predist": "node sync-web.js",
+    "dist": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "ai.notal.studio",
+    "productName": "Notal AI Studio",
+    "copyright": "Copyright © 2026 batbleseed",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "studio-relay.js",
+      "quick/**",
+      "app-web/**",
+      "skills-default.md",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "artifactName": "Notal-AI-Studio-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "Notal AI Studio"
+    },
+    "npmRebuild": false
+  }
+}

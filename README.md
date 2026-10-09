@@ -88,6 +88,19 @@ It's a **power-user alternative** to Notal AI Chat — for people who want more 
 - Full-screen app experience
 - Home screen icon
 
+### 🖥️ Windows app — Notal AI Studio (`studio-app/`)
+The same chat as a real `.exe`, with the things a browser tab cannot do:
+
+- Quick Chat overlay on a global shortcut, answered by the running app and saved into the open chat
+- System tray, desktop notifications, close-to-tray
+- Its own relay on `127.0.0.1:4179` — provider calls, page reads and a local Ollama, all on this machine, all streaming
+- `skills.md` in the app data folder, re-read on every message
+- Native Save dialog for exporting a chat, document text read into the message
+- Desktop dictation: records locally and has a Gemini provider transcribe it
+- Update check against GitHub releases, NSIS installer
+
+`app-web/` is copied from this repo by `sync-web.js`, so the site and the app can never drift apart.
+
 ---
 
 ## 🛠 Tech Stack
@@ -122,6 +135,24 @@ python -m http.server 8000
 ```
 
 Then visit `http://localhost:8000`.
+
+### Building the Windows app
+
+```bash
+cd studio-app
+npm install
+npm start                        # run it from source
+npm run dist                     # -> dist/Notal-AI-Studio-Setup-<version>.exe
+```
+
+Three built-in checks, useful on an install too — each one also writes a JSON
+report into the app data folder:
+
+```bash
+npm run probe                    # relay: page read, provider forward, refusals, every asset
+npm run smoke                    # window: does the app load, is the bridge there
+npm run quick                    # Quick Chat: question in the overlay, answer in history
+```
 
 ### Adding API Keys
 1. Open the app
