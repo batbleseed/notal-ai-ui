@@ -277,21 +277,43 @@
                 <button type="button" data-theme-val="dark">Dark</button>
               </div>
             </div>
-            <div class="setting-row stack">
-              <div class="setting-info"><span class="setting-name">Provider relay</span><small id="relayStatus">Not configured — requests leave this browser directly</small></div>
-              <div class="relay-line">
-                <input type="url" id="relayUrlInput" class="text-input" placeholder="https://notal-relay.your-name.workers.dev" autocomplete="off" />
-                <button class="ghost-btn" id="relayTestBtn" type="button">Test</button>
-              </div>
-            </div>
             <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Model reasoning</span><small>Show Claude's and Gemini's thinking as it happens. Uses extra tokens</small></div>
-              <label class="switch"><input type="checkbox" id="thinkingToggle" /><span class="sl track"></span></label>
-            </div>
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Chat history</span><small>Stored only in this browser</small></div>
+              <div class="setting-info"><span class="setting-name">Chat history</span><small>Saved in this browser, on this device. Nothing is uploaded.</small></div>
               <button class="danger-btn" id="clearChatsBtn" type="button">Clear all chats</button>
             </div>
+
+            <div class="note-block">
+              <h3 class="note-title">What stays, and what does not</h3>
+              <dl class="fact-list">
+                <dt>Refresh or close the tab</dt>
+                <dd>Your chats, projects, memory, skills, models and settings all come back. They are saved on this device as you go.</dd>
+                <dt>A different browser, phone or incognito window</dt>
+                <dd>Starts completely empty. There is no server holding a copy to pull from, so nothing carries across.</dd>
+                <dt>Signing in with Google</dt>
+                <dd>Brings in your name and profile picture for the greeting and the avatar. It does not upload or sync your chats, your memory or your API keys.</dd>
+                <dt>Clearing this site's browsing data</dt>
+                <dd>Deletes all of it for good. Export what you want to keep before you do.</dd>
+              </dl>
+            </div>
+
+            <details class="adv" data-adv="general">
+              <summary>Advanced: reasoning and diagnostics</summary>
+              <div class="adv-body">
+                <p class="adv-lead">Only needed if you want to watch the model think, or to see exactly where Notal is sending your text.</p>
+                <div class="setting-row">
+                  <div class="setting-info"><span class="setting-name">Model reasoning</span><small>Show Claude's and Gemini's thinking as it happens. Uses extra tokens, so it costs a little more per reply.</small></div>
+                  <label class="switch"><input type="checkbox" id="thinkingToggle" /><span class="sl track"></span></label>
+                </div>
+                <div class="setting-row stack">
+                  <div class="setting-info"><span class="setting-name">Diagnostics</span><small>Read from your own settings — nothing is sent anywhere to produce it.</small></div>
+                  <pre class="diag" id="diagOut">Loading…</pre>
+                  <div class="diag-actions">
+                    <button class="ghost-btn" id="diagRefreshBtn" type="button">Refresh</button>
+                    <button class="ghost-btn" id="diagCopyBtn" type="button">Copy</button>
+                  </div>
+                </div>
+              </div>
+            </details>
           </section>
           <section class="settings-panel" id="panel-account" hidden>
             <div class="setting-row">
@@ -305,35 +327,67 @@
                 <button class="danger-btn" id="googleSignOutBtn" type="button" hidden>Sign out</button>
               </div>
             </div>
+            <div class="note-block">
+              <h3 class="note-title">What signing in actually does</h3>
+              <dl class="fact-list">
+                <dt>It brings in</dt>
+                <dd>Your name for the greeting, and your Google photo for the avatar.</dd>
+                <dt>It does not</dt>
+                <dd>Upload or sync your chats, projects, memory, skills or API keys. Those stay in this browser on this device, whether you are signed in or not.</dd>
+                <dt>On another device</dt>
+                <dd>You sign in there too, and it starts with an empty history. The account is not a backup.</dd>
+              </dl>
+            </div>
           </section>
           <section class="settings-panel" id="panel-providers" hidden>
-            <p class="panel-note">Models you add here appear in the model picker. Keys stay in this browser only.</p>
-            <ul class="provider-list" id="providerList"></ul>
+            <p class="panel-note">Pick who answers, name the model, add it. Your key is saved in this browser only and is sent only to the address the diagnostics panel shows.</p>
             <form class="provider-form" id="providerForm">
-              <div class="pf-grid">
-                <label>Provider
-                  <select id="pfProvider">
-                    <option>OpenAI-compatible</option>
-                    <option>Anthropic</option>
-                    <option>Google Gemini</option>
-                    <option>Ollama (local)</option>
-                    <option>Custom</option>
-                  </select>
-                </label>
-                <label>Model ID
-                  <input type="text" id="pfName" placeholder="e.g. llama3.1:8b, gpt-4o-mini" required />
-                </label>
-                <label>Base URL
-                  <input type="url" id="pfUrl" placeholder="https://api.example.com/v1 or http://localhost:11434" />
-                </label>
-                <label>API key
-                  <input type="password" id="pfKey" placeholder="not needed for local Ollama" autocomplete="off" />
-                </label>
-              </div>
-              <div class="pf-actions">
-                <button type="submit" class="primary-btn">Add model</button>
-              </div>
+              <ol class="setup">
+                <li class="setup-step">
+                  <h3 class="setup-title"><span class="step-no">1</span> Who answers</h3>
+                  <div class="prov-cards" id="provCards" role="group" aria-label="Provider"></div>
+                </li>
+                <li class="setup-step">
+                  <h3 class="setup-title"><span class="step-no">2</span> Which model</h3>
+                  <p class="setup-need" id="pfNeed">Pick a provider above.</p>
+                  <div class="pf-fields">
+                    <label>Model ID
+                      <input type="text" id="pfName" placeholder="Pick a provider first" autocomplete="off" required />
+                    </label>
+                    <label id="pfKeyWrap">API key
+                      <input type="password" id="pfKey" placeholder="From the provider's own site" autocomplete="off" />
+                    </label>
+                  </div>
+                </li>
+                <li class="setup-step">
+                  <h3 class="setup-title"><span class="step-no">3</span> Add it, then check it</h3>
+                  <p class="setup-need">Adding puts it in the model picker. Then press <b>Test</b> on its row: Notal sends one short message to that provider with your key, so a wrong key or model name shows up here instead of mid-chat.</p>
+                  <div class="pf-actions">
+                    <button type="submit" class="primary-btn" id="pfAddBtn">Add model</button>
+                  </div>
+                </li>
+              </ol>
             </form>
+            <ul class="provider-list" id="providerList"></ul>
+
+            <details class="adv" data-adv="providers">
+              <summary>Advanced: base URL and relay</summary>
+              <div class="adv-body">
+                <p class="adv-lead">Skip all of this for the five providers above — each one already knows its own address.</p>
+                <label class="adv-field">Base URL for the model you add next
+                  <input type="url" id="pfUrl" placeholder="https://api.example.com/v1, or http://localhost:11434 for Ollama" autocomplete="off" />
+                  <small>Requests go here, direct from this browser tab. Only set it when the provider gives you a different address, or when you are using a service not listed above.</small>
+                </label>
+                <div class="setting-row stack">
+                  <div class="setting-info"><span class="setting-name">Provider relay</span><small id="relayStatus">Not configured — requests leave this browser directly</small></div>
+                  <div class="relay-line">
+                    <input type="url" id="relayUrlInput" class="text-input" placeholder="https://notal-relay.your-name.workers.dev" autocomplete="off" />
+                    <button class="ghost-btn" id="relayTestBtn" type="button">Test</button>
+                  </div>
+                  <p class="adv-lead">Some providers refuse calls that come from a browser page. A relay is a small forwarder you deploy yourself: the tab asks the relay, the relay asks the provider. Until Test comes back green, Notal keeps sending straight from this tab.</p>
+                </div>
+              </div>
+            </details>
           </section>
           <section class="settings-panel" id="panel-notifications" hidden>
             <p class="panel-note">Desktop alerts fire when Notal finishes a reply while the tab is in the background.</p>
@@ -353,7 +407,7 @@
             </div>
           </section>
           <section class="settings-panel" id="panel-security" hidden>
-            <p class="panel-note">Local only. A PIN hides the app from people using your device — it does not encrypt your data.</p>
+            <p class="panel-note">A PIN hides the app from someone glancing at your device. It does not encrypt your chats — they stay plain text in this browser's storage, readable by anyone who can open that storage, PIN or no PIN. Use it to stop a look over your shoulder, not to protect secrets.</p>
             <div class="setting-row">
               <div class="setting-info"><span class="setting-name">App lock PIN</span><small id="pinStatus">Not set</small></div>
               <div class="auth-actions">

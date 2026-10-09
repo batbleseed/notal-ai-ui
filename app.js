@@ -110,6 +110,8 @@ let state = Object.assign({
   showThinking: false,
   sidebarOpen: true,
   mode: "chat",
+  relayVerified: null,
+  advanced: {},
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
@@ -126,6 +128,8 @@ for (const k of ["projects", "memories", "skills"])
   if (!Array.isArray(state[k])) state[k] = [];
 if (!state.projects.some(p => p.id === state.activeProject)) state.activeProject = null;
 if (state.mode !== "chat" && state.mode !== "coding") state.mode = "chat";
+if (!state.advanced || typeof state.advanced !== "object") state.advanced = {};
+if (!state.relayVerified || typeof state.relayVerified !== "object") state.relayVerified = null;
 
 function selectedModel() {
   return state.models.find(m => m.id === state.selectedModel) ?? state.models[0];
@@ -517,6 +521,8 @@ async function sendMessage(text) {
         if (delta.reasoning) turn.addReasoning(delta.reasoning);
         if (delta.text) push(delta.text);
       }, ac.signal);
+      /* a finished reply is better evidence than any test button */
+      recordProviderResult(model.providerId, true, "Answered a real message");
     } else {
       await streamBuiltIn(craftReply(trimmed, conv.messages.length), push, ac.signal);
     }
@@ -540,6 +546,10 @@ async function sendMessage(text) {
       }
       toast("Stopped.");
       return;
+    }
+    if (model.providerId) {
+      const p = state.providers.find(x => x.id === model.providerId);
+      if (p) recordProviderResult(p.id, false, friendlyTestError(err, p));
     }
     turn.textEl.classList.add("msg-error");
     turn.textEl.textContent = "⚠ " + (err?.message || "Request failed");
@@ -1178,6 +1188,11 @@ els.gearBtn = $("#gearBtn");
 let settingsOpen = false;
 function openSettings(tab = "general") {
   settingsOpen = true;
+  /* these readouts are snapshots of what just happened — a chat turn can change
+     a provider's status, so they are refreshed on every open, not at load */
+  renderProviders();
+  renderRelayUI();
+  renderDiagnostics();
   els.overlay.hidden = false;
   motion.reveal(els.settingsModal);
   switchTab(tab);
@@ -1281,30 +1296,54 @@ els.thinkingToggle.checked = !!state.showThinking;
 els.thinkingToggle.addEventListener("change", () => {
   state.showThinking = els.thinkingToggle.checked;
   save();
+  renderDiagnostics();
   toast(state.showThinking
     ? "Reasoning on — supported models think in the box beside their reply."
     : "Reasoning off.");
 });
 
-/* ---------- provider relay ---------- */
+/* ---------- provider relay ----------
+   The label has to describe what is actually true: a URL that was typed in is
+   not the same as a relay that answered. Verification is stored against the
+   exact URL it was earned on, so a new address never inherits an old tick. */
 els.relayUrlInput = $("#relayUrlInput");
 els.relayStatus = $("#relayStatus");
 els.relayTestBtn = $("#relayTestBtn");
 
+function relayVerifiedInfo() {
+  const v = state.relayVerified;
+  return v && v.url === relayBase() ? v : null;
+}
+
+function agoText(at) {
+  const mins = Math.round((Date.now() - at) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 24 ? `${hrs} h ago` : `${Math.round(hrs / 24)} days ago`;
+}
+
 function renderRelayUI(msg) {
   els.relayUrlInput.value = state.relayUrl || "";
-  els.relayStatus.textContent = msg
-    || (state.relayUrl
-      ? "Set — provider requests go through the relay"
-      : "Not configured — requests leave this browser directly");
+  if (msg) { els.relayStatus.textContent = msg; return; }
+  if (!relayBase()) {
+    els.relayStatus.textContent = "Not set — requests leave this browser tab and go straight to the provider";
+    return;
+  }
+  const v = relayVerifiedInfo();
+  els.relayStatus.textContent = v
+    ? `Working — verified ${agoText(v.at)}. Requests go through it, not directly from this tab`
+    : "Set, but never verified — requests are being routed through it now, and nothing has confirmed it answers. Press Test.";
 }
 
 els.relayUrlInput.addEventListener("change", () => {
   let v = els.relayUrlInput.value.trim().replace(/\/+$/, "");
   if (v && !/^https?:\/\//i.test(v)) v = "https://" + v;
   state.relayUrl = v;
+  state.relayVerified = null;
   save();
-  renderRelayUI();
+  renderRelayUI(v ? "Checking…" : null);
+  renderDiagnostics();
   if (v) els.relayTestBtn.click();
 });
 
@@ -1317,11 +1356,17 @@ els.relayTestBtn.addEventListener("click", async () => {
     const res = await fetch(`${base}/health`);
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`);
-    renderRelayUI(`Reachable — allow-listed ${data.hosts ?? "?"} provider hosts`);
+    state.relayVerified = { url: base, at: Date.now(), hosts: data.hosts ?? null };
+    save();
+    renderRelayUI(`Working — verified just now. Allow-listed ${data.hosts ?? "?"} provider hosts`);
   } catch (err) {
-    renderRelayUI("Not reachable: " + String(err?.message || err).slice(0, 90));
+    state.relayVerified = null;
+    save();
+    renderRelayUI("Not reachable: " + String(err?.message || err).slice(0, 90)
+      + " — every provider call fails until this is fixed or the URL is cleared.");
   } finally {
     els.relayTestBtn.disabled = false;
+    renderDiagnostics();
   }
 });
 
@@ -1335,14 +1380,108 @@ els.displayNameInput.addEventListener("input", () => {
   if (!currentUser) renderAuthUI();
 });
 
-/* ---------- providers ---------- */
+/* ---------- provider setup ----------
+   A short guided path instead of four jargon fields at once. Each entry says, in
+   plain words, whether a key is needed, where that key comes from, and where the
+   text is going. The fields are all on screen together — nothing is hidden behind
+   a wizard step — so an experienced user can fill it in top to bottom in seconds. */
+const PROVIDER_GUIDE = [
+  {
+    id: "anthropic", kind: "anthropic", label: "Anthropic", blurb: "Claude",
+    needsKey: true, keyFrom: "console.anthropic.com, under API keys",
+    baseUrl: "https://api.anthropic.com", example: "claude-sonnet-4-5",
+    where: "Your text goes from this browser tab straight to api.anthropic.com.",
+  },
+  {
+    id: "openai", kind: "openai", label: "OpenAI", blurb: "GPT",
+    needsKey: true, keyFrom: "platform.openai.com, under API keys",
+    baseUrl: "https://api.openai.com/v1", example: "gpt-4o-mini",
+    where: "Your text goes from this browser tab straight to api.openai.com.",
+  },
+  {
+    id: "gemini", kind: "gemini", label: "Google Gemini", blurb: "Gemini",
+    needsKey: true, keyFrom: "aistudio.google.com, Get API key",
+    baseUrl: "https://generativelanguage.googleapis.com", example: "gemini-3.8-flash",
+    where: "Your text goes from this browser tab straight to Google's generative language API.",
+  },
+  {
+    id: "ollama", kind: "ollama", label: "Ollama, here", blurb: "local, free",
+    needsKey: false, keyFrom: "",
+    baseUrl: "http://localhost:11434", example: "llama3.1:8b",
+    where: "Nothing leaves this computer — the tab talks to Ollama running on it.",
+  },
+  {
+    id: "custom", kind: "openai", label: "Something else", blurb: "OpenAI-shaped API",
+    needsKey: true, keyFrom: "that service's own dashboard",
+    baseUrl: "", example: "the exact model ID they list",
+    where: "Goes to whichever address you set in Advanced below.",
+  },
+];
+
 els.providerList = $("#providerList");
 els.providerForm = $("#providerForm");
+els.provCards = $("#provCards");
+els.pfNeed = $("#pfNeed");
+els.pfName = $("#pfName");
+els.pfKey = $("#pfKey");
+els.pfKeyWrap = $("#pfKeyWrap");
+els.pfUrl = $("#pfUrl");
+
+let guidePick = null;
+
+function renderProvCards() {
+  els.provCards.replaceChildren(...PROVIDER_GUIDE.map((g) => {
+    const b = document.createElement("button");
+    /* inside a form, so it has to say it is not the submit control */
+    b.type = "button";
+    b.className = "prov-card";
+    b.dataset.guide = g.id;
+    b.setAttribute("aria-pressed", "false");
+    const name = document.createElement("span");
+    name.className = "pc-name";
+    name.textContent = g.label;
+    const blurb = document.createElement("small");
+    blurb.textContent = g.needsKey ? `${g.blurb} · needs a key` : `${g.blurb} · no key`;
+    b.append(name, blurb);
+    b.addEventListener("click", () => { guidePick = g; applyGuide(); });
+    return b;
+  }));
+}
+
+function applyGuide() {
+  els.provCards.querySelectorAll(".prov-card").forEach((b) => {
+    const on = b.dataset.guide === guidePick.id;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+  const g = guidePick;
+  els.pfName.placeholder = `e.g. ${g.example}`;
+  els.pfNeed.textContent = g.needsKey
+    ? `${g.label} needs an API key — you get one from ${g.keyFrom}. ${g.where}`
+    : `${g.label} needs no key. ${g.where}`;
+  els.pfKeyWrap.hidden = !g.needsKey;
+  if (!g.needsKey) els.pfKey.value = "";
+  /* an unlisted service is exactly the case the base URL field exists for */
+  if (g.id === "custom") setAdv("providers", true);
+}
+
+function providerAddress(p) {
+  return (p.baseUrl || KIND_DEFAULTS[p.kind] || "").replace(/\/+$/, "") || "no address set";
+}
+
+function providerStatus(p) {
+  if (!p.baseUrl && !KIND_DEFAULTS[p.kind]) return { label: "Needs a base URL", tone: "warn" };
+  if (p.kind !== "ollama" && !p.apiKey) return { label: "Needs an API key", tone: "warn" };
+  if (!p.test) return { label: "Not tested yet", tone: "idle" };
+  return p.test.ok
+    ? { label: "Works", tone: "ok" }
+    : { label: "Not working", tone: "bad" };
+}
 
 function renderProviders() {
   els.providerList.innerHTML = "";
   if (!state.providers.length) {
-    els.providerList.innerHTML = `<li class="history-empty">No providers configured yet</li>`;
+    els.providerList.innerHTML = `<li class="history-empty">No models added yet — the built-in one still answers.</li>`;
     return;
   }
   for (const p of state.providers) {
@@ -1354,8 +1493,27 @@ function renderProviders() {
     const name = document.createElement("span");
     name.textContent = p.name;
     const detail = document.createElement("small");
-    detail.textContent = [p.provider, p.baseUrl, p.apiKey ? "key set" : "no key"].filter(Boolean).join(" · ");
-    meta.append(name, detail);
+    detail.textContent = `${p.provider} · ${providerAddress(p)}`;
+    const note = document.createElement("small");
+    note.className = "pi-note";
+    const st = providerStatus(p);
+    note.textContent = st.tone === "bad" || st.tone === "ok"
+      ? `${p.test.msg} · ${agoText(p.test.at)}`
+      : st.label === "Not tested yet"
+        ? "Press Test to send one short message and check the key and model ID."
+        : "Fill this in and it will not answer yet.";
+    meta.append(name, detail, note);
+
+    const badge = document.createElement("span");
+    badge.className = "status " + st.tone;
+    badge.textContent = st.label;
+
+    const test = document.createElement("button");
+    test.type = "button";
+    test.className = "ghost-btn";
+    test.textContent = "Test";
+    test.title = `Send one short message to ${p.provider} to check this model`;
+    test.addEventListener("click", () => testProvider(p.id, test));
 
     const del = document.createElement("button");
     del.type = "button";
@@ -1364,7 +1522,7 @@ function renderProviders() {
     del.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
     del.addEventListener("click", () => removeProvider(p.id));
 
-    li.append(meta, del);
+    li.append(meta, badge, test, del);
     els.providerList.append(li);
   }
 }
@@ -1379,34 +1537,155 @@ function removeProvider(id) {
   els.modelName.textContent = selectedModel().name;
 }
 
-const KIND_BY_LABEL = {
-  "OpenAI-compatible": "openai",
-  "Anthropic": "anthropic",
-  "Google Gemini": "gemini",
-  "Ollama (local)": "ollama",
-  "Custom": "openai",
-};
+/* Turns a raw failure into something a person can act on. The distinction that
+   matters most: a connection that never arrived says nothing about the key. */
+function friendlyTestError(err, p) {
+  const m = String(err?.message || err);
+  if (err?.name === "AbortError") return "Gave up after 30 seconds with no answer. The provider never replied.";
+  if (/failed to fetch|load failed|network|cors|could not reach/i.test(m)) {
+    return p.kind === "ollama"
+      ? `Nothing answered on ${providerAddress(p)}. Is Ollama running, and have you pulled that model? (ollama pull ${p.name})`
+      : `Nothing answered at ${providerAddress(p)} at all. The address is wrong, the service is down, or it refuses calls from a web page — a relay in Advanced gets around that last one. This is not about your key: a key is only checked once the connection exists.`;
+  }
+  if (/\b401\b|invalid api key|incorrect api key|unauthorized/i.test(m))
+    return "The key was refused (401). Paste it again in full, and check it is a key for this provider.";
+  if (/\b403\b|forbidden|permission/i.test(m))
+    return "Your key is not allowed to use this model or API (403).";
+  if (/\b404\b|not found|unknown model|invalid model|does not exist/i.test(m))
+    return `Nothing at that address answers as "${p.name}" (404). Model IDs are the usual cause — copy the exact one the provider lists.`;
+  if (/\b429\b|rate|quota|insufficient|credit|billing/i.test(m))
+    return "Rate limited, or the account has no credit left (429). Check the billing page on that provider.";
+  if (/\b5\d\d\b|overloaded|server error/i.test(m))
+    return "The provider itself is failing right now. Try again in a minute.";
+  return m.slice(0, 180);
+}
+
+/* Both the test button and a real chat turn write through here, so the status
+   label always comes from something that actually happened. */
+function recordProviderResult(id, ok, msg) {
+  const p = state.providers.find(x => x.id === id);
+  if (!p) return;
+  p.test = { ok, at: Date.now(), msg };
+  save();
+}
+
+/* One real round trip through the same path a chat message uses, so a pass
+   means the chat will work and a fail names the actual problem. */
+async function testProvider(id, btn) {
+  const p = state.providers.find(x => x.id === id);
+  if (!p) return;
+  btn.disabled = true;
+  btn.textContent = "Testing…";
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 30000);
+  try {
+    const reply = await callProvider(
+      { id: p.id, providerId: p.id, name: p.name },
+      [{ role: "user", text: "Reply with exactly one word: ok" }],
+      () => {}, ac.signal);
+    p.test = { ok: true, at: Date.now(), msg: `Answered “${reply.trim().slice(0, 40)}”` };
+    toast(`"${p.name}" is working.`);
+  } catch (err) {
+    p.test = { ok: false, at: Date.now(), msg: friendlyTestError(err, p) };
+    toast(`Test failed: ${p.test.msg}`);
+  } finally {
+    clearTimeout(timer);
+    btn.disabled = false;
+    btn.textContent = "Test";
+    save();
+    renderProviders();
+    renderDiagnostics();
+  }
+}
 
 els.providerForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const name = $("#pfName").value.trim();
+  if (!guidePick) { toast("Step 1 first — choose who answers."); els.provCards.querySelector(".prov-card")?.focus(); return; }
+  const name = els.pfName.value.trim();
   if (!name) return;
-  const label = $("#pfProvider").value;
+  const base = els.pfUrl.value.trim() || guidePick.baseUrl;
+  if (!base) { setAdv("providers", true); toast("That provider has no built-in address — set the base URL in Advanced."); return; }
   const provider = {
     id: crypto.randomUUID(),
-    kind: KIND_BY_LABEL[label] || "openai",
-    provider: label,
+    kind: guidePick.kind,
+    provider: guidePick.label,
     name,
-    baseUrl: $("#pfUrl").value.trim(),
-    apiKey: $("#pfKey").value.trim(),
+    baseUrl: base,
+    apiKey: guidePick.needsKey ? els.pfKey.value.trim() : "",
+    test: null,
   };
   state.providers.push(provider);
-  state.models.push({ id: provider.id, name, provider: label, providerId: provider.id });
+  state.models.push({ id: provider.id, name, provider: provider.provider, providerId: provider.id });
   els.providerForm.reset();
   save();
   renderProviders();
   renderModelMenu();
-  toast(`Model "${name}" added — pick it in the model menu.`);
+  renderDiagnostics();
+  toast(provider.apiKey || provider.kind === "ollama"
+    ? `Model "${name}" added — press Test on its row to check it with one tiny message.`
+    : `Model "${name}" added, but it has no API key yet — it will not answer until you add one.`);
+});
+
+/* ---------- diagnostics ----------
+   Everything here is read back from your own settings; nothing is sent anywhere
+   to produce it. */
+els.diagOut = $("#diagOut");
+
+function diagnosticsText() {
+  const model = selectedModel();
+  const p = state.providers.find(x => x.id === model.providerId);
+  const relay = relayBase();
+  const verified = relayVerifiedInfo();
+  const keys = state.providers.filter(x => x.apiKey).map(x => x.name);
+  const bytes = new Blob([JSON.stringify(state)]).size;
+  const chats = state.conversations.length;
+  const msgs = state.conversations.reduce((n, c) => n + c.messages.length, 0);
+  const lines = [
+    `Model in use: ${model.name}${model.provider ? ` (${model.provider})` : ""}`,
+    p
+      ? `Requests to: ${providerAddress(p)} · ${relay
+        ? `routed through the relay${verified ? " (verified " + agoText(verified.at) + ")" : " (NOT verified)"}`
+        : "direct from this browser tab"}`
+      : "Requests to: nowhere — the built-in model answers, your text leaves this device",
+    `Relay: ${relay ? (verified ? `${relay} · allow-listed ${verified.hosts ?? "?"} hosts · verified ${agoText(verified.at)}` : `${relay} · never verified`) : "not configured"}`,
+    `Providers: ${state.providers.length ? state.providers.map(x => `${x.name} [${providerStatus(x).label}]`).join(", ") : "none"}`,
+    `API keys held here: ${keys.length ? keys.join(", ") : "none"}`,
+    `History: ${chats} chat${chats === 1 ? "" : "s"}, ${msgs} message${msgs === 1 ? "" : "s"} · about ${(bytes / 1024).toFixed(0)} KB, in this browser only`,
+    `Reasoning display: ${state.showThinking ? "on (uses extra tokens)" : "off"}`,
+    `Network: ${navigator.onLine ? "online" : "offline"}`,
+  ];
+  return lines.join("\n");
+}
+
+function renderDiagnostics() {
+  if (!els.diagOut) return;
+  els.diagOut.textContent = diagnosticsText();
+}
+
+$("#diagRefreshBtn").addEventListener("click", () => { renderDiagnostics(); toast("Refreshed from your settings."); });
+$("#diagCopyBtn").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(diagnosticsText());
+    toast("Diagnostics copied — no keys in it.");
+  } catch {
+    toast("Your browser would not let the page use the clipboard.");
+  }
+});
+
+/* ---------- advanced sections ----------
+   Open or shut is a preference, so it is remembered: an experienced user opens
+   them once and every visit after that is the direct route. */
+function setAdv(name, open) {
+  const d = document.querySelector(`.adv[data-adv="${name}"]`);
+  if (d) d.open = open;
+}
+document.querySelectorAll(".adv[data-adv]").forEach(d => {
+  d.open = !!state.advanced[d.dataset.adv];
+  d.addEventListener("toggle", () => {
+    state.advanced[d.dataset.adv] = d.open;
+    if (d.dataset.adv === "general") renderDiagnostics();
+    save();
+  });
 });
 
 /* ---------- share ---------- */
@@ -2053,6 +2332,7 @@ setSidebar(window.innerWidth < 860 ? false : state.sidebarOpen !== false);
 applyTheme();
 els.modelName.textContent = selectedModel().name;
 renderModelMenu();
+renderProvCards();
 renderProviders();
 renderAuthUI();
 renderNotifUI();
