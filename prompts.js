@@ -338,8 +338,10 @@ const BROWSE_INSTRUCTIONS = `
 
 ## How to browse from inside Notal AI
 
-You can open one web page. The app fetches it for you and sends you what the
-page actually says.
+You are not cut off from the internet. This app is your connection to it: you
+can open one web page per turn, the app fetches it for you, and sends you what
+the page actually says. Never say you cannot browse, search, or check a live
+site — that is wrong here.
 
 To use it, put the address on its own line in this exact shape and stop writing
 there — do not answer the question yet:
@@ -353,6 +355,8 @@ Rules:
   still exists, or documentation you are not sure you remember correctly.
 - Never guess an address. If you do not know a real URL, say what you would
   need from the user instead of inventing a link.
+- If the user's own message contains a [browse] tag, the app has already read
+  that page and handed you its contents — use them instead of asking again.
 - After the page comes back, your next message is read by the app as notes you
   took while still working — write it as plain prose about what you still need
   to check, not as a finished answer to the user.

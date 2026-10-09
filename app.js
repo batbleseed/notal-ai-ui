@@ -629,6 +629,14 @@ async function sendMessage(text) {
          chat history forever. */
       let context = conv.messages;
       let hops = 0;
+      /* An address the user typed themselves is read first, so a page lookup
+         never depends on the model volunteering to ask for one. */
+      const typed = findBrowseRequest(trimmed);
+      if (typed) {
+        context = await readIntoContext(turn, context, typed, ac.signal,
+          "(The user gave me a page to read; the app fetched it.)");
+        hops++;
+      }
       for (;;) {
         const raw = await callProvider(model, context, onDelta, ac.signal);
         const url = hops < MAX_BROWSES ? findBrowseRequest(raw) : null;
@@ -641,24 +649,7 @@ async function sendMessage(text) {
         answer = "";
         if (frame) cancelAnimationFrame(frame);
         draw();
-        const closeStep = turn.startBrowse(url);
-        const question = {
-          role: "assistant",
-          text: note || "(I need to check something before answering.)",
-        };
-        try {
-          const page = await fetchPage(url, ac.signal);
-          closeStep({ ok: true, title: page.title });
-          context = [...context, question,
-            { role: "user", text: `[page contents] ${url}\n\n${page.text}` }];
-        } catch (err) {
-          if (err?.name === "AbortError") throw err;
-          closeStep({ ok: false });
-          /* say so plainly — a model that does not know the lookup failed will
-             ask for the same page again */
-          context = [...context, question,
-            { role: "user", text: `[browse failed] ${url} — ${err?.message || "the page could not be read"}` }];
-        }
+        context = await readIntoContext(turn, context, url, ac.signal, note);
         hops++;
       }
       /* a finished reply is better evidence than any test button */
@@ -1042,6 +1033,28 @@ async function fetchPage(url, signal) {
   return { title, text };
 }
 
+/* One lookup, shown as a step, and the page added to the context the model reads
+   next. Used both for a tag the model emits and for an address the user types. */
+async function readIntoContext(turn, context, url, signal, noteText) {
+  const closeStep = turn.startBrowse(url);
+  /* the page has to arrive as its own turn, and providers want the roles to
+     alternate, so the lookup needs a bridge line before it */
+  const bridge = { role: "assistant", text: noteText || "(Reading the page before answering.)" };
+  try {
+    const page = await fetchPage(url, signal);
+    closeStep({ ok: true, title: page.title });
+    return [...context, bridge,
+      { role: "user", text: `[page contents] ${url}\n\n${page.text}` }];
+  } catch (err) {
+    if (err?.name === "AbortError") throw err;
+    closeStep({ ok: false });
+    /* say so plainly — a model that does not know the lookup failed will ask for
+       the same page again */
+    return [...context, bridge,
+      { role: "user", text: `[browse failed] ${url} — ${err?.message || "the page could not be read"}` }];
+  }
+}
+
 async function callProvider(model, messages, onDelta, signal) {
   const p = state.providers.find(x => x.id === model.providerId);
   if (!p) throw new Error("Provider settings are missing — re-add the model in Settings → Providers.");
@@ -1298,9 +1311,11 @@ const SUGGESTIONS = {
   ],
 };
 
+/* The browse syntax is worth a hint where it is actually used, otherwise it is
+   only knowable from the system prompt. */
 const PLACEHOLDER_BY_MODE = {
-  chat: "Message Notal AI...",
-  coding: "Describe a bug or paste your code...",
+  chat: "Message Notal AI… or hand me a page: [browse]https://…[/browse]",
+  coding: "Describe a bug, paste your code… or [browse]https://…[/browse]",
 };
 
 function renderSuggestions() {
