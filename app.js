@@ -344,6 +344,9 @@ function renderText(el, text, asMarkdown) {
   else el.textContent = text || "";
 }
 
+/* More than one word, because a single word cannot make a wave. */
+const THINK_WORDS = ["Thinking", "it", "through"];
+
 function appendMessage(msg) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${msg.role}`;
@@ -369,7 +372,20 @@ function appendMessage(msg) {
 
   const roleName = document.createElement("div");
   roleName.className = "msg-role";
-  roleName.textContent = "Notal";
+  const roleLabel = document.createElement("span");
+  roleLabel.textContent = "Notal";
+  /* The hopping words sit right beside the spinning mark, so the wait has a
+     shape to it. Each word jumps and falls on its own delay — a wave that
+     travels across the line, driven by the .thinking class alone. */
+  const thinkWords = document.createElement("span");
+  thinkWords.className = "think-words";
+  for (const word of THINK_WORDS) {
+    const w = document.createElement("span");
+    w.className = "think-word";
+    w.textContent = word;
+    thinkWords.append(w);
+  }
+  roleName.append(roleLabel, thinkWords);
 
   const thinkBox = document.createElement("div");
   thinkBox.className = "msg-think";
@@ -416,7 +432,7 @@ function appendMessage(msg) {
       reasoningOn = true;
       reasoningStartedAt = Date.now();
       if (!state.showThinking) return;
-      thinkLabel.textContent = "Thinking";
+      thinkLabel.textContent = "Reasoning";
       thinkBox.classList.add("live");
       if (thinkBox.hidden) {
         thinkBox.hidden = false;

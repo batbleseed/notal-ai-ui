@@ -585,7 +585,10 @@ button:disabled { opacity: .5; cursor: default; }
 .msg-body { min-width: 0; flex: 1; }
 .msg.user .msg-body { flex: 0 1 auto; max-width: 84%; }
 .msg.user .msg-attachments { justify-content: flex-end; }
-.msg-role { font-size: 12px; font-weight: 600; color: var(--text-faint); margin-bottom: 5px; letter-spacing: .3px; }
+.msg-role {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--text-faint); margin-bottom: 5px; letter-spacing: .3px;
+}
 .msg-text { font-size: 15px; line-height: 1.7; word-wrap: break-word; }
 .msg-text > * + * { margin-top: 12px; }
 .msg-text p { margin: 0; }
@@ -622,7 +625,27 @@ button:disabled { opacity: .5; cursor: default; }
   display: inline-block; max-width: 100%;
 }
 
-/* reasoning box — appears beside the spinning mark while the model thinks */
+/* The wait given a shape: while a reply is being produced, the words beside the
+   spinning mark hop one after another — up, past the line, back to rest. Pure
+   CSS, so nothing has to tick it and it survives a background tab. */
+.think-words { display: none; align-items: baseline; gap: 4px; }
+.msg.thinking .think-words { display: inline-flex; }
+.think-word { display: inline-block; color: var(--accent); font-weight: 600; }
+.msg.thinking .think-word { animation: think-hop 1.45s ease-in-out infinite; }
+.msg.thinking .think-word:nth-child(2) { animation-delay: .14s; }
+.msg.thinking .think-word:nth-child(3) { animation-delay: .28s; }
+@keyframes think-hop {
+  0%, 62%, 100% { transform: translateY(0); }
+  16% { transform: translateY(-5px); }
+  34% { transform: translateY(1.5px); }
+  48% { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* the same deal as the spinning mark: slow it down rather than switch it off,
+     so the wait still reads as a wait on a machine that dials motion back */
+  .msg.thinking .think-word { animation-duration: 3.6s; }
+}
+
 /* Model reasoning folds into a one-line row once the answer is ready. */
 .msg-think { display: grid; gap: 3px; align-content: start; margin-bottom: 10px; }
 .msg-think[hidden] { display: none; }
