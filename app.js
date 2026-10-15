@@ -93,6 +93,96 @@ const DEFAULT_FIREBASE_CONFIG = {
   appId: "1:202138488352:web:d84f27b7c8009f60753645",
 };
 
+/* ---------- Supabase telemetry (`events` table) ----------
+   Logs each completed AI reply to the Supabase `events` table
+   (columns: type, model, tokens, latency_ms, device) in a fire-and-forget
+   promise chain so it never blocks the chat UI. Works with the Supabase JS CDN
+   (<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>)
+   and automatically loads the CDN script if not already present in chat/index.html. */
+const SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+const SUPABASE_CDN_URL = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+
+let supabaseClient = null;
+let supabaseInitPromise = null;
+
+function getSupabaseClient() {
+  if (supabaseClient) return Promise.resolve(supabaseClient);
+  if (
+    !SUPABASE_URL ||
+    !SUPABASE_ANON_KEY ||
+    SUPABASE_URL.includes("YOUR_PROJECT_ID") ||
+    SUPABASE_ANON_KEY.includes("YOUR_SUPABASE_ANON_KEY")
+  ) {
+    return Promise.resolve(null);
+  }
+  if (window.supabase && typeof window.supabase.createClient === "function") {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    return Promise.resolve(supabaseClient);
+  }
+  if (!supabaseInitPromise) {
+    supabaseInitPromise = new Promise((resolve) => {
+      const s = document.createElement("script");
+      s.src = SUPABASE_CDN_URL;
+      s.async = true;
+      s.onload = () => {
+        if (window.supabase && typeof window.supabase.createClient === "function") {
+          supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+        resolve(supabaseClient);
+      };
+      s.onerror = () => resolve(null);
+      document.head.append(s);
+    });
+  }
+  return supabaseInitPromise;
+}
+
+function detectNotalDevice() {
+  if (typeof DESKTOP === "boolean" && DESKTOP) return "electron";
+  if (window.notal && window.notal.desktop) return "electron";
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+  if (/Electron/i.test(ua)) return "electron";
+  if (/Mobi|Android|iPhone|iPad|iPod/i.test(ua)) return "mobile_web";
+  return "web";
+}
+
+function estimateTokens(promptText = "", replyText = "") {
+  const chars = String(promptText).length + String(replyText).length;
+  return Math.max(1, Math.ceil(chars / 4));
+}
+
+function logNotalAiEvent({
+  type = "ai_reply",
+  model = "notal-generic",
+  tokens = 0,
+  latency_ms = 0,
+  device = detectNotalDevice(),
+} = {}) {
+  const payload = {
+    type: String(type),
+    model: String(model),
+    tokens: Number.isFinite(Number(tokens)) ? Math.round(Number(tokens)) : 0,
+    latency_ms: Math.max(0, Math.round(Number(latency_ms) || 0)),
+    device: String(device),
+  };
+
+  /* Fire-and-forget: detached promise chain so it never blocks UI rendering */
+  getSupabaseClient()
+    .then((client) => {
+      if (!client) return null;
+      return client.from("events").insert([payload]);
+    })
+    .then((res) => {
+      if (res?.error) {
+        console.warn("[Notal Telemetry] Supabase insert error:", res.error.message);
+      }
+    })
+    .catch((err) => {
+      console.warn("[Notal Telemetry] Failed to log event:", err?.message || err);
+    });
+}
+
 let state = Object.assign({
   conversations: [],
   activeId: null,
@@ -906,13 +996,20 @@ async function sendMessage(text) {
     if (quick) window.notal.quickChunk(quick.id, chunk);
     if (!frame) frame = requestAnimationFrame(() => draw());
   };
+  let replyTokens = 0;
   const onDelta = (delta) => {
     if (delta.reasoning) turn.addReasoning(delta.reasoning);
     if (delta.text) push(delta.text);
+    if (delta.tokens) replyTokens = delta.tokens;
   };
   const finishQuick = (payload) => {
     if (quick && quickJobs.has(quick.id)) window.notal.quickDone(quick.id, payload);
   };
+
+  const replyStartTime =
+    typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
 
   try {
     if (model.providerId) {
@@ -963,6 +1060,20 @@ async function sendMessage(text) {
     save();
     notifyReply(reply);
     finishQuick({ text: reply });
+
+    /* Fire-and-forget log to Supabase `events` table — never blocks the UI */
+    const replyEndTime =
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
+    const latencyMs = Math.max(0, Math.round(replyEndTime - replyStartTime));
+    logNotalAiEvent({
+      type: "ai_reply",
+      model: model.name || model.id || "notal-generic",
+      tokens: replyTokens || estimateTokens(trimmed, reply),
+      latency_ms: latencyMs,
+      device: detectNotalDevice(),
+    });
   } catch (err) {
     if (frame) cancelAnimationFrame(frame);
     turn.stopThinking();
@@ -1408,32 +1519,43 @@ const sseJson = (line) => {
 // One line of a live stream in, the pieces of the reply it carried out.
 const STREAM_LINES = {
   openai(line) {
-    const d = sseJson(line)?.choices?.[0]?.delta;
-    return d
-      ? { text: d.content || "", reasoning: d.reasoning_content || d.reasoning || "" }
-      : null;
+    const j = sseJson(line);
+    if (!j) return null;
+    const d = j.choices?.[0]?.delta;
+    const tokens = j.usage?.total_tokens || 0;
+    if (!d && !tokens) return null;
+    return {
+      text: d?.content || "",
+      reasoning: d?.reasoning_content || d?.reasoning || "",
+      tokens,
+    };
   },
   anthropic(line) {
     const j = sseJson(line);
     if (!j) return null;
     if (j.type === "error") throw new Error(j.error?.message || "The provider returned an error.");
+    const u = j.usage || j.message?.usage;
+    const tokens = u ? (u.input_tokens || 0) + (u.output_tokens || 0) : 0;
     const d = j.delta || {};
-    if (d.type === "text_delta") return { text: d.text || "", reasoning: "" };
-    if (d.type === "thinking_delta") return { text: "", reasoning: d.thinking || "" };
-    return null;
+    if (d.type === "text_delta") return { text: d.text || "", reasoning: "", tokens };
+    if (d.type === "thinking_delta") return { text: "", reasoning: d.thinking || "", tokens };
+    return tokens ? { text: "", reasoning: "", tokens } : null;
   },
   gemini(line) {
     const j = sseJson(line);
     if (!j) return null;
     if (j.error?.message) throw new Error(j.error.message);
-    return splitThoughts(j.candidates?.[0]?.content?.parts);
+    const out = splitThoughts(j.candidates?.[0]?.content?.parts);
+    out.tokens = j.usageMetadata?.totalTokenCount || 0;
+    return out;
   },
   ollama(line) {
     if (!line.trim()) return null;
     let j;
     try { j = JSON.parse(line); } catch { return null; }
     if (j.error) throw new Error(String(j.error));
-    return { text: j.message?.content || "", reasoning: j.message?.thinking || "" };
+    const tokens = (j.prompt_eval_count || 0) + (j.eval_count || 0);
+    return { text: j.message?.content || "", reasoning: j.message?.thinking || "", tokens };
   },
 };
 
@@ -1449,20 +1571,32 @@ function splitThoughts(parts = []) {
 // The same reply in its whole-response shape, for servers that ignore
 // "stream" and answer with one JSON body anyway.
 const WHOLE_REPLIES = {
-  openai: (j) => ({ text: j.choices?.[0]?.message?.content || "", reasoning: "" }),
+  openai: (j) => ({
+    text: j.choices?.[0]?.message?.content || "",
+    reasoning: "",
+    tokens: j.usage?.total_tokens || 0,
+  }),
   anthropic: (j) => ({
     text: (j.content || []).filter(b => b.type === "text").map(b => b.text).join(""),
     reasoning: (j.content || []).filter(b => b.type === "thinking").map(b => b.thinking || "").join(""),
+    tokens: (j.usage?.input_tokens || 0) + (j.usage?.output_tokens || 0),
   }),
-  gemini: (j) => splitThoughts(j.candidates?.[0]?.content?.parts),
-  ollama: (j) => ({ text: j.message?.content || "", reasoning: j.message?.thinking || "" }),
+  gemini: (j) => ({
+    ...splitThoughts(j.candidates?.[0]?.content?.parts),
+    tokens: j.usageMetadata?.totalTokenCount || 0,
+  }),
+  ollama: (j) => ({
+    text: j.message?.content || "",
+    reasoning: j.message?.thinking || "",
+    tokens: (j.prompt_eval_count || 0) + (j.eval_count || 0),
+  }),
 };
 
 async function streamProvider(url, opts, kind, onDelta) {
   const res = await openProviderCall(url, opts);
   if ((res.headers.get("content-type") || "").includes("application/json")) {
     const whole = WHOLE_REPLIES[kind]((await res.json()) || {});
-    if (whole.text || whole.reasoning) onDelta(whole);
+    if (whole.text || whole.reasoning || whole.tokens) onDelta(whole);
     return;
   }
   if (!res.body) throw new Error("The provider sent no response body.");
@@ -1473,7 +1607,7 @@ async function streamProvider(url, opts, kind, onDelta) {
   let buffer = "";
   const takeLine = (raw) => {
     const delta = parse(raw);
-    if (delta && (delta.text || delta.reasoning)) onDelta(delta);
+    if (delta && (delta.text || delta.reasoning || delta.tokens)) onDelta(delta);
   };
 
   for (;;) {
