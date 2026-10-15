@@ -3472,3 +3472,15 @@ setMode(state.mode);
 renderHistory();
 renderMessages();
 ensureAuth().catch(() => {});
+
+/* Lift the boot splash once the workspace has painted, with a short floor so
+   the mark never just flashes on a fast load. */
+const bootSplash = document.getElementById("bootSplash");
+if (bootSplash) {
+  const lift = () => {
+    bootSplash.classList.add("closing");
+    bootSplash.addEventListener("transitionend", () => bootSplash.remove(), { once: true });
+  };
+  setTimeout(lift, Math.max(0, 650 - performance.now()));
+}
+

@@ -776,6 +776,29 @@ button:disabled { opacity: .5; cursor: default; }
   .msg.thinking .think-word { animation-duration: 3.6s; }
 }
 
+/* Boot splash — the page-open counterpart of the thinking message: the mark
+   turns and the words hop until init lifts the curtain. */
+.boot-splash {
+  position: fixed; inset: 0; z-index: 400;
+  display: grid; place-content: center; justify-items: center; gap: 18px;
+  background: var(--bg);
+  transition: opacity .45s ease;
+}
+.boot-splash.closing { opacity: 0; pointer-events: none; }
+.boot-mark { width: 52px; height: 52px; }
+.boot-mark::before { animation: notal-spin 1.15s linear infinite; }
+.boot-words { display: inline-flex; align-items: baseline; gap: 5px; font-size: 13.5px; }
+.boot-word {
+  display: inline-block; color: var(--accent); font-weight: 600;
+  animation: think-hop 1.45s ease-in-out infinite;
+}
+.boot-word:nth-child(2) { animation-delay: .14s; }
+.boot-word:nth-child(3) { animation-delay: .28s; }
+@media (prefers-reduced-motion: reduce) {
+  .boot-mark::before { animation-duration: 5s; }
+  .boot-word { animation-duration: 3.6s; }
+}
+
 /* Model reasoning folds into a one-line row once the answer is ready. */
 .msg-think { display: grid; gap: 3px; align-content: start; margin-bottom: 10px; }
 .msg-think[hidden] { display: none; }

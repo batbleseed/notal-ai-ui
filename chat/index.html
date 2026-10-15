@@ -16,6 +16,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
 <body>
+  <!-- The opening curtain: the same spinning petals and hopping words the
+       thinking state uses, so the wait on entry matches the wait in a reply. -->
+  <div class="boot-splash" id="bootSplash" aria-hidden="true">
+    <span class="boot-mark notal-mark"></span>
+    <span class="boot-words">
+      <span class="boot-word">Thinking</span>
+      <span class="boot-word">it</span>
+      <span class="boot-word">through</span>
+    </span>
+  </div>
+  <script>setTimeout(() => { const s = document.getElementById("bootSplash"); if (s) s.remove(); }, 4000);</script>
+
   <div class="app">
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
