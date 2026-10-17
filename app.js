@@ -3473,14 +3473,17 @@ renderHistory();
 renderMessages();
 ensureAuth().catch(() => {});
 
-/* Lift the boot splash once the workspace has painted, with a short floor so
-   the mark never just flashes on a fast load. */
+/* The boot splash holds for a full two seconds, then the mark swells bigger
+   and bigger until the whole chat is revealed behind it. */
 const bootSplash = document.getElementById("bootSplash");
 if (bootSplash) {
-  const lift = () => {
-    bootSplash.classList.add("closing");
-    bootSplash.addEventListener("transitionend", () => bootSplash.remove(), { once: true });
-  };
-  setTimeout(lift, Math.max(0, 650 - performance.now()));
+  setTimeout(() => {
+    bootSplash.classList.add("zoom");
+    const mark = bootSplash.querySelector(".boot-mark");
+    mark.addEventListener("animationend", () => {
+      bootSplash.classList.add("closing");
+      bootSplash.addEventListener("transitionend", () => bootSplash.remove(), { once: true });
+    }, { once: true });
+  }, Math.max(0, 2000 - performance.now()));
 }
 

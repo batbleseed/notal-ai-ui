@@ -787,16 +787,26 @@ button:disabled { opacity: .5; cursor: default; }
 .boot-splash.closing { opacity: 0; pointer-events: none; }
 .boot-mark { width: 52px; height: 52px; }
 .boot-mark::before { animation: notal-spin 1.15s linear infinite; }
-.boot-words { display: inline-flex; align-items: baseline; gap: 5px; font-size: 13.5px; }
+.boot-words { display: inline-flex; align-items: baseline; gap: 5px; font-size: 13.5px; transition: opacity .3s ease; }
 .boot-word {
   display: inline-block; color: var(--accent); font-weight: 600;
   animation: think-hop 1.45s ease-in-out infinite;
 }
 .boot-word:nth-child(2) { animation-delay: .14s; }
 .boot-word:nth-child(3) { animation-delay: .28s; }
+/* the reveal: after the hold, the mark swells bigger and bigger, past the
+   frame, and the curtain goes with it — the chat grows out of the mark */
+.boot-splash.zoom .boot-mark { animation: boot-swell 1s cubic-bezier(.55, 0, .85, .4) forwards; }
+.boot-splash.zoom .boot-words { opacity: 0; }
+@keyframes boot-swell {
+  from { transform: scale(1); opacity: 1; }
+  60% { opacity: 1; }
+  to { transform: scale(16); opacity: 0; }
+}
 @media (prefers-reduced-motion: reduce) {
   .boot-mark::before { animation-duration: 5s; }
   .boot-word { animation-duration: 3.6s; }
+  .boot-splash.zoom .boot-mark { animation-duration: 2.4s; }
 }
 
 /* Model reasoning folds into a one-line row once the answer is ready. */
