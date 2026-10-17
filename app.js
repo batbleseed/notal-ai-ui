@@ -183,6 +183,43 @@ function logNotalAiEvent({
     });
 }
 
+/* Prompt add-ons the app ships with. Each one is a short instruction that
+   rides in the system prompt while its switch is on; users write their own
+   in Settings → Extensions. */
+const BUILTIN_EXTENSIONS = [
+  { id: "ext-terse", name: "Terse", desc: "Short answers, no filler.",
+    prompt: "Answer in the fewest sentences that stay correct. No preamble, no sign-off, no restating the question." },
+  { id: "ext-devil", name: "Devil's advocate", desc: "Challenge the idea before helping it.",
+    prompt: "When the user proposes an idea, first make the strongest honest case against it, then help them build it anyway." },
+  { id: "ext-teach", name: "Explain as you go", desc: "Every answer carries the why.",
+    prompt: "After any code or plan, add a short 'Why' note covering the two or three decisions a reader would otherwise have to reverse-engineer." },
+  { id: "ext-json", name: "Strict JSON", desc: "Replies parse with JSON.parse.",
+    prompt: "Reply with a single valid JSON object and nothing else — no markdown fences, no prose outside the braces." },
+  { id: "ext-dusk", name: "Sepia dusk", desc: "A warmer paper tone for the whole workspace.",
+    prompt: "", builtin: true,
+    ui: { css: ":root { --bg: #ece2cf; --surface: #f9f3e6; --surface-2: #e2d5bc; --border: #cfc0a4; }", html: "", js: "" } },
+  { id: "ext-clock", name: "Status clock", desc: "A live clock at the end of the top bar.",
+    prompt: "", builtin: true,
+    ui: { css: "#ext-clock-time { margin-left: 12px; font-size: 12.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }",
+      html: "",
+      js: "const bar = document.querySelector('.topbar');\nif (bar && !document.getElementById('ext-clock-time')) {\n  const s = document.createElement('span');\n  s.id = 'ext-clock-time';\n  bar.append(s);\n  const tick = () => { s.textContent = new Date().toLocaleTimeString(); };\n  tick();\n  setInterval(tick, 1000);\n}" } },
+];
+
+/* What the Library group shows until a Supabase table is connected in
+   Settings → Extensions — and again if that table can't be reached. */
+const EXT_LIBRARY_SEED = [
+  { libId: "lib-focus", name: "Focus frame", desc: "The sidebar dims until you reach for it.",
+    prompt: "", ui: { css: ".sidebar { opacity: .72; transition: opacity .25s; }\n.sidebar:hover { opacity: 1; }", html: "", js: "" } },
+  { libId: "lib-round", name: "Round everything", desc: "Softer corners across the workspace.",
+    prompt: "", ui: { css: ":root { --radius: 22px; --radius-sm: 14px; --radius-xs: 10px; }", html: "", js: "" } },
+  { libId: "lib-bigtype", name: "Big type", desc: "Larger, roomier message text.",
+    prompt: "", ui: { css: ".msg-text { font-size: 17px; line-height: 1.75; }", html: "", js: "" } },
+  { libId: "lib-serif", name: "Serif replies", desc: "Flowing prose, never bullet lists.",
+    prompt: "Write replies in flowing prose with no bullet lists, headings or bold — the way a good essay reads.", ui: null },
+  { libId: "lib-careful", name: "Careful answers", desc: "Names the assumption each answer rests on.",
+    prompt: "Before answering, state the one assumption your answer depends on most; if it is wrong, say how the answer would change.", ui: null },
+];
+
 let state = Object.assign({
   conversations: [],
   activeId: null,
@@ -197,6 +234,7 @@ let state = Object.assign({
   projects: [],
   memories: [],
   skills: [],
+  extensions: [],
   activeProject: null,
   relayUrl: "",
   showThinking: false,
@@ -204,6 +242,8 @@ let state = Object.assign({
   mode: "chat",
   relayVerified: null,
   advanced: {},
+  libUrl: "https://bgpptjdqosmzxbctclkv.supabase.co",
+  libKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJncHB0amRxb3NtenhiY3RjbGt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNDM3NzYsImV4cCI6MjEwNzgxOTc3Nn0.evRfV8i4qYQ36Hfn23XkHLDoozq4wGgEOujThLDE0t8",
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
@@ -218,6 +258,14 @@ if (typeof state.pinHash !== "string") state.pinHash = null;
 if (typeof state.idleLock !== "number") state.idleLock = 0;
 for (const k of ["projects", "memories", "skills"])
   if (!Array.isArray(state[k])) state[k] = [];
+if (!Array.isArray(state.extensions)) state.extensions = [];
+/* built-ins are seeded, not saved once: a future version can add one and it
+   appears on the next load */
+for (const b of BUILTIN_EXTENSIONS)
+  if (!state.extensions.some(x => x.id === b.id))
+    state.extensions.push({ ...b, builtin: true, enabled: false });
+if (typeof state.libUrl !== "string") state.libUrl = "";
+if (typeof state.libKey !== "string") state.libKey = "";
 if (!state.projects.some(p => p.id === state.activeProject)) state.activeProject = null;
 if (state.mode !== "chat" && state.mode !== "coding") state.mode = "chat";
 if (!state.advanced || typeof state.advanced !== "object") state.advanced = {};
@@ -1185,6 +1233,8 @@ function systemPrompt() {
   let s = SYSTEM_BY_MODE[state.mode] || SYSTEM_BY_MODE.chat;
   if (proj) s += ` The current project is "${proj.name}".`;
   if (facts.length) s += `\nThings the user wants you to remember:\n- ${facts.join("\n- ")}`;
+  for (const x of state.extensions)
+    if (x.enabled) s += `\nExtension "${x.name}": ${x.prompt}`;
   /* in the desktop app this carries the Studio brief and the owner's skills.md,
      both read from disk moments ago — see refreshStudioBrief() */
   if (studioBrief) s += studioBrief;
@@ -2287,6 +2337,8 @@ function openSettings(tab = "general") {
   renderProviders();
   renderRelayUI();
   renderDiagnostics();
+  $("#libUrlInput").value = state.libUrl || "";
+  $("#libKeyInput").value = state.libKey || "";
   els.overlay.hidden = false;
   motion.reveal(els.settingsModal);
   switchTab(tab);
@@ -3099,7 +3151,10 @@ document.addEventListener("keydown", (e) => {
     setModelMenu(false);
     setAccountMenu(false);
     if (!els.overlay.hidden) closeSettings();
-    else if (panelOpen) setView("chats");
+    else if (!nameDialog.hidden) { closeNameDialog(); discardEditorMode(); }
+    else if (!makerPick.hidden) makerPick.hidden = true;
+    else if (editing) exitEditorMode();
+    else if (panelOpen || els.main.classList.contains("ext-open")) setView("chats");
     return;
   }
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
@@ -3115,8 +3170,11 @@ document.addEventListener("keydown", (e) => {
 /* ---------- projects / memory / skills panels ----------
    These three open on top of the chat instead of swapping it out, so the chat
    stays the main event and whatever you were typing is still there when the
-   panel closes. The sidebar nav is the quick access to each one. */
+   panel closes. The sidebar nav is the quick access to each one.
+   Extensions is different: it takes over the main column as its own view. */
 els.chatTitle = $(".chat-title");
+els.main = $(".main");
+els.extView = $("#extView");
 const PANELS = ["projects", "memory", "skills"];
 let panelOpen = null;
 
@@ -3126,6 +3184,12 @@ function renderPanel(name) {
   else renderSkills();
 }
 
+/* hidden synchronously: an overlay that fades out but never finishes would
+   sit invisible on top of the chat and swallow every click */
+function closePanel(name) {
+  $(`#view-${name}`).hidden = true;
+}
+
 function openPanel(name) {
   const overlay = $(`#view-${name}`);
   overlay.hidden = false;
@@ -3133,14 +3197,9 @@ function openPanel(name) {
   motion.reveal(overlay.querySelector(".panel-modal"));
 }
 
-/* hidden synchronously: an overlay that fades out but never finishes would
-   sit invisible on top of the chat and swallow every click */
-function closePanel(name) {
-  $(`#view-${name}`).hidden = true;
-}
-
 function setView(name) {
   const panel = PANELS.includes(name) ? name : null;
+  const ext = name === "extensions";
   if (panel !== panelOpen) {
     if (panelOpen) closePanel(panelOpen);
     panelOpen = panel;
@@ -3148,9 +3207,18 @@ function setView(name) {
   } else if (panel) {
     renderPanel(panel);
   }
+  const wasExt = els.main.classList.contains("ext-open");
+  els.main.classList.toggle("ext-open", ext);
+  /* the view stays in the DOM, so it only needs filling and animating on the
+     way in — Chats and Esc just hide it again */
+  if (ext && !wasExt) {
+    renderExtensions();
+    motion.reveal(els.extView);
+  }
   document.querySelectorAll(".nav-item").forEach(b =>
-    b.classList.toggle("active", b.dataset.view === (panel ?? "chats")));
-  els.chatTitle.textContent = activeConv()?.title
+    b.classList.toggle("active", b.dataset.view === (panel ?? (ext ? "extensions" : "chats"))));
+  els.chatTitle.textContent = ext ? "Extensions"
+    : activeConv()?.title
     || (state.activeProject ? projectName(state.activeProject) : "Notal AI");
 }
 
@@ -3403,6 +3471,825 @@ $("#skillForm").addEventListener("submit", (e) => {
   toast(`Skill "${name}" added.`);
 });
 
+/* ----- extensions ----- */
+els.extBuiltinList = $("#extBuiltinList");
+els.extCustomList = $("#extCustomList");
+els.extLibraryList = $("#extLibraryList");
+els.libStatus = $("#libStatus");
+
+/* The real library is a Supabase table read over REST — GET only, the anon
+   key needs no write policy. Until one is connected, the curated seed shows. */
+let libResult = null; // { entries, source, count? } — filled by loadLibrary()
+
+async function loadLibrary() {
+  const url = (state.libUrl || "").trim().replace(/\/+$/, "");
+  const key = (state.libKey || "").trim();
+  if (!url || !key) return { entries: EXT_LIBRARY_SEED, source: "demo" };
+  try {
+    const res = await fetch(`${url}/rest/v1/extensions?select=name,descr,prompt,ui,created_at`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    return {
+      source: "supabase", count: rows.length,
+      entries: rows.map(r => ({
+        libId: `db:${r.name}|${r.created_at || ""}`,
+        name: r.name, desc: r.descr || "", prompt: r.prompt || "", ui: r.ui || null,
+      })),
+    };
+  } catch (err) {
+    console.warn("Extension library unreachable:", err);
+    return { entries: EXT_LIBRARY_SEED, source: "offline" };
+  }
+}
+
+function renderLibrary() {
+  els.extLibraryList.innerHTML = "";
+  if (!libResult) {
+    els.libStatus.textContent = "Loading the library…";
+    loadLibrary().then(r => { libResult = r; renderLibrary(); });
+    return;
+  }
+  els.libStatus.textContent = libResult.source === "supabase"
+    ? libResult.count
+      ? `${libResult.count} ${libResult.count === 1 ? "entry" : "entries"} from your Supabase table.`
+      : "Connected to your Supabase table — it is empty. Add rows in its SQL editor."
+    : libResult.source === "offline"
+      ? "Could not reach the database — showing the demo library."
+      : "Demo library. Connect a Supabase table in Settings → Extensions for the real one.";
+  const installed = new Set(state.extensions.map(x => x.libId).filter(Boolean));
+  for (const e of libResult.entries) {
+    const li = document.createElement("li");
+    li.className = "lib-card";
+
+    li.append(extPreview(e.ui));
+
+    const h = document.createElement("strong");
+    h.className = "lib-name";
+    h.textContent = e.name;
+    if (e.ui && (e.ui.css || e.ui.html || e.ui.js)) {
+      const badge = document.createElement("span");
+      badge.className = "ext-badge";
+      badge.textContent = "UI";
+      h.append(" ", badge);
+    }
+    li.append(h);
+
+    const p = document.createElement("small");
+    p.className = "lib-desc";
+    p.textContent = e.desc
+      || (e.ui && (e.ui.css || e.ui.html || e.ui.js) ? "A UI extension." : "A prompt add-on.");
+    li.append(p);
+
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "ghost-btn";
+    if (installed.has(e.libId)) {
+      btn.textContent = "Installed"; btn.disabled = true;
+    } else {
+      btn.textContent = "Install";
+      btn.addEventListener("click", () => {
+        state.extensions.push({
+          id: crypto.randomUUID(), libId: e.libId, name: e.name,
+          desc: p.textContent, prompt: e.prompt || "",
+          ui: e.ui || undefined, builtin: false, enabled: false,
+        });
+        save();
+        renderExtensions();
+        toast(`"${e.name}" installed — switch it on above.`);
+      });
+    }
+    const foot = document.createElement("div");
+    foot.className = "lib-foot";
+    foot.append(btn);
+    li.append(foot);
+    els.extLibraryList.append(li);
+  }
+}
+
+/* Switched-on UI extensions write into one style tag and one mount point, so
+   turning any of them off takes its share back on the next apply. Scripts run
+   once per apply and are expected to be idempotent — check before you build,
+   as the built-in clock does. */
+function applyUiExtensions() {
+  const on = state.extensions.filter(x => x.enabled && x.ui);
+  let style = document.getElementById("extStyles");
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "extStyles";
+    document.head.append(style);
+  }
+  style.textContent = on.map(x => `/* ${x.name} */\n${x.ui.css || ""}`).join("\n");
+  const mount = document.getElementById("extMount");
+  mount.textContent = "";
+  for (const x of on) {
+    if (!x.ui.html) continue;
+    const holder = document.createElement("div");
+    holder.innerHTML = x.ui.html;
+    mount.append(...holder.childNodes);
+  }
+  for (const x of on) {
+    if (!x.ui.js) continue;
+    try { new Function(x.ui.js)(); }
+    catch (err) { console.warn(`Extension "${x.name}" script failed:`, err); }
+  }
+}
+
+function extRow(x, deletable) {
+  const li = document.createElement("li");
+  li.className = "lib-card" + (x.enabled ? "" : " off");
+
+  li.append(extPreview(x.ui));
+
+  const h = document.createElement("strong");
+  h.className = "lib-name";
+  h.textContent = x.name;
+  if (x.ui) {
+    const badge = document.createElement("span");
+    badge.className = "ext-badge";
+    badge.textContent = "UI";
+    h.append(" ", badge);
+  }
+  li.append(h);
+
+  const p = document.createElement("small");
+  p.className = "lib-desc";
+  p.textContent = x.desc || (x.ui ? "A UI extension." : "A prompt add-on.");
+  li.append(p);
+
+  const foot = document.createElement("div");
+  foot.className = "lib-foot";
+
+  const label = document.createElement("label");
+  label.className = "switch";
+  const cb = document.createElement("input");
+  cb.type = "checkbox"; cb.checked = x.enabled;
+  cb.setAttribute("aria-label", `${x.enabled ? "Turn off" : "Turn on"} ${x.name}`);
+  cb.addEventListener("change", () => {
+    x.enabled = cb.checked;
+    save();
+    applyUiExtensions();
+    renderExtensions();
+    toast(x.enabled ? `"${x.name}" is on.` : `"${x.name}" turned off.`);
+  });
+  const sl = document.createElement("span");
+  sl.className = "sl track";
+  label.append(cb, sl);
+  foot.append(label);
+
+  if (x.ui) {
+    const edit = document.createElement("button");
+    edit.type = "button"; edit.className = "ghost-btn";
+    edit.textContent = "Edit";
+    edit.addEventListener("click", () => openExtEditor(x));
+    foot.append(edit);
+  }
+
+  if (deletable) {
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "icon-btn pi-del";
+    del.setAttribute("aria-label", `Delete ${x.name}`);
+    del.innerHTML = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+    del.addEventListener("click", () => {
+      state.extensions = state.extensions.filter(y => y.id !== x.id);
+      save();
+      applyUiExtensions();
+      renderExtensions();
+    });
+    foot.append(del);
+  }
+
+  li.append(foot);
+  return li;
+}
+
+function renderExtensions() {
+  renderLibrary();
+  els.extBuiltinList.innerHTML = "";
+  els.extCustomList.innerHTML = "";
+  for (const x of state.extensions.filter(y => y.builtin))
+    els.extBuiltinList.append(extRow(x, false));
+  const custom = state.extensions.filter(y => !y.builtin);
+  if (!custom.length) {
+    const li = document.createElement("li");
+    li.className = "empty-note";
+    li.textContent = "Nothing of your own yet — press Extension Maker above.";
+    els.extCustomList.append(li);
+  }
+  for (const x of custom) els.extCustomList.append(extRow(x, true));
+}
+
+/* ----- the UI-extension editor ----- */
+const edBuffers = { css: "", html: "", js: "" };
+let edLang = "css";
+let edTarget = null; // the extension being edited, null while composing a new one
+
+function edHighlight() {
+  $("#edHl").replaceChildren(...syntaxNodes(edBuffers[edLang] + "\n", edLang));
+}
+
+function edShow(lang) {
+  /* the input listener keeps edBuffers current, so switching tabs only reads
+     the new pane back out — never write the old textarea into the target */
+  edLang = lang;
+  document.querySelectorAll(".ed-tab").forEach(t => {
+    const active = t.dataset.ed === lang;
+    t.classList.toggle("active", active);
+    t.setAttribute("aria-selected", String(active));
+  });
+  $("#edInput").value = edBuffers[lang];
+  $("#edHint").textContent = ED_HINTS[lang];
+  edHighlight();
+  $("#edInput").scrollTop = $("#edHl").scrollTop = 0;
+}
+
+function openExtEditor(x) {
+  edTarget = x || null;
+  $("#extEditorTitle").textContent = x ? `Edit — ${x.name}` : "New UI extension";
+  $("#edName").value = x?.name || "";
+  $("#edDesc").value = x?.desc || "";
+  edBuffers.css = x?.ui?.css || "";
+  edBuffers.html = x?.ui?.html || "";
+  edBuffers.js = x?.ui?.js || "";
+  edApplySize();
+  edShow("css");
+  $("#extEditor").hidden = false;
+  $("#edInput").focus();
+}
+
+function closeExtEditor() { $("#extEditor").hidden = true; }
+
+$("#extEditorClose").addEventListener("click", closeExtEditor);
+$("#extEditor").addEventListener("click", (e) => { if (e.target === $("#extEditor")) closeExtEditor(); });
+document.querySelectorAll(".ed-tab").forEach(t =>
+  t.addEventListener("click", () => edShow(t.dataset.ed)));
+$("#edInput").addEventListener("input", () => { edBuffers[edLang] = $("#edInput").value; edHighlight(); });
+$("#edInput").addEventListener("scroll", () => { $("#edHl").scrollTop = $("#edInput").scrollTop; $("#edHl").scrollLeft = $("#edInput").scrollLeft; });
+
+/* Tab inside a code box should indent, not throw the caret out of the editor. */
+$("#edInput").addEventListener("keydown", (e) => {
+  if (e.key !== "Tab") return;
+  e.preventDefault();
+  const el = e.target;
+  el.setRangeText("  ", el.selectionStart, el.selectionEnd, "end");
+  edBuffers[edLang] = el.value;
+  edHighlight();
+});
+
+/* Working examples, so the first thing a new user reads is code that runs.
+   A starter only fills the panes it ships with — it never erases what you
+   have already written in another language. */
+const ED_STARTERS = {
+  theme: {
+    name: "Night colours", desc: "A dark, blue-tinted take on the page.",
+    css: `/* Your CSS loads after the theme, so these win.
+   Change a colour and press Save to see it land. */
+:root {
+  --bg: #101418;
+  --surface: #171d23;
+  --text: #e8ecf0;
+  --accent: #58a6ff;
+}`,
+  },
+  type: {
+    name: "Comfy reading", desc: "Larger type and a wider chat column.",
+    css: `/* :root font-size scales the whole interface. */
+:root { font-size: 18px; }
+.chat { max-width: 860px; margin: 0 auto; width: 100%; }`,
+  },
+  clock: {
+    name: "Corner clock", desc: "A live clock pinned to the bottom right.",
+    html: `<!-- HTML adds this to the page. CSS dresses it, JS fills it. -->
+<div id="extClock"></div>`,
+    css: `#extClock {
+  position: fixed; right: 18px; bottom: 16px; z-index: 60;
+  padding: 7px 13px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface);
+  font: 600 13px/1 var(--sans); color: var(--text-soft);
+}`,
+    js: `// JS runs every time the switch goes on, so this clears
+// its own old timer before starting a new one.
+clearInterval(window.__extClockTimer);
+function extClockTick() {
+  const el = document.getElementById("extClock");
+  if (el) el.textContent = new Date().toLocaleTimeString();
+}
+extClockTick();
+window.__extClockTimer = setInterval(extClockTick, 1000);`,
+  },
+  blank: { name: "", desc: "" },
+};
+
+const ED_HINTS = {
+  css: "CSS changes how the page looks. Anything you write here loads last, so it wins over the built-in theme.",
+  html: "HTML is added to the page on top of everything else. Give your element an id here, then style it in the CSS tab.",
+  js: "JavaScript runs each time the extension is switched on, and can read or change anything on the page. It should not add the same thing twice.",
+};
+
+function edApplyStarter(key) {
+  const s = ED_STARTERS[key];
+  if (!s) return;
+  if (key === "blank") edBuffers.css = edBuffers.html = edBuffers.js = "";
+  else for (const lang of ["css", "html", "js"]) if (s[lang]) edBuffers[lang] = s[lang];
+  if (s.name && !$("#edName").value.trim()) $("#edName").value = s.name;
+  if (s.desc && !$("#edDesc").value.trim()) $("#edDesc").value = s.desc;
+  edShow(s.html ? "html" : "css");
+  $("#edInput").focus();
+}
+
+document.querySelectorAll("[data-starter]").forEach(b =>
+  b.addEventListener("click", () => edApplyStarter(b.dataset.starter)));
+
+/* ----- resizing the editor -----
+   Three grips: the right edge, the bottom edge, and the corner. The size you
+   drag to is remembered, because a code editor you have to re-open at arm's
+   length every session is a bad one. */
+const ED_MIN = { w: 520, h: 340 };
+const edModal = $("#extEditor .ext-editor");
+
+function edApplySize() {
+  const s = state.advanced.edSize;
+  if (s && Number.isFinite(s.w) && Number.isFinite(s.h)) {
+    edModal.style.width = s.w + "px";
+    edModal.style.height = s.h + "px";
+  } else {
+    edModal.style.width = edModal.style.height = "";
+  }
+}
+
+let edDrag = null;
+for (const grip of document.querySelectorAll(".ed-grip")) {
+  grip.addEventListener("pointerdown", (e) => {
+    const r = edModal.getBoundingClientRect();
+    edDrag = { axes: grip.dataset.grip, x: e.clientX, y: e.clientY, w: r.width, h: r.height };
+    grip.setPointerCapture(e.pointerId);
+    grip.classList.add("on");
+    e.preventDefault();
+  });
+  grip.addEventListener("pointermove", (e) => {
+    if (!edDrag) return;
+    const maxW = innerWidth - 40, maxH = innerHeight - 40;
+    if (edDrag.axes !== "s")
+      edModal.style.width = Math.min(maxW, Math.max(ED_MIN.w, edDrag.w + e.clientX - edDrag.x)) + "px";
+    if (edDrag.axes !== "e")
+      edModal.style.height = Math.min(maxH, Math.max(ED_MIN.h, edDrag.h + e.clientY - edDrag.y)) + "px";
+  });
+  const end = (e) => {
+    if (!edDrag) return;
+    edDrag = null;
+    grip.classList.remove("on");
+    if (grip.hasPointerCapture(e.pointerId)) grip.releasePointerCapture(e.pointerId);
+    const r = edModal.getBoundingClientRect();
+    state.advanced.edSize = { w: Math.round(r.width), h: Math.round(r.height) };
+    save();
+  };
+  grip.addEventListener("pointerup", end);
+  grip.addEventListener("pointercancel", end);
+  grip.addEventListener("dblclick", () => {
+    state.advanced.edSize = null;
+    save();
+    edApplySize();
+  });
+}
+
+function edCollect() {
+  edBuffers[edLang] = $("#edInput").value;
+  return {
+    name: $("#edName").value.trim() || "Untitled extension",
+    desc: $("#edDesc").value.trim() || "Your own UI extension.",
+    ui: { css: edBuffers.css, html: edBuffers.html, js: edBuffers.js },
+  };
+}
+
+$("#edSave").addEventListener("click", () => {
+  const { name, desc, ui } = edCollect();
+  if (edTarget) {
+    Object.assign(edTarget, { name, desc, ui });
+  } else {
+    state.extensions.push({ id: crypto.randomUUID(), name, desc, prompt: "", builtin: false, enabled: true, ui });
+  }
+  save();
+  applyUiExtensions();
+  renderExtensions();
+  closeExtEditor();
+  toast(`"${name}" saved.`);
+});
+
+$("#edDownload").addEventListener("click", () => {
+  const { name, desc, ui } = edCollect();
+  const blob = new Blob(
+    [JSON.stringify({ kind: "notal-ui-extension", name, desc, ui }, null, 2)],
+    { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".notal-extension.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+});
+
+/* Publish writes an extension into the shared library, so the next person to
+   open Extensions finds it in their list. That is a write, and the anon key can
+   only do one if the table has an insert policy — Settings → Extensions prints
+   the single line that adds it. */
+let publishing = false;
+async function publishToLibrary(d, onDone) {
+  if (publishing) return;
+  const url = (state.libUrl || "").trim().replace(/\/+$/, "");
+  const key = (state.libKey || "").trim();
+  if (!url || !key) {
+    toast("Publishing needs the library database — connect one in Settings → Extensions.");
+    return;
+  }
+  publishing = true;
+  document.querySelectorAll("#edPublish,#ftPublish").forEach(b => { b.disabled = true; });
+  try {
+    const res = await fetch(`${url}/rest/v1/extensions`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ name: d.name, descr: d.desc, prompt: d.prompt || "", ui: d.ui || null }),
+    });
+    if (!res.ok) {
+      throw new Error(res.status === 401 || res.status === 403
+        ? "the table has no insert policy for this key yet"
+        : `HTTP ${res.status}`);
+    }
+    libResult = null; // the next library read shows the new row
+    renderExtensions();
+    onDone?.();
+    toast(`"${d.name}" is published to the library.`);
+  } catch (err) {
+    console.warn("Publish failed:", err);
+    toast(`Could not publish — ${err.message}. Add the insert policy in Settings → Extensions.`);
+  } finally {
+    publishing = false;
+    document.querySelectorAll("#edPublish,#ftPublish").forEach(b => { b.disabled = false; });
+  }
+}
+
+$("#edPublish").addEventListener("click", () => {
+  const { name, desc, ui } = edCollect();
+  publishToLibrary({ name, desc, prompt: "", ui });
+});
+
+/* ----- the extension preview -----
+   A library card is a real rendering of the extension rather than a stored
+   image: a small mock of the page carrying the same class names as the app,
+   with the extension's own CSS, HTML and JS applied inside a sandboxed frame.
+   Nothing to upload, and it can never drift from what the extension does. */
+const SHOT_BASE = `
+:root{--bg:#f5f1ea;--surface:#fffdfa;--surface-2:#efe9df;--text:#1f1e1d;--text-soft:#5c5750;
+  --text-faint:#8b847b;--border:#e0d8cb;--accent:#d97757;--accent-soft:#f6dccd;
+  --radius:14px;--radius-sm:9px;--serif:Georgia,serif;--sans:system-ui,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:640px;height:400px;overflow:hidden;background:var(--bg);color:var(--text);
+  font:13px/1.55 var(--sans)}
+.page{display:flex;height:400px}
+.sidebar{width:168px;flex:none;padding:16px 14px;background:var(--surface-2);
+  border-right:1px solid var(--border)}
+.nav-item{display:block;height:30px;border-radius:9px;background:rgba(31,30,29,.07);margin-bottom:10px}
+.nav-item.on{background:var(--accent)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;padding:16px 20px}
+.topbar{margin-bottom:18px;font-family:var(--serif);font-size:15px;font-weight:600}
+.chat{flex:1}
+.greeting{margin-bottom:14px;font-family:var(--serif);font-size:24px}
+.msg{max-width:76%;margin-bottom:10px;padding:10px 14px;border-radius:13px;
+  border:1px solid var(--border);background:var(--surface);font-size:12.5px;color:var(--text-soft)}
+.msg.me{margin-left:auto;border-color:var(--text);background:var(--text);color:var(--bg)}
+.composer{margin-top:14px;padding:12px 14px;border-radius:14px;border:1px solid var(--border);
+  background:var(--surface);font-size:12.5px;color:var(--text-faint)}
+`;
+const SHOT_PAGE = `
+<div class="page">
+  <div class="sidebar"><i class="nav-item on"></i><i class="nav-item"></i><i class="nav-item"></i><i class="nav-item"></i></div>
+  <div class="main">
+    <div class="topbar">Notal AI</div>
+    <div class="chat">
+      <div class="greeting">Welcome back</div>
+      <p class="msg me">Review this idea: an app that turns meeting notes into tasks</p>
+      <p class="msg">Good seed. Strengths — it solves a pain people already feel. Risks — the magic moment depends on extraction quality.</p>
+    </div>
+    <div class="composer">Message Notal AI…</div>
+  </div>
+</div>`;
+
+function extPreview(ui) {
+  const wrap = document.createElement("div");
+  wrap.className = "ext-shot";
+  const f = document.createElement("iframe");
+  f.setAttribute("sandbox", "allow-scripts");
+  f.setAttribute("title", "Extension preview");
+  f.setAttribute("loading", "lazy");
+  f.srcdoc = `<!doctype html><html><head><meta charset="utf-8">`
+    + `<style>${SHOT_BASE}${ui?.css || ""}</style></head><body>${SHOT_PAGE}${ui?.html || ""}`
+    + `<script>try{${ui?.js || ""}}catch(e){}<\/script></body></html>`;
+  wrap.append(f);
+  return wrap;
+}
+
+/* ---------- Extension Maker: two doors ---------- */
+const makerPick = $("#extMakerPick");
+const nameDialog = $("#extNameDialog");
+let nameKind = "feature"; // "feature" is a prompt add-on, "ui" comes from editor mode
+let pendingUi = null;     // the CSS editor mode just produced
+
+function openNameDialog(kind, ui) {
+  nameKind = kind;
+  pendingUi = ui || null;
+  $("#featureTitle").textContent = kind === "feature" ? "New feature" : "New UI extension";
+  $("#featureSub").textContent = kind === "feature"
+    ? "Say what it should do. While its switch is on, those words ride along with every message you send."
+    : "Name what you dragged together. The card shows the page with your changes applied.";
+  $("#ftPromptWrap").hidden = kind !== "feature";
+  $("#ftName").value = "";
+  $("#ftDesc").value = "";
+  $("#ftPrompt").value = "";
+  $("#ftPreview").replaceChildren(extPreview(nameKind === "feature" ? null : pendingUi));
+  nameDialog.hidden = false;
+  motion.reveal(nameDialog.querySelector(".modal"));
+  $("#ftName").focus();
+}
+
+function closeNameDialog() { nameDialog.hidden = true; }
+
+$("#extMakerBtn").addEventListener("click", () => {
+  makerPick.hidden = false;
+  motion.reveal(makerPick.querySelector(".modal"));
+});
+$("#pickClose").addEventListener("click", () => { makerPick.hidden = true; });
+makerPick.addEventListener("click", e => { if (e.target === makerPick) makerPick.hidden = true; });
+document.querySelectorAll("[data-pick]").forEach(b => b.addEventListener("click", () => {
+  makerPick.hidden = true;
+  if (b.dataset.pick === "feature") openNameDialog("feature", null);
+  else startEditorMode();
+}));
+$("#featureClose").addEventListener("click", () => { closeNameDialog(); discardEditorMode(); });
+nameDialog.addEventListener("click", e => {
+  if (e.target === nameDialog) { closeNameDialog(); discardEditorMode(); }
+});
+
+function nameCollect() {
+  const name = $("#ftName").value.trim();
+  if (!name) {
+    toast("Give it a name first.");
+    $("#ftName").focus();
+    return null;
+  }
+  if (nameKind === "feature" && !$("#ftPrompt").value.trim()) {
+    toast("Say what the feature should do.");
+    $("#ftPrompt").focus();
+    return null;
+  }
+  return {
+    name,
+    desc: $("#ftDesc").value.trim()
+      || (nameKind === "feature" ? "Your own feature." : "Your own UI extension."),
+    prompt: nameKind === "feature" ? $("#ftPrompt").value.trim() : "",
+    ui: nameKind === "feature" ? null : pendingUi,
+  };
+}
+
+function nameFinish() {
+  closeNameDialog();
+  exitEditorMode();
+  applyUiExtensions();
+  renderExtensions();
+}
+
+$("#ftSave").addEventListener("click", () => {
+  const d = nameCollect();
+  if (!d) return;
+  state.extensions.push({ id: crypto.randomUUID(), ...d, builtin: false, enabled: true });
+  save();
+  nameFinish();
+  toast(`"${d.name}" saved and switched on.`);
+});
+
+$("#ftPublish").addEventListener("click", () => {
+  const d = nameCollect();
+  if (!d) return;
+  publishToLibrary(d, () => {
+    state.extensions.push({ id: crypto.randomUUID(), ...d, builtin: false, enabled: true });
+    save();
+    nameFinish();
+  });
+});
+
+/* ---------- editor mode ----------
+   The UI maker puts the real page under your hands: hover a part of it, drag
+   to move, pull the corner to resize. Every change is recorded against a
+   selector rather than left on the element, because what you make has to be
+   CSS that works on someone else's screen. */
+const EDIT_TARGETS = [
+  [".composer", "Message box"],
+  [".greeting", "Greeting"],
+  [".msg", "Messages"],
+  [".chat", "Chat column"],
+  [".topbar", "Top bar"],
+  [".sidebar", "Sidebar"],
+];
+const EDIT_MIN = 48;
+const edBox = $("#edBox");
+let editing = false;
+let edits = {};      // selector -> { left, top, width, height }
+let edHover = null;  // { sel, label, el }
+let editDrag = null;
+
+function editTarget(node) {
+  if (!node || !node.closest) return null;
+  for (const [sel, label] of EDIT_TARGETS) {
+    const el = node.closest(sel);
+    if (el) return { sel, label, el };
+  }
+  return null;
+}
+
+function applyEdit(sel) {
+  const e = edits[sel] || {};
+  for (const el of document.querySelectorAll(sel)) {
+    el.style.position = e.left || e.top ? "relative" : "";
+    el.style.left = e.left ? `${e.left}px` : "";
+    el.style.top = e.top ? `${e.top}px` : "";
+    el.style.width = e.width ? `${e.width}px` : "";
+    el.style.height = e.height ? `${e.height}px` : "";
+  }
+}
+
+function moveEdBox() {
+  if (!editing || !edHover || !edHover.el.isConnected) { edBox.hidden = true; return; }
+  const r = edHover.el.getBoundingClientRect();
+  edBox.hidden = false;
+  edBox.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
+  edBox.querySelector(".ed-box-label").textContent = edHover.label;
+}
+
+function startEditorMode() {
+  setView("chats");
+  editing = true;
+  edits = {};
+  document.body.classList.add("editing");
+  $("#editorBar").hidden = false;
+  toast("Editor mode — drag a part of the page, or pull its corner.");
+}
+
+function exitEditorMode() {
+  if (!editing) return;
+  editing = false;
+  editDrag = null;
+  edHover = null;
+  for (const sel of Object.keys(edits)) { edits[sel] = {}; applyEdit(sel); }
+  edits = {};
+  document.body.classList.remove("editing");
+  $("#editorBar").hidden = true;
+  edBox.hidden = true;
+}
+
+function discardEditorMode() { exitEditorMode(); }
+
+function resetEdits() {
+  for (const sel of Object.keys(edits)) { edits[sel] = {}; applyEdit(sel); }
+  edits = {};
+  moveEdBox();
+}
+
+function editorCss() {
+  const blocks = [];
+  for (const [sel, e] of Object.entries(edits)) {
+    const rules = [];
+    if (e.left || e.top) rules.push("position: relative");
+    if (e.left) rules.push(`left: ${e.left}px`);
+    if (e.top) rules.push(`top: ${e.top}px`);
+    if (e.width) rules.push(`width: ${e.width}px`);
+    if (e.height) rules.push(`height: ${e.height}px`);
+    if (rules.length) blocks.push(`${sel} {\n  ${rules.join(";\n  ")};\n}`);
+  }
+  return blocks.join("\n\n");
+}
+
+document.addEventListener("pointermove", (e) => {
+  if (!editing || editDrag) return;
+  edHover = editTarget(e.target);
+  moveEdBox();
+}, true);
+
+document.addEventListener("pointerdown", (e) => {
+  if (!editing) return;
+  if (e.target.closest("#editorBar")) return;
+  if (editDrag) return;
+  if (e.target.classList.contains("ed-handle")) {
+    beginEditDrag(e, "resize");
+    return;
+  }
+  const t = editTarget(e.target);
+  if (!t) return;
+  edHover = t;
+  moveEdBox();
+  beginEditDrag(e, "move");
+}, true);
+
+function beginEditDrag(e, mode) {
+  if (!edHover) return;
+  const cur = edits[edHover.sel] || {};
+  const r = edHover.el.getBoundingClientRect();
+  editDrag = {
+    mode, sel: edHover.sel, x: e.clientX, y: e.clientY,
+    left: cur.left || 0, top: cur.top || 0,
+    w: Math.round(r.width), h: Math.round(r.height),
+  };
+  window.addEventListener("pointermove", stepEditDrag, true);
+  window.addEventListener("pointerup", endEditDrag, true);
+  e.preventDefault();
+}
+
+function stepEditDrag(e) {
+  if (!editDrag) return;
+  const dx = e.clientX - editDrag.x, dy = e.clientY - editDrag.y;
+  const cur = edits[editDrag.sel] || (edits[editDrag.sel] = {});
+  if (editDrag.mode === "move") {
+    cur.left = Math.round(editDrag.left + dx);
+    cur.top = Math.round(editDrag.top + dy);
+  } else {
+    cur.width = Math.max(EDIT_MIN, Math.round(editDrag.w + dx));
+    cur.height = Math.max(EDIT_MIN, Math.round(editDrag.h + dy));
+  }
+  applyEdit(editDrag.sel);
+  moveEdBox();
+}
+
+function endEditDrag() {
+  editDrag = null;
+  window.removeEventListener("pointermove", stepEditDrag, true);
+  window.removeEventListener("pointerup", endEditDrag, true);
+}
+
+$("#ebClose").addEventListener("click", exitEditorMode);
+$("#ebReset").addEventListener("click", resetEdits);
+$("#ebSave").addEventListener("click", () => {
+  const css = editorCss();
+  if (!css) { toast("Nothing moved yet — drag a part of the page first."); return; }
+  const ui = { css, html: "", js: "" };
+  exitEditorMode();
+  openNameDialog("ui", ui);
+});
+
+/* An imported script runs here the moment its switch goes on, so the import
+   asks first when the file carries any JavaScript. */
+$("#extImportBtn").addEventListener("click", () => $("#extImportInput").click());
+$("#extImportInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (!data || typeof data.name !== "string" || !data.ui || typeof data.ui !== "object")
+      throw new Error("not a notal-ui-extension file");
+    if (data.ui.js && !confirm(`"${data.name}" carries JavaScript that will run in this page when you switch it on. Import anyway?`)) return;
+    state.extensions.push({
+      id: crypto.randomUUID(), name: data.name,
+      desc: data.desc || "Imported extension.", prompt: "",
+      builtin: false, enabled: false,
+      ui: { css: data.ui.css || "", html: data.ui.html || "", js: data.ui.js || "" },
+    });
+    save();
+    renderExtensions();
+    toast(`"${data.name}" imported — switch it on in the Built-in/Yours lists.`);
+  } catch (err) {
+    toast("Could not import that file: " + err.message);
+  }
+});
+
+$("#extForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = $("#extNameInput").value.trim();
+  const desc = $("#extDescInput").value.trim();
+  const prompt = $("#extPromptInput").value.trim();
+  if (!name || !prompt) return;
+  state.extensions.push({
+    id: crypto.randomUUID(), name,
+    desc: desc || "Your own extension.",
+    prompt, builtin: false, enabled: true,
+  });
+  e.target.reset();
+  save();
+  renderExtensions();
+  toast(`Extension "${name}" added and switched on.`);
+});
+
+$("#libSaveBtn").addEventListener("click", () => {
+  state.libUrl = $("#libUrlInput").value.trim();
+  state.libKey = $("#libKeyInput").value.trim();
+  save();
+  libResult = null; // the next panel open reads the new source
+  renderExtensions();
+  toast(state.libUrl && state.libKey
+    ? "Library pointed at your Supabase table."
+    : "Library connection cleared — back to the demo list.");
+});
+
 /* ---------- global dismiss ---------- */
 document.addEventListener("click", () => { setModelMenu(false); setAccountMenu(false); });
 
@@ -3471,6 +4358,7 @@ setGreeting();
 setMode(state.mode);
 renderHistory();
 renderMessages();
+applyUiExtensions();
 ensureAuth().catch(() => {});
 
 /* The boot splash holds for a full two seconds, then the mark swells bigger

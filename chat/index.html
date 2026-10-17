@@ -58,6 +58,10 @@
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 4l8 14H4z"/></svg>
           <span>Skills</span>
         </button>
+        <button class="nav-item" data-view="extensions" title="Extensions" aria-label="Extensions">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M10.5 7h3a3.5 3.5 0 013.5 3.5v3"/></svg>
+          <span>Extensions</span>
+        </button>
       </nav>
 
       <div class="new-chat-wrap">
@@ -158,6 +162,37 @@
           <div class="suggestions" id="suggestions"></div>
         </div>
         <div class="messages" id="messages"></div>
+      </section>
+
+      <!-- Extensions is a view rather than a dialog over the chat: the sidebar
+           button swaps the main column to it, Chats swaps it back. -->
+      <section class="ext-view" id="extView" aria-labelledby="extensionsTitle">
+        <header class="ext-view-head">
+          <div class="panel-heading">
+            <h2 id="extensionsTitle">Extensions</h2>
+            <p class="panel-sub">Install from the library, make your own, and switch them on to shape the page and every reply.</p>
+          </div>
+          <div class="ext-tools">
+            <button class="ghost-btn" type="button" id="extImportBtn">Import</button>
+            <input type="file" id="extImportInput" accept=".json,application/json" hidden />
+            <button class="ghost-btn" type="button" id="extMakerBtn">Extension Maker</button>
+          </div>
+        </header>
+        <div class="ext-view-body">
+          <section class="ext-block">
+            <h3 class="ext-block-head">Built-in</h3>
+            <ul class="lib-grid" id="extBuiltinList"></ul>
+          </section>
+          <section class="ext-block">
+            <h3 class="ext-block-head">Yours</h3>
+            <ul class="lib-grid" id="extCustomList"></ul>
+          </section>
+          <section class="ext-block">
+            <h3 class="ext-block-head">Library</h3>
+            <p class="lib-status" id="libStatus"></p>
+            <ul class="lib-grid" id="extLibraryList"></ul>
+          </section>
+        </div>
       </section>
 
       <footer class="composer-wrap">
@@ -262,6 +297,143 @@
     </div>
   </div>
 
+  <!-- The UI-extension editor: one highlighted code surface, three panes.
+       What it saves runs in this page, so the note says so plainly. -->
+  <div class="modal-overlay" id="extEditor" hidden>
+    <div class="modal panel-modal ext-editor" role="dialog" aria-modal="true" aria-labelledby="extEditorTitle">
+      <header class="modal-header">
+        <div class="panel-heading">
+          <h2 id="extEditorTitle">UI extension</h2>
+          <p class="panel-sub">CSS restyles the page, HTML is added to it, JS runs when the extension is switched on. Save keeps it in this browser; Publish sends it to the shared library.</p>
+        </div>
+        <button class="icon-btn" type="button" id="extEditorClose" aria-label="Close editor">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="panel-body ext-editor-body">
+        <div class="ext-form-row">
+          <label>Name
+            <input type="text" id="edName" placeholder="e.g. Midnight sidebar" />
+          </label>
+          <label>Description
+            <input type="text" id="edDesc" placeholder="One line for the card" />
+          </label>
+        </div>
+        <div class="ed-start">
+          <span class="ed-start-label">Start from an example:</span>
+          <button type="button" class="ed-chip" data-starter="theme">Colour theme</button>
+          <button type="button" class="ed-chip" data-starter="type">Bigger text</button>
+          <button type="button" class="ed-chip" data-starter="clock">A clock in the corner</button>
+          <button type="button" class="ed-chip" data-starter="blank">Empty</button>
+        </div>
+        <div class="ed-tabs" role="tablist" aria-label="Language">
+          <button type="button" class="ed-tab active" data-ed="css" role="tab" aria-selected="true">CSS</button>
+          <button type="button" class="ed-tab" data-ed="html" role="tab" aria-selected="false">HTML</button>
+          <button type="button" class="ed-tab" data-ed="js" role="tab" aria-selected="false">JavaScript</button>
+        </div>
+        <p class="ed-hint" id="edHint"></p>
+        <div class="ed-pane">
+          <pre class="ed-hl" id="edHl" aria-hidden="true"></pre>
+          <textarea class="ed-input" id="edInput" wrap="off" spellcheck="false" aria-label="Extension code"></textarea>
+        </div>
+        <div class="ed-actions">
+          <span class="ed-tip">Drag the bottom-right corner to make this editor bigger.</span>
+          <button type="button" class="ghost-btn" id="edDownload">Download</button>
+          <button type="button" class="ghost-btn" id="edPublish">Publish</button>
+          <button type="button" class="primary-btn" id="edSave">Save</button>
+        </div>
+      </div>
+      <button type="button" class="ed-grip ed-grip-e" data-grip="e" aria-label="Make wider"></button>
+      <button type="button" class="ed-grip ed-grip-s" data-grip="s" aria-label="Make taller"></button>
+      <button type="button" class="ed-grip ed-grip-se" data-grip="se" aria-label="Resize the editor"></button>
+    </div>
+  </div>
+
+  <!-- Extension Maker: two doors. A new feature is words only; the UI maker
+       puts the page itself under your hands. -->
+  <div class="modal-overlay" id="extMakerPick" hidden>
+    <div class="modal pick-modal" role="dialog" aria-modal="true" aria-labelledby="pickTitle">
+      <header class="modal-header">
+        <h2 id="pickTitle">Make an extension</h2>
+        <button class="icon-btn" type="button" id="pickClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="pick-body">
+        <button class="pick-card" type="button" data-pick="feature">
+          <span class="pick-art" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12.5a7.5 7.5 0 01-10.9 6.7L4 20l1-4.6A7.5 7.5 0 1120 12.5z"/><path d="M12 8.5l1 2.4 2.4 1-2.4 1-1 2.4-1-2.4-2.4-1 2.4-1z"/></svg>
+          </span>
+          <strong>New feature</strong>
+          <small>Tell Notal AI to answer differently. Plain words, no code.</small>
+        </button>
+        <button class="pick-card" type="button" data-pick="ui">
+          <span class="pick-art" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16"/><path d="M16.5 12.5l3 3m0-3l-3 3"/></svg>
+          </span>
+          <strong>UI maker</strong>
+          <small>Editor mode: drag and resize the page itself, then keep what you made.</small>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Naming is the last step of both doors, so both share this one dialog. -->
+  <div class="modal-overlay" id="extNameDialog" hidden>
+    <div class="modal panel-modal" role="dialog" aria-modal="true" aria-labelledby="featureTitle">
+      <header class="modal-header">
+        <div class="panel-heading">
+          <h2 id="featureTitle">New feature</h2>
+          <p class="panel-sub" id="featureSub"></p>
+        </div>
+        <button class="icon-btn" type="button" id="featureClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="panel-body feature-body">
+        <div class="feature-grid">
+          <div class="ext-form">
+            <label>Name
+              <input type="text" id="ftName" placeholder="e.g. Bullet answers" autocomplete="off" />
+            </label>
+            <label>Description
+              <input type="text" id="ftDesc" placeholder="One line for the card" autocomplete="off" />
+            </label>
+            <label id="ftPromptWrap">What should it do?
+              <textarea id="ftPrompt" rows="6" placeholder="e.g. Answer in three short bullets and end with one thing to try today."></textarea>
+            </label>
+          </div>
+          <figure class="feat-shot">
+            <div id="ftPreview"></div>
+            <figcaption>How it will look in the library</figcaption>
+          </figure>
+        </div>
+        <div class="ed-actions">
+          <button type="button" class="ghost-btn" id="ftPublish">Publish to library</button>
+          <button type="button" class="primary-btn" id="ftSave">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Editor mode: the page itself becomes the editor. The bar sits top right
+       so it never hides behind the sidebar, and the box follows whatever your
+       pointer is over. -->
+  <div class="editor-bar" id="editorBar" hidden>
+    <span class="eb-pulse" aria-hidden="true"></span>
+    <span class="eb-label">Editor mode</span>
+    <span class="eb-hint">Drag any part of the page to move it · pull its corner to resize</span>
+    <button class="ghost-btn" type="button" id="ebReset">Reset</button>
+    <button class="primary-btn" type="button" id="ebSave">Save extension</button>
+    <button class="icon-btn" type="button" id="ebClose" aria-label="Leave editor mode">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="ed-box" id="edBox" hidden>
+    <span class="ed-box-label"></span>
+    <span class="ed-handle" data-handle="se"></span>
+  </div>
+
   <!-- Settings modal -->
   <div class="modal-overlay" id="settingsOverlay" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
@@ -279,6 +451,7 @@
           <button class="settings-tab" data-tab="notifications">Notifications</button>
           <button class="settings-tab" data-tab="security">Security</button>
           <button class="settings-tab" data-tab="shortcuts">Shortcuts</button>
+          <button class="settings-tab" data-tab="extensions">Extensions</button>
           <button class="settings-tab" data-tab="desktop" id="desktopTab" hidden>Desktop</button>
         </nav>
         <div class="settings-panels">
@@ -462,6 +635,54 @@
             </ul>
           </section>
 
+          <section class="settings-panel" id="panel-extensions" hidden>
+            <p class="panel-note">A custom extension is a prompt add-on you write: while it is switched on in the Extensions panel, its instruction rides along in every reply. UI extensions — CSS, HTML and JavaScript — are written in the Extension Maker inside the Extensions panel.</p>
+            <form class="ext-form" id="extForm">
+              <label>Name
+                <input type="text" id="extNameInput" placeholder="e.g. Legal tone" required />
+              </label>
+              <label>Description
+                <input type="text" id="extDescInput" placeholder="Shown on the card in the Extensions panel" />
+              </label>
+              <label>Instruction
+                <textarea id="extPromptInput" rows="4" placeholder="What should this tell the model to do? e.g. Answer as a careful legal reviewer: flag assumptions, note what jurisdiction depends on, never state law as certain." required></textarea>
+              </label>
+              <div class="pf-actions">
+                <button type="submit" class="primary-btn">Add extension</button>
+              </div>
+            </form>
+            <details class="adv">
+              <summary>Library database (Supabase)</summary>
+              <div class="adv-body">
+                <p class="adv-lead">Point the Extensions panel at a real Supabase table and the Library group lists what that database holds, with an Install button on every entry. Without it the panel shows a curated demo library. In your Supabase project's SQL editor, create the table once:</p>
+                <pre class="ext-sql">create table extensions (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  descr text,
+  prompt text default '',
+  ui jsonb,
+  created_at timestamptz default now()
+);
+alter table extensions enable row level security;
+create policy "read only" on extensions for select using (true);
+-- the editor's Publish button needs this one too:
+create policy "anyone can publish" on extensions
+  for insert to anon with check (true);</pre>
+                <div class="pf-fields">
+                  <label>Project URL
+                    <input type="text" id="libUrlInput" placeholder="https://xxxx.supabase.co" autocomplete="off" />
+                  </label>
+                  <label>Anon key
+                    <input type="password" id="libKeyInput" placeholder="Public anon key — read access only" autocomplete="off" />
+                  </label>
+                </div>
+                <div class="pf-actions">
+                  <button class="ghost-btn" type="button" id="libSaveBtn">Save connection</button>
+                </div>
+              </div>
+            </details>
+          </section>
+
           <!-- only Notal AI Studio shows this tab; in a browser tab it stays
                hidden, because there is no tray, no shortcut table and no file on
                disk to speak of there -->
@@ -513,6 +734,9 @@
       <p class="lock-error" id="lockError" hidden>Wrong PIN — try again</p>
     </form>
   </div>
+
+  <!-- where switched-on UI extensions drop their markup -->
+  <div id="extMount"></div>
 
   <div class="toast" id="toast" role="status"></div>
   <div class="lightbox" id="lightbox" hidden><img id="lightboxImg" alt="Attached image, full size" /></div>
