@@ -137,6 +137,17 @@ async function webModelForget() {
   }
 }
 
+/* Hand the graphics memory back and keep the files: switching off should cost
+   nothing on a machine that is not asking it anything, and switching back on
+   must not mean another 290 MB. */
+async function webModelRelease() {
+  if (!webEngine) return false;
+  const engine = webEngine;
+  webEngine = null;
+  try { await engine.unload(); } catch { /* off either way */ }
+  return true;
+}
+
 /* The answer arrives as a real token stream, so the caller's onToken sees the
    same shape it sees from any hosted provider — and the counts come from the
    runtime, not from a guess made by watching how fast text appeared. */

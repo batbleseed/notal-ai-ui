@@ -2993,11 +2993,22 @@ async function downloadBrowserModel() {
   }
 }
 
-if (wmEls.switchBox) wmEls.switchBox.addEventListener("change", () => {
+if (wmEls.switchBox) wmEls.switchBox.addEventListener("change", async () => {
   state.localAI = wmEls.switchBox.checked;
   save();
   syncLocalAIModel();
   renderBrowserModel();
+  /* Off has to mean off. A model that already answered in this tab is still
+     holding its weights on the graphics card until the tab closes, so the switch
+     gives that back — while the files on disk stay, because idle bytes on a
+     storage device cost nothing and 290 MB of re-fetching certainly does. */
+  if (state.localAI) return;
+  if (turnController) {
+    toast("A reply is in flight — stop it first, then the model can give the graphics card back.");
+    return;
+  }
+  if (await webModelRelease())
+    toast("local ai is off, and the graphics memory is back. The files stay until you remove them.");
 });
 if (wmEls.getBtn) wmEls.getBtn.addEventListener("click", downloadBrowserModel);
 if (wmEls.offBtn) wmEls.offBtn.addEventListener("click", async () => {
