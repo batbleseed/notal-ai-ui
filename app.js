@@ -258,7 +258,9 @@ let state = Object.assign({
   claims: {},
   makerSecret: "",
   /* the local model is a developer's feature: off until it is switched on in
-     Settings, and the second flag only records that the weights are downloaded */
+     Settings. The switch decides whether the menu offers it; the second flag
+     only records whether the weights are already on this device, which decides
+     what the first question has to fetch. */
   localAI: false,
   localAIFiles: false,
 }, store.load());
@@ -266,8 +268,7 @@ let state = Object.assign({
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
 if (!Array.isArray(state.models) || !state.models.length) state.models = [GENERIC_MODEL];
 if (!state.models.some(m => m.id === "notal-generic")) state.models.unshift(GENERIC_MODEL);
-if (!state.localAI) dropBrowserModel();
-if (state.localAI && state.localAIFiles) addBrowserModel();
+if (state.localAI) addBrowserModel(); else dropBrowserModel();
 if (!state.models.some(m => m.id === state.selectedModel)) state.selectedModel = "notal-generic";
 if (!Array.isArray(state.providers)) state.providers = [];
 if (!state.firebaseConfig) state.firebaseConfig = DEFAULT_FIREBASE_CONFIG;
@@ -1277,13 +1278,14 @@ function trailStep(turn, text) {
 
 /* Every number here was observed — the clock, and the runtime's own count of
    the tokens it sampled. Nothing about a local reply is estimated. */
-function localAnswerWords(got) {
+function localAnswerWords(got, fetched) {
   const secs = (got.elapsedMs / 1000).toFixed(1);
   const n = got.completionTokens;
   const parts = [`Ran on this device in ${secs} s`];
   if (n) parts.push(`${n} tokens`);
   if (n && got.elapsedMs > 500) parts.push(`${(n / (got.elapsedMs / 1000)).toFixed(1)} per second`);
   if (got.firstTokenMs !== null) parts.push(`first token after ${(got.firstTokenMs / 1000).toFixed(1)} s`);
+  if (fetched) parts.push("the weights came down on this question");
   return {
     detail: parts.join(" · "),
     header: `Ran here in ${secs} s${n ? ` · ${n} tokens` : ""}`,
@@ -1291,9 +1293,20 @@ function localAnswerWords(got) {
 }
 
 async function streamBrowserModel(history, onDelta, signal, turn) {
+  /* A picked model whose weights are not here yet has to fetch them, and that
+     wait belongs in the chat where it can be watched rather than behind a
+     Settings button. The one thing worth doing first is refusing early: a
+     browser with no adapter should be told before 290 MB is fetched in vain. */
   const step = trailStep(turn, "Getting the model ready");
+  const hadToFetch = !state.localAIFiles;
   let wrote = false;
   try {
+    const support = await webModelSupport();
+    if (!support.ok && support.reason !== "stalled") {
+      /* already written for a person to read — the remapping in the catch would
+         only blur which kind of WebGPU failure this is */
+      throw Object.assign(new Error(localAINoWords(support.reason)), { plain: true });
+    }
     let text = "";
     const got = await webModelAsk(browserMessages(history), (d) => {
       if (!wrote) { wrote = true; step.set("Writing the answer"); }
@@ -1303,6 +1316,7 @@ async function streamBrowserModel(history, onDelta, signal, turn) {
       signal,
       onProgress: (label, pct) => { step.set(progressWords(label, pct)); },
     });
+    if (state.localAIFiles !== true) { state.localAIFiles = true; syncLocalAIModel(); }
     if (signal?.aborted) {
       /* stopping is stopping, whether it landed mid-download or mid-sentence:
          the caller keeps the partial and says so */
@@ -1313,13 +1327,13 @@ async function streamBrowserModel(history, onDelta, signal, turn) {
       step.done();
       throw new Error("The browser model answered with nothing. Try again, or ask it something shorter.");
     }
-    const words = localAnswerWords(got);
+    const words = localAnswerWords(got, hadToFetch);
     step.finish(words.detail);
     turn.settleNote(words.header);
     return got.text;
   } catch (err) {
     step.done();
-    if (err?.name === "AbortError") throw err;
+    if (err?.name === "AbortError" || err?.plain) throw err;
     throw new Error(webModelError(err));
   }
 }
@@ -2853,16 +2867,26 @@ const wmEls = {
   getBtn: $("#wmGet"), offBtn: $("#wmOff"), switchBox: $("#wmSwitch"),
 };
 
+/* The line under the model's name says what the next question costs, because a
+   model whose weights are not on this device yet cannot answer instantly. */
+function browserModelProvider() {
+  return state.localAIFiles
+    ? "Runs on this device"
+    : `Runs on this device · fetches ${WEB_MODEL_MB} MB once`;
+}
+
 function browserModelEntry() {
   return {
-    id: WEB_MODEL_ID, name: WEB_MODEL_NAME, provider: "Runs on this device",
+    id: WEB_MODEL_ID, name: WEB_MODEL_NAME, provider: browserModelProvider(),
     browser: true, card: WEB_MODEL_CARD,
   };
 }
 
 /* Idempotent: the boot path and a finished download both call this. */
 function addBrowserModel() {
-  if (!state.models.some(m => m.id === WEB_MODEL_ID)) state.models.push(browserModelEntry());
+  const entry = state.models.find(m => m.id === WEB_MODEL_ID);
+  if (entry) entry.provider = browserModelProvider();
+  else state.models.push(browserModelEntry());
 }
 
 function dropBrowserModel() {
@@ -2870,10 +2894,11 @@ function dropBrowserModel() {
   if (state.selectedModel === WEB_MODEL_ID) state.selectedModel = "notal-generic";
 }
 
-/* The picker follows both flags, never one of them: a model that is on disk but
-   switched off has no business being offered, and vice versa. */
+/* The switch alone decides what the picker offers. Whether the weights are on
+   this device only decides whether the first question has 290 MB of fetching to
+   do first, and that happens in the chat where it can be watched. */
 function syncLocalAIModel() {
-  if (state.localAI && state.localAIFiles) addBrowserModel(); else dropBrowserModel();
+  if (state.localAI) addBrowserModel(); else dropBrowserModel();
   save();
   renderModelMenu();
   els.modelName.textContent = selectedModel().name;
@@ -2888,22 +2913,20 @@ function wmProgress(text, pct) {
   wmEls.status.textContent = progressWords(text, pct);
 }
 
-/* Three different no's, each with its own fixing, and all three say the same
-   thing about the model menu: nothing is offered until there is a device to run
-   it on. The commonest one on Linux Chrome is a browser that has WebGPU and uses
-   ANGLE's OpenGL backend, where the only adapter Dawn can name is one it keeps
-   to itself — the same machine's Vulkan driver is often perfectly usable. */
+/* Three different no's, each with its own fixing. The switch puts the model in
+   the menu whatever the answer is — the honest part is saying why it will not
+   reply rather than hiding it until the graphics card shows up. */
 function localAINoWords(reason) {
-  const menu = ` So "${WEB_MODEL_NAME}" stays out of the model menu until it can actually run.`;
+  const but = " The model is in the menu because you switched it on, but it cannot answer on this device yet.";
   if (reason === "no-api")
-    return "This browser has no WebGPU at all. Open Notal in a recent Chrome, Edge or Safari." + menu;
+    return "This browser has no WebGPU at all. Open Notal in a recent Chrome, Edge or Safari." + but;
   if (reason === "stalled")
     return "The browser's graphics process never answered, which says nothing about the model. "
-      + "Reload the page; if it stays silent, Chrome has a wedged GPU process." + menu;
+      + "Reload the page; if it stays silent, Chrome has a wedged GPU process.";
   return "This browser speaks WebGPU but its graphics process handed out no adapter, so there is "
     + "nothing here to run a model on — that is the graphics driver, not Notal. On Linux Chrome the "
     + "usual cause is ANGLE sitting on OpenGL instead of Vulkan: quit Chrome completely and reopen "
-    + "it with --use-angle=vulkan." + menu;
+    + "it with --use-angle=vulkan." + but;
 }
 
 async function renderBrowserModel() {
@@ -2933,9 +2956,9 @@ async function renderBrowserModel() {
   }
   if (state.localAIFiles && !filesThere) {
     wmEls.getBtn.hidden = false;
-    wmEls.getBtn.textContent = `Download again (${WEB_MODEL_MB} MB)`;
+    wmEls.getBtn.textContent = `Fetch them now (${WEB_MODEL_MB} MB)`;
     wmEls.status.textContent = "The weights are no longer in this browser's storage — something cleared "
-      + "it. Until they come back this model will not answer.";
+      + "it. The next question fetches them again in the chat, or this button does it now.";
     return;
   }
   if (filesThere) {
@@ -2945,9 +2968,10 @@ async function renderBrowserModel() {
     return;
   }
   wmEls.getBtn.hidden = false;
-  wmEls.getBtn.textContent = `Download (${WEB_MODEL_MB} MB, once)`;
-  wmEls.status.textContent = "Fetched once from Hugging Face, then never again. After that the graphics "
-    + "card does the work and no request leaves this tab.";
+  wmEls.getBtn.textContent = `Fetch it now (${WEB_MODEL_MB} MB, once)`;
+  wmEls.status.textContent = `It is in the model menu as "${WEB_MODEL_NAME}" already — asking it anything `
+    + `brings the weights down here in the chat first, and that happens once. Fetched from Hugging Face; `
+    + "after that the graphics card does the work and no request leaves this tab.";
 }
 
 async function downloadBrowserModel() {
@@ -2960,7 +2984,7 @@ async function downloadBrowserModel() {
     state.localAIFiles = true;
     syncLocalAIModel();
     wmProgress("Ready", 1);
-    toast("local ai is on this device. Pick it in the model menu.");
+    toast("local ai is on this device — the next question needs no internet.");
     renderBrowserModel();
   } catch (err) {
     wmEls.getBtn.disabled = false;
