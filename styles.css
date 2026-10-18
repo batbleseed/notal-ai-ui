@@ -630,7 +630,10 @@ button:disabled { opacity: .5; cursor: default; }
   display: grid; gap: 26px;
 }
 
-.msg { display: flex; gap: 13px; animation: rise .25s ease both; }
+/* min-width:0 is what keeps a long line of code inside the column: a grid item
+   would otherwise take its minimum size from the unbreakable line and grow past
+   the 720px, pushing the reply out of the page instead of scrolling in the card. */
+.msg { display: flex; gap: 13px; min-width: 0; animation: rise .25s ease both; }
 .msg.user { justify-content: flex-end; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
