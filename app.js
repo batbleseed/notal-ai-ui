@@ -2888,17 +2888,35 @@ function wmProgress(text, pct) {
   wmEls.status.textContent = progressWords(text, pct);
 }
 
+/* Three different no's, each with its own fixing, and all three say the same
+   thing about the model menu: nothing is offered until there is a device to run
+   it on. The commonest one on Linux Chrome is a browser that has WebGPU and uses
+   ANGLE's OpenGL backend, where the only adapter Dawn can name is one it keeps
+   to itself — the same machine's Vulkan driver is often perfectly usable. */
+function localAINoWords(reason) {
+  const menu = ` So "${WEB_MODEL_NAME}" stays out of the model menu until it can actually run.`;
+  if (reason === "no-api")
+    return "This browser has no WebGPU at all. Open Notal in a recent Chrome, Edge or Safari." + menu;
+  if (reason === "stalled")
+    return "The browser's graphics process never answered, which says nothing about the model. "
+      + "Reload the page; if it stays silent, Chrome has a wedged GPU process." + menu;
+  return "This browser speaks WebGPU but its graphics process handed out no adapter, so there is "
+    + "nothing here to run a model on — that is the graphics driver, not Notal. On Linux Chrome the "
+    + "usual cause is ANGLE sitting on OpenGL instead of Vulkan: quit Chrome completely and reopen "
+    + "it with --use-angle=vulkan." + menu;
+}
+
 async function renderBrowserModel() {
   if (!wmEls.box) return;
   wmEls.switchBox.checked = !!state.localAI;
   wmEls.body.hidden = !state.localAI;
   if (!state.localAI) return;
 
-  const supported = await webModelSupported();
+  const support = await webModelSupport();
   /* The cache is the evidence, and it is only trusted to *find* files this
      browser forgot it had. Deciding they are gone costs someone a 290 MB
      re-download, so that is the Remove button's job alone. */
-  const filesThere = supported ? await webModelOnDevice().catch(() => state.localAIFiles) : state.localAIFiles;
+  const filesThere = support.ok ? await webModelOnDevice().catch(() => state.localAIFiles) : state.localAIFiles;
   if (filesThere && !state.localAIFiles) {
     state.localAIFiles = true;
     syncLocalAIModel();
@@ -2909,9 +2927,8 @@ async function renderBrowserModel() {
   wmEls.getBtn.hidden = true;
   wmEls.offBtn.hidden = true;
 
-  if (!supported) {
-    wmEls.status.textContent = "This browser has no WebGPU, so nothing can run here. "
-      + "Open Notal in a recent Chrome, Edge or Safari, or turn this back off and add a provider.";
+  if (!support.ok) {
+    wmEls.status.textContent = localAINoWords(support.reason);
     return;
   }
   if (state.localAIFiles && !filesThere) {

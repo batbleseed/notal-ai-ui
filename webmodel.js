@@ -17,25 +17,39 @@ const WEB_MODEL_MAX_TOKENS = 512;
    weights, the chat config, and the compiled library it runs them with. A
    download is only finished when all three are here, so all three are checked. */
 const WEB_MODEL_SCOPES = ["webllm/model", "webllm/config", "webllm/wasm"];
+/* How long to wait for the graphics process before calling it silent. A Chrome
+   whose GPU process is wedged never resolves requestAdapter() at all. */
+const WEB_ADAPTER_WAIT = 5000;
 
 let webLLM = null;
 let webEngine = null;
 let webEngineStarting = null;
-let webAdapterPromise = null;
 
-/* Having navigator.gpu is not the same as having a device: a blocked or
-   software-only tab answers null here, and that is worth knowing before 290 MB
-   is offered to someone who cannot use it. */
-function webModelSupported() {
-  if (!webAdapterPromise) {
-    webAdapterPromise = (async () => {
+/* Having navigator.gpu is not the same as having a device, and the ways this can
+   fail need different words: a browser without the API at all, a browser whose
+   graphics process owns the API but has no adapter to hand out — and it can also
+   sit silent, which is worth distinguishing from a refusal before 290 MB is
+   offered to someone who cannot use any of it. */
+let webSupportPromise = null;
+
+function webModelSupport() {
+  if (!webSupportPromise) {
+    webSupportPromise = (async () => {
+      if (!navigator.gpu) return { ok: false, reason: "no-api" };
       try {
-        const adapter = navigator.gpu && await navigator.gpu.requestAdapter();
-        return !!adapter;
-      } catch { return false; }
+        const stalled = new Promise(res => setTimeout(() => res("stalled"), WEB_ADAPTER_WAIT));
+        const adapter = await Promise.race([navigator.gpu.requestAdapter(), stalled]);
+        if (adapter === "stalled") return { ok: false, reason: "stalled" };
+        return adapter ? { ok: true, reason: "ok" } : { ok: false, reason: "no-adapter" };
+      } catch { return { ok: false, reason: "no-adapter" }; }
     })();
   }
-  return webAdapterPromise;
+  return webSupportPromise.then((r) => {
+    /* a graphics process that never answered says nothing about the next one,
+       so the refusal is not remembered */
+    if (r.reason === "stalled") webSupportPromise = null;
+    return r;
+  });
 }
 
 async function webModelLibrary() {
@@ -172,7 +186,9 @@ function webModelError(err) {
   if (/max sequence|seq length|context window|preprocess fill/i.test(m))
     return "This exchange is longer than the small model can hold. Start a new chat, or ask it to work from a shorter part.";
   if (/webgpu|no adapter|gpu device|device lost|webgpu is not supported/i.test(m))
-    return "WebGPU did not come up, so no model can run here. Update the browser or close other tabs that are using the graphics card.";
+    return "The browser's graphics process gave no adapter, so nothing can run here. Close the tabs that "
+      + "are using the graphics card and reload; on Linux Chrome the usual fix is to reopen it with "
+      + "--use-angle=vulkan.";
   if (/fetch|network|failed to load|failed to fetch|opfs|storage/i.test(m))
     return "The model files did not arrive. The first download needs the internet, and enough free space on this device.";
   return m.slice(0, 200) || "The browser model did not start.";
