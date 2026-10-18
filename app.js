@@ -203,6 +203,11 @@ const BUILTIN_EXTENSIONS = [
     ui: { css: "#ext-clock-time { margin-left: 12px; font-size: 12.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }",
       html: "",
       js: "const bar = document.querySelector('.topbar');\nif (bar && !document.getElementById('ext-clock-time')) {\n  const s = document.createElement('span');\n  s.id = 'ext-clock-time';\n  bar.append(s);\n  const tick = () => { s.textContent = new Date().toLocaleTimeString(); };\n  tick();\n  setInterval(tick, 1000);\n}" } },
+  /* Not a look of its own: this one is the shelf the Theme maker writes its
+     rules onto, so a theme has somewhere to live and something to publish. */
+  { id: "ext-theme", name: "Theme", desc: "Colours and corners you picked right where you saw them.",
+    prompt: "", builtin: true, themeMaker: true, theme: null,
+    ui: { css: "", html: "", js: "" } },
 ];
 
 /* What the Library group shows when the shared table can't be reached. */
@@ -248,10 +253,10 @@ let state = Object.assign({
   mode: "chat",
   relayVerified: null,
   advanced: {},
-  /* the name shown as a card's creator, and the secrets that prove this
-     browser published the rows it can still change */
-  creatorName: "",
+  /* the rows this browser published, and the one secret behind all of them —
+     a card's creator is the signed-in account, never something typed */
   claims: {},
+  makerSecret: "",
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
@@ -272,7 +277,7 @@ if (!Array.isArray(state.extensions)) state.extensions = [];
 for (const b of BUILTIN_EXTENSIONS)
   if (!state.extensions.some(x => x.id === b.id))
     state.extensions.push({ ...b, builtin: true, enabled: false });
-if (typeof state.creatorName !== "string") state.creatorName = "";
+if (typeof state.makerSecret !== "string") state.makerSecret = "";
 if (!state.claims || typeof state.claims !== "object") state.claims = {};
 if (!state.projects.some(p => p.id === state.activeProject)) state.activeProject = null;
 if (state.mode !== "chat" && state.mode !== "coding") state.mode = "chat";
@@ -3620,7 +3625,6 @@ function editLibraryEntry(e) {
     state.extensions.push(x);
   }
   x.pubId = e.rowId;
-  x.creator = e.creator || state.creatorName || "";
   x.screenshot = e.screenshot || "";
   save();
   openExtEditor(x);
@@ -3654,16 +3658,21 @@ function applyUiExtensions() {
   }
 }
 
+/* Which theme cards have their "Make a theme" button showing — a view state,
+   so it is deliberately not saved with the extension. */
+const makeThemeOpen = new Set();
+
 function extRow(x, deletable) {
   const li = document.createElement("li");
   li.className = "lib-card" + (x.enabled ? "" : " off");
 
-  li.append(extPreview(x.ui, x.screenshot));
+  const shot = extPreview(x.ui, x.screenshot);
+  li.append(shot);
 
   const h = document.createElement("strong");
   h.className = "lib-name";
   h.textContent = x.name;
-  if (x.ui) {
+  if (x.ui && !x.themeMaker) {
     const badge = document.createElement("span");
     badge.className = "ext-badge";
     badge.textContent = "UI";
@@ -3675,6 +3684,31 @@ function extRow(x, deletable) {
   p.className = "lib-desc";
   p.textContent = x.desc || (x.ui ? "A UI extension." : "A prompt add-on.");
   li.append(p);
+
+  /* the theme maker is entered from its own card: click the picture and the way
+     in appears underneath the description */
+  if (x.themeMaker) {
+    shot.classList.add("is-button");
+    shot.title = "Make a theme";
+    shot.tabIndex = 0;
+    const toggle = () => {
+      if (makeThemeOpen.has(x.id)) makeThemeOpen.delete(x.id);
+      else makeThemeOpen.add(x.id);
+      renderExtensions();
+    };
+    shot.addEventListener("click", toggle);
+    shot.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+    });
+    if (makeThemeOpen.has(x.id)) {
+      const make = document.createElement("button");
+      make.type = "button";
+      make.className = "ghost-btn ext-make-theme";
+      make.textContent = "Make a theme";
+      make.addEventListener("click", startThemeMode);
+      li.append(make);
+    }
+  }
 
   const foot = document.createElement("div");
   foot.className = "lib-foot";
@@ -3702,6 +3736,16 @@ function extRow(x, deletable) {
     edit.textContent = "Edit";
     edit.addEventListener("click", () => openExtEditor(x));
     foot.append(edit);
+  }
+
+  /* publishing is a decision you take about something that already exists, so
+     the door to the library sits on the card rather than on the create form */
+  if (!x.builtin) {
+    const pub = document.createElement("button");
+    pub.type = "button"; pub.className = "ghost-btn";
+    pub.textContent = x.pubId ? "Update" : "Publish";
+    pub.addEventListener("click", () => openPublishDialog(x));
+    foot.append(pub);
   }
 
   if (deletable) {
@@ -3742,7 +3786,6 @@ function renderExtensions() {
 const edBuffers = { css: "", html: "", js: "" };
 let edLang = "css";
 let edTarget = null; // the extension being edited, null while composing a new one
-let edShot = ""; // a photo chosen for this extension's library card
 
 function edHighlight() {
   $("#edHl").replaceChildren(...syntaxNodes(edBuffers[edLang] + "\n", edLang));
@@ -3768,10 +3811,6 @@ function openExtEditor(x) {
   $("#extEditorTitle").textContent = x ? `Edit — ${x.name}` : "New UI extension";
   $("#edName").value = x?.name || "";
   $("#edDesc").value = x?.desc || "";
-  $("#edCreator").value = x?.creator || state.creatorName || "";
-  edShot = x?.screenshot || "";
-  $("#edShot").value = "";
-  edShotNote();
   edBuffers.css = x?.ui?.css || "";
   edBuffers.html = x?.ui?.html || "";
   edBuffers.js = x?.ui?.js || "";
@@ -3984,13 +4023,30 @@ function myPublications() {
   return Object.keys(state.claims).length;
 }
 
+/* One uuid, minted the first time this browser publishes and reused for every
+   row after it, so the database counts a maker rather than a row when it holds
+   them to ten. */
+function makerSecret() {
+  if (!state.makerSecret) { state.makerSecret = crypto.randomUUID(); save(); }
+  return state.makerSecret;
+}
+
+/* The creator on a card is the account, never a field someone types: two
+   browsers signed in as the same person publish as the same name. */
+function makerName() {
+  return currentUser?.displayName || currentUser?.email || "";
+}
+
 let publishing = false;
 async function publishToLibrary(d, onDone) {
   if (publishing) return;
+  const creator = makerName();
+  if (!creator) {
+    toast("Publishing puts your Google account name on the card — sign in first.");
+    return;
+  }
   const updating = !!d.rowId;
-  const rowId = updating ? d.rowId : crypto.randomUUID();
-  const secret = updating ? state.claims[d.rowId] : crypto.randomUUID();
-  if (!secret) {
+  if (updating && !state.claims[d.rowId]) {
     toast("Only the maker can change that one — it was published from another browser.");
     return;
   }
@@ -3998,9 +4054,10 @@ async function publishToLibrary(d, onDone) {
     toast(`Ten published extensions is the limit for one maker — withdraw one first.`);
     return;
   }
-  const creator = d.creator || state.creatorName || "";
+  const rowId = updating ? d.rowId : crypto.randomUUID();
+  const secret = makerSecret();
   publishing = true;
-  document.querySelectorAll("#edPublish,#ftPublish").forEach(b => { b.disabled = true; });
+  document.querySelectorAll("#pubGo").forEach(b => { b.disabled = true; });
   try {
     await libraryRpc(updating ? "revise_extension" : "publish_extension", {
       which_row: rowId,
@@ -4012,8 +4069,7 @@ async function publishToLibrary(d, onDone) {
       ext_shot: d.screenshot || "",
       the_secret: secret,
     });
-    state.claims[rowId] = secret;
-    state.creatorName = creator;
+    state.claims[rowId] = true;
     save();
     libResult = null; // the next library read shows the new row
     renderExtensions();
@@ -4026,19 +4082,18 @@ async function publishToLibrary(d, onDone) {
     toast(`Could not publish — ${err.message}`);
   } finally {
     publishing = false;
-    document.querySelectorAll("#edPublish,#ftPublish").forEach(b => { b.disabled = false; });
+    document.querySelectorAll("#pubGo").forEach(b => { b.disabled = false; });
   }
 }
 
 async function deleteLibraryRow(entry) {
-  const secret = state.claims[entry.rowId];
-  if (!secret) {
+  if (!state.claims[entry.rowId]) {
     toast("Only the maker can withdraw that one.");
     return;
   }
   if (!confirm(`Remove "${entry.name}" from the library? Anyone who already installed it keeps their copy.`)) return;
   try {
-    await libraryRpc("withdraw_extension", { which_row: entry.rowId, the_secret: secret });
+    await libraryRpc("withdraw_extension", { which_row: entry.rowId, the_secret: makerSecret() });
     delete state.claims[entry.rowId];
     save();
     libResult = null;
@@ -4050,38 +4105,73 @@ async function deleteLibraryRow(entry) {
   }
 }
 
-function edShotNote() {
-  $("#edShotNote").textContent = edShot
+/* ---------- publishing, from a card you already made ----------
+   Creating an extension and sending it to the library are two decisions, so
+   they are two dialogs: this one carries only the card's photo, and the name it
+   cannot change because it comes from the account. */
+let pubTarget = null;
+let pubShot = "";
+
+function pubShotNote() {
+  $("#pubShotNote").textContent = pubShot
     ? "Using your image. Clear the field to go back to the live preview."
     : SHOT_NOTE;
 }
 
-$("#edShot").addEventListener("change", async (e) => {
+function pubPreview() {
+  $("#pubPreview").replaceChildren(extPreview(pubTarget?.ui || null, pubShot));
+}
+
+function openPublishDialog(x) {
+  pubTarget = x;
+  pubShot = x.screenshot || "";
+  $("#pubShot").value = "";
+  $("#pubTitle").textContent = x.pubId ? `Update “${x.name}”` : `Publish “${x.name}”`;
+  $("#pubSub").textContent = x.pubId
+    ? "The library already carries this one, so publishing replaces it."
+    : "Anyone who opens the library will find it in their list.";
+  $("#pubAs").textContent = makerName()
+    ? `The card will read “by ${makerName()}”.`
+    : "Sign in with Google first — the card carries your account name, and nothing else can.";
+  pubShotNote();
+  pubPreview();
+  $("#extPublishDialog").hidden = false;
+  motion.reveal($("#extPublishDialog").querySelector(".modal"));
+}
+
+$("#pubShot").addEventListener("change", async (e) => {
   const file = e.target.files[0];
-  if (!file) { edShot = ""; edShotNote(); return; }
+  if (!file) { pubShot = ""; pubShotNote(); pubPreview(); return; }
   try {
-    edShot = await shotFromFile(file);
-    edShotNote();
+    pubShot = await shotFromFile(file);
+    pubShotNote();
+    pubPreview();
   } catch (err) {
     console.warn("Card photo rejected:", err);
     toast("That image could not be read — try a PNG or JPG.");
   }
 });
 
-$("#edPublish").addEventListener("click", () => {
-  const creator = $("#edCreator").value.trim();
-  if (!creator) {
-    toast("Publishing needs your name on the card.");
-    $("#edCreator").focus();
-    return;
-  }
-  const { name, desc, ui } = edCollect();
+function closePublishDialog() { $("#extPublishDialog").hidden = true; pubTarget = null; }
+$("#pubClose").addEventListener("click", closePublishDialog);
+$("#pubCancel").addEventListener("click", closePublishDialog);
+$("#extPublishDialog").addEventListener("click", e => {
+  if (e.target === $("#extPublishDialog")) closePublishDialog();
+});
+
+$("#pubGo").addEventListener("click", () => {
+  const x = pubTarget;
+  if (!x) return;
   publishToLibrary({
-    name, desc, prompt: "", ui,
-    rowId: edTarget?.pubId,
-    creator,
-    screenshot: edShot,
-  }, (rowId) => { if (edTarget) edTarget.pubId = rowId; });
+    name: x.name, desc: x.desc, prompt: x.prompt || "", ui: x.ui || null,
+    rowId: x.pubId, screenshot: pubShot,
+  }, (rowId) => {
+    x.pubId = rowId;
+    x.libId = `db:${rowId}`;
+    x.screenshot = pubShot;
+    save();
+    closePublishDialog();
+  });
 });
 
 /* ----- the extension preview -----
@@ -4125,6 +4215,13 @@ const SHOT_PAGE = `
   </div>
 </div>`;
 
+/* One observer for every card: the mock is authored at 640x400, so the width a
+   card actually got decides how far down it scales. */
+const shotScale = new ResizeObserver(entries => {
+  for (const en of entries)
+    en.target.style.setProperty("--shot-scale", String(Math.min(1, en.contentRect.width / 640)));
+});
+
 function extPreview(ui, shot) {
   const wrap = document.createElement("div");
   wrap.className = "ext-shot";
@@ -4143,6 +4240,7 @@ function extPreview(ui, shot) {
     + `<style>${SHOT_BASE}${ui?.css || ""}</style></head><body>${SHOT_PAGE}${ui?.html || ""}`
     + `<script>try{${ui?.js || ""}}catch(e){}<\/script></body></html>`;
   wrap.append(f);
+  shotScale.observe(wrap);
   return wrap;
 }
 
@@ -4165,15 +4263,11 @@ const makerPick = $("#extMakerPick");
 const nameDialog = $("#extNameDialog");
 let nameKind = "feature"; // "feature" is a prompt add-on, "ui" comes from editor mode
 let pendingUi = null;     // the CSS editor mode just produced
-let pendingShot = "";     // a photo chosen for the library card
 const SHOT_NOTE = "Optional. Without one the card draws a live preview of the extension itself.";
 
 function openNameDialog(kind, ui) {
   nameKind = kind;
   pendingUi = ui || null;
-  pendingShot = "";
-  $("#ftShot").value = "";
-  $("#ftShotNote").textContent = SHOT_NOTE;
   $("#featureTitle").textContent = kind === "feature" ? "New feature" : "New UI extension";
   $("#featureSub").textContent = kind === "feature"
     ? "Say what it should do. While its switch is on, those words ride along with every message you send."
@@ -4182,7 +4276,6 @@ function openNameDialog(kind, ui) {
   $("#ftName").value = "";
   $("#ftDesc").value = "";
   $("#ftPrompt").value = "";
-  $("#ftCreator").value = state.creatorName || "";
   showNameShot();
   nameDialog.hidden = false;
   motion.reveal(nameDialog.querySelector(".modal"));
@@ -4190,21 +4283,8 @@ function openNameDialog(kind, ui) {
 }
 
 function showNameShot() {
-  $("#ftPreview").replaceChildren(extPreview(nameKind === "feature" ? null : pendingUi, pendingShot));
+  $("#ftPreview").replaceChildren(extPreview(nameKind === "feature" ? null : pendingUi));
 }
-
-$("#ftShot").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) { pendingShot = ""; showNameShot(); $("#ftShotNote").textContent = SHOT_NOTE; return; }
-  try {
-    pendingShot = await shotFromFile(file);
-    showNameShot();
-    $("#ftShotNote").textContent = "Using your image. Clear the field to go back to the live preview.";
-  } catch (err) {
-    console.warn("Card photo rejected:", err);
-    toast("That image could not be read — try a PNG or JPG.");
-  }
-});
 
 function closeNameDialog() { nameDialog.hidden = true; }
 
@@ -4242,8 +4322,6 @@ function nameCollect() {
       || (nameKind === "feature" ? "Your own feature." : "Your own UI extension."),
     prompt: nameKind === "feature" ? $("#ftPrompt").value.trim() : "",
     ui: nameKind === "feature" ? null : pendingUi,
-    creator: $("#ftCreator").value.trim(),
-    screenshot: pendingShot,
   };
 }
 
@@ -4260,22 +4338,7 @@ $("#ftSave").addEventListener("click", () => {
   state.extensions.push({ id: crypto.randomUUID(), ...d, builtin: false, enabled: true });
   save();
   nameFinish();
-  toast(`"${d.name}" saved and switched on.`);
-});
-
-$("#ftPublish").addEventListener("click", () => {
-  const d = nameCollect();
-  if (!d) return;
-  if (!d.creator) {
-    toast("Publishing needs your name on the card.");
-    $("#ftCreator").focus();
-    return;
-  }
-  publishToLibrary(d, () => {
-    state.extensions.push({ id: crypto.randomUUID(), ...d, builtin: false, enabled: true });
-    save();
-    nameFinish();
-  });
+  toast(`"${d.name}" saved and switched on — publish it from its card when you want others to have it.`);
 });
 
 /* ---------- editor mode ----------
@@ -4349,6 +4412,7 @@ function moveEdBox() {
 }
 
 function startEditorMode() {
+  if (theming) stopThemeMode(true);
   setView("chats");
   editing = true;
   edits = {};
@@ -4455,6 +4519,233 @@ $("#ebSave").addEventListener("click", () => {
   const ui = { css, html: "", js: "" };
   exitEditorMode();
   openNameDialog("ui", ui);
+  /* a layout maker has no colours of its own — those live in Theme — so say so
+     once, rather than let the result look like the drag did nothing */
+  if (!themeExtension()?.enabled)
+    toast("Colours and corners come from the Theme extension. Switch it on to see them over your layout.");
+});
+
+/* ---------- the right-click menu ----------
+   The browser's menu had nothing this page cares about, so the page answers the
+   right-click itself: what you can do with the words you selected, and what you
+   can make of the part sitting under the cursor. */
+const ctxMenu = $("#ctxMenu");
+const ctxTheme = $("#ctxTheme");
+let ctxPart = null; // the part under the cursor, when there was one
+
+function closeCtx() {
+  ctxMenu.hidden = true;
+  ctxTheme.hidden = true;
+  ctxPart = null;
+}
+
+function placeCtx(menu, x, y) {
+  menu.hidden = false;
+  const r = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
+}
+
+function ctxText() {
+  const sel = String(getSelection() || "").trim();
+  if (sel) return sel;
+  const el = editTarget(document.activeElement)?.el || ctxPart?.el;
+  return el ? (el.innerText || "").trim().slice(0, 4000) : "";
+}
+
+document.addEventListener("contextmenu", (e) => {
+  if (e.target.closest(".ctx-menu")) return; // the colour pickers keep their own menus
+  e.preventDefault();
+  const wasOpen = !ctxMenu.hidden || !ctxTheme.hidden;
+  closeCtx();
+  if (wasOpen) return; // a second right-click closes it, like any menu
+  ctxPart = editTarget(e.target);
+  if (theming) {
+    if (ctxPart) openThemeControls(ctxPart, e.clientX, e.clientY);
+    else toast("Right-click one of the page's parts — the message box, sidebar, top bar.");
+    return;
+  }
+  const text = ctxText();
+  ctxMenu.querySelector('[data-ctx="copy"]').disabled = !text;
+  ctxMenu.querySelector('[data-ctx="ask"]').disabled = !text;
+  ctxMenu.querySelector('[data-ctx="theme-part"]').hidden = !ctxPart;
+  placeCtx(ctxMenu, e.clientX, e.clientY);
+});
+
+ctxMenu.addEventListener("click", async (e) => {
+  const item = e.target.closest("[data-ctx]");
+  if (!item || item.disabled) return;
+  /* this same click is still on its way to the document-wide dismiss, which
+     would shut the theme panel this handler has just opened */
+  e.stopPropagation();
+  const act = item.dataset.ctx;
+  const text = ctxText();
+  const part = ctxPart;
+  closeCtx();
+  if (act === "copy") {
+    try { await navigator.clipboard.writeText(text); toast("Copied."); }
+    catch { toast("The browser would not hand over the clipboard."); }
+  } else if (act === "paste") {
+    try {
+      const clip = await navigator.clipboard.readText();
+      if (!clip) { toast("The clipboard is empty."); return; }
+      const box = document.activeElement?.matches?.("input, textarea")
+        ? document.activeElement : els.input;
+      box.value = box.value.trim() ? `${box.value.replace(/\s+$/, "")}\n\n${clip}` : clip;
+      box.focus();
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    } catch { toast("Nothing to paste — the browser blocked the clipboard."); }
+  } else if (act === "ask") {
+    setView("chats");
+    els.input.value = `About this:\n\n${text}\n\n`;
+    els.input.focus();
+    els.input.dispatchEvent(new Event("input", { bubbles: true }));
+  } else if (act === "make-feature") openNameDialog("feature", null);
+  else if (act === "make-ui") startEditorMode();
+  else if (act === "theme-part") {
+    startThemeMode();
+    if (part) openThemeControls(part, 120, 120);
+  }
+});
+
+document.addEventListener("click", closeCtx);
+window.addEventListener("resize", closeCtx);
+window.addEventListener("scroll", closeCtx, true);
+
+/* ---------- theme mode ----------
+   A theme is a colour pair and a corner radius per part, recorded against the
+   same selectors the UI maker uses so the rules hold up on someone else's
+   screen. They live on the Theme extension, which is what makes a theme
+   something you can switch off — or publish — like anything else. */
+let theming = false;
+let themeEdits = {};      // selector -> { bg, fg, radius }
+let themeTarget = null;   // the Theme extension being written into
+let themeWas = null;      // its contents on the way in, for a walk-back
+
+function themeExtension() {
+  return state.extensions.find(x => x.themeMaker) || null;
+}
+
+function themeCss(ed) {
+  return Object.entries(ed)
+    .filter(([, v]) => v && (v.bg || v.fg || v.radius))
+    .map(([sel, v]) => `${sel} {\n`
+      + [v.bg && `  background: ${v.bg};`, v.fg && `  color: ${v.fg};`,
+         v.radius && `  border-radius: ${v.radius}px;`].filter(Boolean).join("\n")
+      + "\n}")
+    .join("\n");
+}
+
+function applyThemeEdits() {
+  if (!themeTarget) return;
+  themeTarget.theme = themeEdits;
+  themeTarget.ui.css = themeCss(themeEdits);
+  save();
+  applyUiExtensions();
+}
+
+function startThemeMode() {
+  const x = themeExtension();
+  if (!x) { toast("The Theme extension is not here to write into."); return; }
+  /* the two makers each own the top-right corner, and one page cannot be under
+     both kinds of edit at once */
+  if (editing) exitEditorMode();
+  setView("chats");
+  themeTarget = x;
+  themeWas = { theme: x.theme ? JSON.parse(JSON.stringify(x.theme)) : {}, css: x.ui?.css || "" };
+  themeEdits = x.theme ? JSON.parse(JSON.stringify(x.theme)) : {};
+  if (!x.ui) x.ui = { css: "", html: "", js: "" };
+  /* a theme you cannot see is not worth picking, so the extension switches
+     itself on the moment its maker opens */
+  const wasOff = !x.enabled;
+  x.enabled = true;
+  theming = true;
+  document.body.classList.add("theming");
+  $("#themeBar").hidden = false;
+  applyThemeEdits();
+  renderExtensions();
+  toast(wasOff
+    ? "Theme switched on. Right-click a part of the page to recolour it."
+    : "Theme mode — right-click a part of the page to recolour it.");
+}
+
+function stopThemeMode(revert) {
+  if (!theming) return;
+  theming = false;
+  document.body.classList.remove("theming");
+  $("#themeBar").hidden = true;
+  ctxTheme.hidden = true;
+  if (revert && themeTarget && themeWas) {
+    themeTarget.theme = themeWas.theme;
+    themeTarget.ui.css = themeWas.css;
+  }
+  save();
+  applyUiExtensions();
+  themeTarget = null;
+  themeWas = null;
+  renderExtensions();
+}
+
+function openThemeControls(part, x, y) {
+  const cur = themeEdits[part.sel] || {};
+  const cs = getComputedStyle(part.el);
+  $("#ctLabel").textContent = part.label;
+  $("#ctBg").value = cur.bg || readableBg(part.el);
+  $("#ctFg").value = cur.fg || rgbToHex(cs.color);
+  $("#ctRadius").value = cur.radius ?? 0;
+  $("#ctRadiusOut").textContent = `${$("#ctRadius").value}px`;
+  ctxTheme.dataset.part = part.sel;
+  placeCtx(ctxTheme, x, y);
+}
+
+/* the page speaks rgb()/rgba() and the pickers speak #rrggbb */
+function rgbToHex(rgb) {
+  const m = /rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(rgb || "");
+  if (!m) return "#ffffff";
+  return `#${m.slice(1, 4).map(n => (+n).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/* A see-through part reports rgba(0,0,0,0), which a picker would show as black,
+   so the swatch asks the nearest ancestor that actually paints something. */
+function readableBg(el) {
+  for (let n = el; n; n = n.parentElement) {
+    const v = getComputedStyle(n).backgroundColor || "";
+    const m = /rgba?\(([^)]+)\)/.exec(v);
+    if (!m) continue;
+    const parts = m[1].split(/[\s,/]+/).filter(s => s !== "");
+    if (parts.length >= 4 && parseFloat(parts[3]) === 0) continue;
+    return rgbToHex(v);
+  }
+  return "#ffffff";
+}
+
+function stepTheme() {
+  const sel = ctxTheme.dataset.part;
+  if (!sel) return;
+  const radius = +$("#ctRadius").value;
+  themeEdits[sel] = { bg: $("#ctBg").value, fg: $("#ctFg").value, radius };
+  $("#ctRadiusOut").textContent = `${radius}px`;
+  applyThemeEdits();
+}
+["ctBg", "ctFg", "ctRadius"].forEach(id => $(`#${id}`).addEventListener("input", stepTheme));
+
+$("#tbSave").addEventListener("click", () => {
+  const named = Object.keys(themeEdits).length;
+  stopThemeMode(false);
+  toast(named
+    ? `Theme saved across ${named} ${named === 1 ? "part" : "parts"} — publish the Theme card to share it.`
+    : "Theme saved.");
+});
+$("#tbClose").addEventListener("click", () => stopThemeMode(true));
+$("#tbReset").addEventListener("click", () => { themeEdits = {}; applyThemeEdits(); toast("Cleared every part."); });
+
+ctxTheme.querySelector('[data-ctx="theme-clear"]').addEventListener("click", () => {
+  const sel = ctxTheme.dataset.part;
+  if (!sel) return;
+  delete themeEdits[sel];
+  applyThemeEdits();
+  ctxTheme.hidden = true;
+  toast("That part is back to the page's own colours.");
 });
 
 /* An imported script runs here the moment its switch goes on, so the import

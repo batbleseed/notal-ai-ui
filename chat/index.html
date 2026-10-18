@@ -319,16 +319,6 @@
             <input type="text" id="edDesc" placeholder="One line for the card" />
           </label>
         </div>
-        <div class="ft-pub">
-          <label class="ft-creator">Your name
-            <input type="text" id="edCreator" placeholder="Shown as the creator on the card" autocomplete="name" />
-          </label>
-          <label class="ft-shot">
-            <span>Card photo</span>
-            <input type="file" id="edShot" accept="image/*" />
-            <small id="edShotNote">Optional. Without one the card draws a live preview of the extension itself.</small>
-          </label>
-        </div>
         <div class="ed-start">
           <span class="ed-start-label">Start from an example:</span>
           <button type="button" class="ed-chip" data-starter="theme">Colour theme</button>
@@ -349,7 +339,6 @@
         <div class="ed-actions">
           <span class="ed-tip">Drag the bottom-right corner to make this editor bigger.</span>
           <button type="button" class="ghost-btn" id="edDownload">Download</button>
-          <button type="button" class="ghost-btn" id="edPublish">Publish</button>
           <button type="button" class="primary-btn" id="edSave">Save</button>
         </div>
       </div>
@@ -418,22 +407,84 @@
             <figcaption>How it will look in the library</figcaption>
           </figure>
         </div>
-        <div class="ft-pub">
-          <label class="ft-creator">Your name
-            <input type="text" id="ftCreator" placeholder="Shown as the creator on the card" autocomplete="name" />
-          </label>
-          <label class="ft-shot">
-            <span>Card photo</span>
-            <input type="file" id="ftShot" accept="image/*" />
-            <small id="ftShotNote">Optional. Without one the card draws a live preview of the extension itself.</small>
-          </label>
-        </div>
         <div class="ed-actions">
-          <button type="button" class="ghost-btn" id="ftPublish">Publish to library</button>
           <button type="button" class="primary-btn" id="ftSave">Save</button>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Publishing is its own step, taken from a card you already made: the only
+       choice here is the photo on the library card. -->
+  <div class="modal-overlay" id="extPublishDialog" hidden>
+    <div class="modal panel-modal pub-modal" role="dialog" aria-modal="true" aria-labelledby="pubTitle">
+      <header class="modal-header">
+        <div class="panel-heading">
+          <h2 id="pubTitle">Publish to the library</h2>
+          <p class="panel-sub" id="pubSub"></p>
+        </div>
+        <button class="icon-btn" type="button" id="pubClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="panel-body feature-body">
+        <div class="feature-grid">
+          <div class="ext-form">
+            <label>Card photo
+              <input type="file" id="pubShot" accept="image/*" />
+            </label>
+            <small id="pubShotNote">Optional. Without one the card draws a live preview of the extension itself.</small>
+            <p class="pub-as" id="pubAs"></p>
+          </div>
+          <figure class="feat-shot">
+            <div id="pubPreview"></div>
+            <figcaption>How it will look in the library</figcaption>
+          </figure>
+        </div>
+        <div class="ed-actions">
+          <button type="button" class="ghost-btn" id="pubCancel">Cancel</button>
+          <button type="button" class="primary-btn" id="pubGo">Publish</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right-click is the app's own menu: the browser's has nothing here that
+       these do, and one of them — theme the part under the cursor — exists
+       nowhere else. -->
+  <div class="ctx-menu" id="ctxMenu" hidden role="menu" aria-label="Selection">
+    <button type="button" class="ctx-item" data-ctx="copy" role="menuitem">Copy</button>
+    <button type="button" class="ctx-item" data-ctx="paste" role="menuitem">Paste</button>
+    <button type="button" class="ctx-item" data-ctx="ask" role="menuitem">Ask AI</button>
+    <p class="ctx-label">Make a new extension</p>
+    <button type="button" class="ctx-item ctx-indent" data-ctx="make-feature" role="menuitem">New feature</button>
+    <button type="button" class="ctx-item ctx-indent" data-ctx="make-ui" role="menuitem">UI maker</button>
+    <button type="button" class="ctx-item ctx-indent" data-ctx="theme-part" role="menuitem" hidden>Theme this part</button>
+  </div>
+
+  <!-- Theme mode: the page stays the page, and a right-click on one of its
+       parts changes how that part looks. -->
+  <div class="ctx-menu ctx-theme" id="ctxTheme" hidden role="dialog" aria-label="Theme this part">
+    <p class="ctx-label" id="ctLabel">Part</p>
+    <label class="ctx-row">Background
+      <input type="color" id="ctBg" value="#ffffff" />
+    </label>
+    <label class="ctx-row">Text
+      <input type="color" id="ctFg" value="#1f1e1d" />
+    </label>
+    <label class="ctx-row">Corner radius
+      <input type="range" id="ctRadius" min="0" max="28" step="2" />
+      <output id="ctRadiusOut">0</output>
+    </label>
+    <button type="button" class="ctx-item" data-ctx="theme-clear" role="menuitem">Clear this part</button>
+  </div>
+  <div class="editor-bar theme-bar" id="themeBar" hidden>
+    <span class="eb-label">Theme mode — right-click a part of the page to recolour it</span>
+    <button type="button" class="ghost-btn" id="tbReset">Start over</button>
+    <button type="button" class="primary-btn" id="tbSave">Save theme</button>
+    <button class="icon-btn" type="button" id="tbClose" aria-label="Leave theme mode">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
   </div>
 
   <!-- Editor mode: the page itself becomes the editor. The bar sits top right
@@ -674,7 +725,7 @@
             <details class="adv">
               <summary>Library database (Supabase)</summary>
               <div class="adv-body">
-                <p class="adv-lead">The Library group reads a Supabase table whose address and public anon key are fixed in <code>app.js</code>, so there is nothing to connect here. Run this once in that project's SQL editor. It adds the columns the cards show and replaces open writes with three guarded functions, so publishing is capped at ten per maker and only a maker can change or withdraw what they published.</p>
+                <p class="adv-lead">The Library group reads a Supabase table whose address and public anon key are fixed in <code>app.js</code>, so there is nothing to connect here. Run this once in that project's SQL editor. It adds the columns the cards show and replaces open writes with three guarded functions, so publishing is capped at ten per maker and only a maker can change or withdraw what they published. A card's creator is the Google account signed in when you publish, so there is no name to type and no publishing while signed out.</p>
                 <pre class="ext-sql">alter table extensions
   add column if not exists creator text,
   add column if not exists screenshot text,

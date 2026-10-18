@@ -1088,8 +1088,8 @@ button:disabled { opacity: .5; cursor: default; }
   padding-bottom: 2px; border-bottom: 1px solid var(--border);
 }
 .lib-grid {
-  list-style: none; display: grid; gap: 14px; justify-content: start;
-  grid-template-columns: repeat(auto-fill, 340px);
+  list-style: none; display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(min(440px, 100%), 1fr));
 }
 .lib-card {
   display: grid; gap: 8px; align-content: start;
@@ -1102,15 +1102,15 @@ button:disabled { opacity: .5; cursor: default; }
 .lib-card.off:hover { opacity: .8; }
 .lib-name { font-size: 14.5px; font-weight: 600; }
 .lib-desc { font-size: 12.5px; line-height: 1.45; color: var(--text-soft); min-height: 2.9em; }
-/* the mock is drawn at 640x400 and scaled down, so pixel values in an
-   extension's CSS land at the same proportion as on the real page */
+/* the mock is drawn at 640x400 and scaled by --shot-scale, which the card's own
+   width sets, so a wider card shows the same page larger rather than cropped */
 .ext-shot {
-  position: relative; width: 316px; height: 198px; overflow: hidden;
+  position: relative; width: 100%; aspect-ratio: 8 / 5; overflow: hidden;
   border: 1px solid var(--border); border-radius: 10px; background: var(--bg);
 }
 .ext-shot iframe {
   position: absolute; top: 0; left: 0; width: 640px; height: 400px; border: 0;
-  transform: scale(.49375); transform-origin: 0 0; pointer-events: none;
+  transform: scale(var(--shot-scale, .49375)); transform-origin: 0 0; pointer-events: none;
 }
 .lib-foot { display: flex; align-items: center; gap: 8px; min-height: 30px; }
 .lib-foot .switch { margin-right: auto; }
@@ -1232,25 +1232,61 @@ button:disabled { opacity: .5; cursor: default; }
 }
 .feature-body { gap: 14px; }
 .feature-grid {
-  display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: start;
+  /* the preview column gets a floor: the shot is now a percentage of it, and an
+     auto column would shrink to nothing around an absolutely-positioned mock */
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 42%); gap: 18px; align-items: start;
 }
 .feature-grid .ext-form { display: grid; gap: 10px; min-width: 0; }
 .feature-grid .ext-form label { display: grid; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-soft); }
-.feat-shot { display: grid; gap: 7px; justify-items: center; }
+/* the figure stretches so the shot has a width to be 100% of — centred, it
+   would collapse to the width of its own absolutely-positioned mock */
+.feat-shot { display: grid; gap: 7px; justify-items: stretch; }
 .feat-shot figcaption { font-size: 11.5px; color: var(--text-faint); text-align: center; max-width: 260px; }
-/* who made it, and the picture the card will carry */
-.ft-pub { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; margin-top: 4px; }
-.ft-pub label { display: grid; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-soft); min-width: 0; }
-.ft-pub input[type="text"] {
-  padding: 8px 10px; font-size: 13.5px; font-weight: 400; color: var(--text);
-  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none;
-  min-width: 0; transition: border-color .15s;
-}
-.ft-pub input[type="text"]:focus { border-color: var(--accent); box-shadow: var(--ring); }
-.ft-pub input[type="file"] { font-size: 12px; font-weight: 400; color: var(--text-soft); }
-.ft-pub small { font-size: 11.5px; font-weight: 400; color: var(--text-faint); line-height: 1.4; }
-@media (max-width: 620px) { .ft-pub { grid-template-columns: 1fr; } }
+/* the account name a card will carry — shown, never typed */
+.pub-as { font-size: 12px; color: var(--text-faint); }
+.ext-form small { font-size: 11.5px; font-weight: 400; color: var(--text-faint); line-height: 1.4; }
 @media (max-width: 700px) { .feature-grid { grid-template-columns: 1fr; } }
+
+/* ---------- the right-click menu ---------- */
+.ctx-menu {
+  position: fixed; z-index: 140; min-width: 200px;
+  display: grid; gap: 2px; padding: 6px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); box-shadow: var(--shadow); font-size: 13px;
+}
+.ctx-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; border: 0; border-radius: 8px; background: none;
+  font: inherit; font-weight: 500; color: var(--text); text-align: left; cursor: pointer;
+}
+.ctx-item:hover:not(:disabled) { background: var(--surface-2); }
+.ctx-item:disabled { opacity: .45; cursor: default; }
+.ctx-indent { padding-left: 18px; color: var(--text-soft); }
+.ctx-label {
+  margin: 6px 0 2px; padding: 0 9px; font-size: 11px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint);
+}
+.ctx-theme { min-width: 236px; }
+.ctx-row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px;
+  padding: 4px 9px; font-size: 12.5px; font-weight: 500; color: var(--text-soft);
+}
+.ctx-row output { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.ctx-theme input[type="color"] {
+  width: 42px; height: 24px; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px; background: none;
+}
+.ctx-theme input[type="range"] { width: 112px; accent-color: var(--accent); }
+
+/* ---------- theme mode ---------- */
+body.theming .composer:hover, body.theming .greeting:hover, body.theming .msg:hover,
+body.theming .chat:hover, body.theming .topbar:hover, body.theming .sidebar:hover {
+  outline: 2px dashed var(--accent); outline-offset: 2px;
+}
+.ext-shot.is-button { cursor: pointer; }
+.ext-shot.is-button:hover { border-color: var(--accent); }
+.ext-shot.is-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ext-make-theme { justify-self: start; }
 
 /* ---------- editor mode ---------- */
 .editor-bar {
