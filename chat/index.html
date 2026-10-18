@@ -600,14 +600,20 @@
             <p class="panel-note">Pick who answers, name the model, add it. Your key is saved in this browser only and is sent only to the address the diagnostics panel shows.</p>
 
             <div class="web-model" id="wmBox">
-              <div class="setting-info">
-                <span class="setting-name">A model with no API key</span>
-                <small id="wmStatus">Checking whether this browser can run one…</small>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <span class="setting-name">Local AI &middot; developer</span>
+                  <small>Run a 0.5B model in this tab on the graphics card. Off by default — switch it on to see it work.</small>
+                </div>
+                <label class="switch"><input type="checkbox" id="wmSwitch" /><span class="sl track"></span></label>
               </div>
-              <progress class="wm-bar" id="wmBar" max="100" value="0" hidden></progress>
-              <div class="wm-line">
-                <button class="ghost-btn" id="wmGet" type="button" disabled>Download</button>
-                <button class="ghost-btn danger" id="wmOff" type="button" hidden>Remove</button>
+              <div id="wmBody" hidden>
+                <small class="wm-status" id="wmStatus">Checking whether this browser can run one…</small>
+                <progress class="wm-bar" id="wmBar" max="100" value="0" hidden></progress>
+                <div class="wm-line">
+                  <button class="ghost-btn" id="wmGet" type="button" hidden>Download</button>
+                  <button class="ghost-btn danger" id="wmOff" type="button" hidden>Remove</button>
+                </div>
               </div>
             </div>
 

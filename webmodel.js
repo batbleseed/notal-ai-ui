@@ -10,11 +10,13 @@
 const WEBLLM_URL = "https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.86/+esm";
 const WEB_MODEL_CARD = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const WEB_MODEL_ID = "browser-qwen-05b";
-const WEB_MODEL_NAME = "browser mini · Qwen 0.5B";
+const WEB_MODEL_NAME = "local ai";
 const WEB_MODEL_MB = 290;
 const WEB_MODEL_MAX_TOKENS = 512;
-/* WebLLM keeps what it downloads in the Cache API under this scope. */
-const WEB_MODEL_CACHE = "webllm/model";
+/* Where WebLLM keeps what it downloads under the default "cache" backend: the
+   weights, the chat config, and the compiled library it runs them with. A
+   download is only finished when all three are here, so all three are checked. */
+const WEB_MODEL_SCOPES = ["webllm/model", "webllm/config", "webllm/wasm"];
 
 let webLLM = null;
 let webEngine = null;
@@ -56,56 +58,111 @@ function webModelEngine(onProgress) {
   return webEngineStarting;
 }
 
+function webCache() {
+  return typeof caches === "object" && caches ? caches : null;
+}
+
+/* Every entry this card has across the three scopes, with its real size. The
+   Cache API keeps Content-Length on the stored response, so the MB figure is
+   measured rather than the number the model card advertises. */
+async function webModelFiles() {
+  const c = webCache();
+  if (!c) return { files: 0, bytes: 0 };
+  let files = 0, bytes = 0;
+  for (const scope of WEB_MODEL_SCOPES) {
+    const cache = await c.open(scope);
+    for (const req of await cache.keys()) {
+      if (!req.url.includes(WEB_MODEL_CARD)) continue;
+      const res = await cache.match(req);
+      const len = Number(res?.headers?.get("content-length")) || 0;
+      files++;
+      bytes += len;
+    }
+  }
+  return { files, bytes };
+}
+
+/* The weights are the download; the config and the library are a few hundred KB
+   beside them. Presence means the shards are here, which is the only part worth
+   asking someone to wait for. */
 async function webModelOnDevice() {
-  if (typeof caches !== "object" || !caches) return false;
-  const cache = await caches.open(WEB_MODEL_CACHE);
+  const c = webCache();
+  if (!c) return false;
+  const cache = await c.open(WEB_MODEL_SCOPES[0]);
   return (await cache.keys()).some(req => req.url.includes(WEB_MODEL_CARD));
 }
 
-/* The whole origin's holding, because the Cache API gives no per-entry size
-   back; it is labelled as such in Settings rather than passed off as the
-   model's own weight. */
-async function webModelUsage() {
-  try {
-    const est = await navigator.storage?.estimate();
-    return est?.usage ? Math.round(est.usage / 1e6) : null;
-  } catch { return null; }
+/* What this card actually occupies, in MB, measured from the stored responses.
+   Null when nothing of it is here — the caller then quotes the advertised size
+   and says so. */
+async function webModelBytes() {
+  const { bytes } = await webModelFiles();
+  return bytes ? Math.round(bytes / 1e6) : null;
 }
 
+/* Deleting through WebLLM's own helper, because it knows which of the three
+   scopes a given version writes to. The cache sweep is the fallback for a
+   release where the helper is missing or throws halfway through. */
 async function webModelForget() {
   if (webEngine) {
     try { await webEngine.unload(); } catch { /* already gone */ }
     webEngine = null;
   }
-  if (typeof caches !== "object" || !caches) return;
-  const cache = await caches.open(WEB_MODEL_CACHE);
-  const keys = await cache.keys();
-  await Promise.all(keys
-    .filter(req => req.url.includes(WEB_MODEL_CARD))
-    .map(req => cache.delete(req)));
+  const webllm = await webModelLibrary().catch(() => null);
+  if (webllm?.deleteModelAllInfoInCache) {
+    try { await webllm.deleteModelAllInfoInCache(WEB_MODEL_CARD); } catch { /* fall through */ }
+  }
+  const c = webCache();
+  if (!c) return;
+  for (const scope of WEB_MODEL_SCOPES) {
+    const cache = await c.open(scope);
+    const keys = await cache.keys();
+    await Promise.all(keys
+      .filter(req => req.url.includes(WEB_MODEL_CARD))
+      .map(req => cache.delete(req)));
+  }
 }
 
 /* The answer arrives as a real token stream, so the caller's onToken sees the
-   same shape it sees from any hosted provider. */
+   same shape it sees from any hosted provider — and the counts come from the
+   runtime, not from a guess made by watching how fast text appeared. */
 async function webModelAsk(messages, onToken, opts = {}) {
   const { signal, onProgress } = opts;
   const engine = await webModelEngine(onProgress);
   const interrupt = () => { engine.interruptGenerate?.().catch(() => {}); };
   signal?.addEventListener("abort", interrupt, { once: true });
+  const startedAt = Date.now();
   let text = "";
+  let firstTokenMs = null;
+  let usage = null;
   try {
     const stream = await engine.chat.completions.create({
-      messages, stream: true, max_tokens: WEB_MODEL_MAX_TOKENS, temperature: 0.7,
+      messages,
+      stream: true,
+      stream_options: { include_usage: true },
+      max_tokens: WEB_MODEL_MAX_TOKENS,
+      temperature: 0.7,
     });
     for await (const chunk of stream) {
+      if (chunk.usage) usage = chunk.usage;
       const delta = chunk.choices?.[0]?.delta?.content || "";
-      if (delta) { text += delta; onToken?.(delta); }
+      if (delta) {
+        if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt;
+        text += delta;
+        onToken?.(delta);
+      }
       if (signal?.aborted) break;
     }
   } finally {
     signal?.removeEventListener("abort", interrupt);
   }
-  return text;
+  return {
+    text,
+    elapsedMs: Date.now() - startedAt,
+    firstTokenMs,
+    completionTokens: usage?.completion_tokens ?? null,
+    promptTokens: usage?.prompt_tokens ?? null,
+  };
 }
 
 /* WebLLM fails in three distinguishable ways, and which one it is decides what

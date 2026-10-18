@@ -366,6 +366,13 @@ input, textarea { font: inherit; color: inherit; }
   background: var(--surface);
 }
 .web-model[hidden] { display: none; }
+.web-model .setting-row { padding: 0; border-bottom: 0; }
+#wmBody {
+  display: grid; gap: 8px; margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+#wmBody[hidden] { display: none; }
+.wm-status { display: block; color: var(--text-faint); font-size: 12.5px; line-height: 1.55; }
 .wm-line { display: flex; flex-wrap: wrap; gap: 8px; }
 .wm-line .ghost-btn[hidden] { display: none; }
 .wm-line .ghost-btn.danger { color: #c0392b; }
@@ -376,6 +383,9 @@ input, textarea { font: inherit; color: inherit; }
 .wm-bar::-webkit-progress-bar { background: transparent; border-radius: 999px; }
 .wm-bar::-webkit-progress-value { background: var(--accent); border-radius: 999px; }
 .wm-bar::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
+/* while a local reply is being made the trail says what is happening in numbers,
+   so the hopping stand-in words have nothing left to stand in for */
+.msg.named-work .think-words { display: none; }
 .provider-list { list-style: none; display: grid; gap: 8px; margin-top: 16px; }
 .provider-item {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px;
