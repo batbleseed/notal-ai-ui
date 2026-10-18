@@ -1,5 +1,5 @@
 /* Notal AI service worker — offline shell for the landing page and the app. */
-const CACHE = "notal-ai-v16";
+const CACHE = "notal-ai-v17";
 const CORE = [
   "./",
   "./index.html",
@@ -8,6 +8,7 @@ const CORE = [
   "./app.js",
   "./prompts.js",
   "./syntax.js",
+  "./webmodel.js",
   "./gsap.min.js",
   "./icons/favicon-32.png",
   "./icons/notal-petals.png",
@@ -30,8 +31,12 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil((async () => {
-    for (const key of await caches.keys())
+    for (const key of await caches.keys()) {
+      /* WebLLM keeps the model weights in this same origin's cache; clearing
+         them would throw away a 290 MB download on every release */
+      if (key.startsWith("webllm/")) continue;
       if (key !== CACHE) await caches.delete(key);
+    }
     await self.clients.claim();
   })());
 });

@@ -598,6 +598,19 @@
           </section>
           <section class="settings-panel" id="panel-providers" hidden>
             <p class="panel-note">Pick who answers, name the model, add it. Your key is saved in this browser only and is sent only to the address the diagnostics panel shows.</p>
+
+            <div class="web-model" id="wmBox">
+              <div class="setting-info">
+                <span class="setting-name">A model with no API key</span>
+                <small id="wmStatus">Checking whether this browser can run one…</small>
+              </div>
+              <progress class="wm-bar" id="wmBar" max="100" value="0" hidden></progress>
+              <div class="wm-line">
+                <button class="ghost-btn" id="wmGet" type="button" disabled>Download</button>
+                <button class="ghost-btn danger" id="wmOff" type="button" hidden>Remove</button>
+              </div>
+            </div>
+
             <form class="provider-form" id="providerForm">
               <ol class="setup">
                 <li class="setup-step">
@@ -846,6 +859,7 @@ grant execute on function withdraw_extension(uuid, text) to anon;</pre>
   <script src="../gsap.min.js"></script>
   <script src="../prompts.js"></script>
   <script src="../syntax.js"></script>
+  <script src="../webmodel.js"></script>
   <script src="../app.js"></script>
 </body>
 </html>

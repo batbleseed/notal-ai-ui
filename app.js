@@ -257,11 +257,14 @@ let state = Object.assign({
      a card's creator is the signed-in account, never something typed */
   claims: {},
   makerSecret: "",
+  /* true once the on-device model's files have been fetched into this browser */
+  browserModel: false,
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
 if (!Array.isArray(state.models) || !state.models.length) state.models = [GENERIC_MODEL];
 if (!state.models.some(m => m.id === "notal-generic")) state.models.unshift(GENERIC_MODEL);
+if (state.browserModel) addBrowserModel();
 if (!state.models.some(m => m.id === state.selectedModel)) state.selectedModel = "notal-generic";
 if (!Array.isArray(state.providers)) state.providers = [];
 if (!state.firebaseConfig) state.firebaseConfig = DEFAULT_FIREBASE_CONFIG;
@@ -1110,6 +1113,10 @@ async function sendMessage(text) {
       }
       /* a finished reply is better evidence than any test button */
       recordProviderResult(model.providerId, true, "Answered a real message");
+    } else if (model.browser) {
+      /* the tokens arrive through the same push path, so `answer` is already
+         whole by the time this returns */
+      await streamBrowserModel(withDocuments(conv.messages), onDelta, ac.signal, turn);
     } else {
       await streamBuiltIn(craftReply(trimmed, conv.messages.length), push, ac.signal);
     }
@@ -1174,6 +1181,88 @@ async function streamBuiltIn(fullText, push, signal) {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
     push(chunk);
     await new Promise(r => setTimeout(r, 26));
+  }
+}
+
+/* ---------- the model that runs on this device ----------
+   webmodel.js loads it and asks it. This is the part that fits the app's own
+   context into a small model's memory and says what the wait is doing. */
+
+/* The card holds 4096 tokens and spends them badly, so the whole exchange —
+   instruction, memory and history together — is kept to about three thousand
+   tokens and the rest is left for the answer. */
+const BROWSER_PROMPT_CHARS = 9_000;
+
+function browserSystemPrompt() {
+  const facts = state.memories.filter(m => m.enabled).map(m => m.text);
+  const proj = state.projects.find(p => p.id === state.activeProject);
+  let s = "You are Notal, the assistant in the Notal AI workspace. "
+    + "Answer plainly and briefly, and say when you are unsure.";
+  if (proj) s += ` The current project is "${proj.name}".`;
+  if (facts.length) s += `\nThings the user wants you to remember:\n- ${facts.join("\n- ")}`;
+  for (const x of state.extensions)
+    if (x.enabled && x.prompt) s += `\nExtension "${x.name}": ${x.prompt}`;
+  return s;
+}
+
+/* Newest first until the room runs out, because a small model that never sees
+   the question answers about whatever came before it. */
+function browserMessages(history) {
+  const sys = { role: "system", content: browserSystemPrompt() };
+  let used = sys.content.length;
+  const kept = [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    const text = (m.text || "").trim()
+      || (imageAtts(m).length ? "(an image was attached; this model cannot see pictures)" : "(an attachment)");
+    if (kept.length && used + text.length > BROWSER_PROMPT_CHARS) break;
+    used += text.length;
+    kept.unshift({ role: m.role, content: text });
+  }
+  return [sys, ...kept];
+}
+
+function progressWords(label, pct) {
+  const p = typeof pct === "number" && pct >= 0 ? Math.round(pct * 100) : null;
+  const text = String(label || "").trim() || "Getting the model ready";
+  return p === null ? text + "…" : `${text} — ${p}%`;
+}
+
+/* A step the trail has no word for yet. The download and the first token both
+   want a line of their own, and the thinking box already exists to hold one. */
+function trailStep(turn, text) {
+  turn.thinkBox.hidden = false;
+  turn.thinkBox.classList.add("busy");
+  const p = document.createElement("p");
+  p.className = "think-notes";
+  p.textContent = text;
+  turn.thinkText.append(p);
+  turn.thinkText.scrollTop = turn.thinkText.scrollHeight;
+  return {
+    set(next) { p.textContent = next; },
+    done() { p.remove(); turn.thinkBox.classList.remove("busy"); },
+  };
+}
+
+async function streamBrowserModel(history, onDelta, signal, turn) {
+  const step = trailStep(turn, "Getting the model ready");
+  try {
+    let text = "";
+    const got = await webModelAsk(browserMessages(history), (d) => {
+      text += d;
+      onDelta({ text: d });
+    }, {
+      signal,
+      onProgress: (label, pct) => { step.set(progressWords(label, pct)); },
+    });
+    step.done();
+    if (signal?.aborted) return text;
+    if (!got.trim()) throw new Error("The browser model answered with nothing. Try again, or ask it something shorter.");
+    return got;
+  } catch (err) {
+    step.done();
+    if (err?.name === "AbortError") throw err;
+    throw new Error(webModelError(err));
   }
 }
 
@@ -2350,6 +2439,7 @@ function openSettings(tab = "general") {
   renderProviders();
   renderRelayUI();
   renderDiagnostics();
+  renderBrowserModel();
   els.overlay.hidden = false;
   motion.reveal(els.settingsModal);
   switchTab(tab);
@@ -2694,6 +2784,121 @@ function removeProvider(id) {
   renderModelMenu();
   els.modelName.textContent = selectedModel().name;
 }
+
+/* ---------- the model with no API key, Settings side ----------
+   One button does the only step that needs the internet: fetch the weights
+   once, into this browser's own storage. Everything after that happens on the
+   device, so the picker entry and the download state are the whole story. */
+const wmEls = {
+  box: $("#wmBox"), status: $("#wmStatus"), bar: $("#wmBar"),
+  getBtn: $("#wmGet"), offBtn: $("#wmOff"),
+};
+
+function browserModelEntry() {
+  return {
+    id: WEB_MODEL_ID, name: WEB_MODEL_NAME, provider: "Runs on this device",
+    browser: true, card: WEB_MODEL_CARD,
+  };
+}
+
+/* Idempotent: the boot path and a finished download both call this. */
+function addBrowserModel() {
+  if (!state.models.some(m => m.id === WEB_MODEL_ID)) state.models.push(browserModelEntry());
+}
+
+function dropBrowserModel() {
+  state.models = state.models.filter(m => m.id !== WEB_MODEL_ID);
+  if (state.selectedModel === WEB_MODEL_ID) state.selectedModel = "notal-generic";
+}
+
+function wmProgress(text, pct) {
+  /* WebLLM reports -1 for a step it cannot measure; the bar holds the last real
+     fraction rather than falling back to zero mid-download */
+  if (typeof pct === "number" && pct >= 0) wmEls.bar.value = Math.round(pct * 100);
+  wmEls.status.textContent = progressWords(text, pct);
+}
+
+async function renderBrowserModel() {
+  if (!wmEls.box) return;
+  const supported = await webModelSupported();
+  /* The flag is the promise, the cache is the evidence. A cache probe can be
+     wrong in the direction that costs someone a 290 MB re-download, so it is
+     only ever trusted to *find* files this browser forgot it had — never to
+     take the model away. That is the Remove button's job alone. */
+  const filesThere = supported ? await webModelOnDevice().catch(() => state.browserModel) : state.browserModel;
+  if (supported && filesThere && !state.browserModel) {
+    state.browserModel = true;
+    addBrowserModel();
+    save();
+    renderModelMenu();
+    els.modelName.textContent = selectedModel().name;
+  }
+  const mb = await webModelUsage();
+  wmEls.bar.hidden = true;
+  wmEls.getBtn.disabled = false;
+  wmEls.getBtn.hidden = false;
+  wmEls.offBtn.hidden = true;
+
+  if (!supported) {
+    wmEls.status.textContent = "This browser has no WebGPU, so no model can run in it. "
+      + "Add a provider above, or open Notal in a recent Chrome, Edge or Safari.";
+    wmEls.getBtn.hidden = true;
+    return;
+  }
+  if (state.browserModel && !filesThere) {
+    wmEls.getBtn.textContent = `Download again (${WEB_MODEL_MB} MB)`;
+    wmEls.status.textContent = `Still in the picker, but the ${WEB_MODEL_MB} MB of model files are no `
+      + "longer in this browser's storage — something cleared it. Picking it would fetch them again.";
+    return;
+  }
+  if (state.browserModel) {
+    wmEls.getBtn.hidden = true;
+    wmEls.offBtn.hidden = false;
+    wmEls.status.textContent = `On this device — about ${WEB_MODEL_MB} MB of model files`
+      + (mb ? ` (${mb} MB held by Notal in total)` : "")
+      + `. Pick it as "${WEB_MODEL_NAME}" in the model menu; replies never leave the tab.`;
+    return;
+  }
+  wmEls.getBtn.textContent = `Download (${WEB_MODEL_MB} MB, once)`;
+  wmEls.status.textContent = "No key, no account, nothing sent anywhere once it is here. "
+    + "The first run fetches the model into this browser and the graphics card does the thinking.";
+}
+
+async function downloadBrowserModel() {
+  wmEls.getBtn.disabled = true;
+  wmEls.bar.hidden = false;
+  wmEls.bar.value = 0;
+  wmEls.status.textContent = "Fetching the model library…";
+  try {
+    await webModelEngine(wmProgress);
+    state.browserModel = true;
+    addBrowserModel();
+    save();
+    renderModelMenu();
+    wmProgress("Ready", 1);
+    toast("The model is on this device. Pick it in the model menu.");
+    renderBrowserModel();
+  } catch (err) {
+    wmEls.getBtn.disabled = false;
+    wmEls.bar.hidden = true;
+    wmEls.status.textContent = "⚠ " + webModelError(err);
+  }
+}
+
+if (wmEls.getBtn) wmEls.getBtn.addEventListener("click", downloadBrowserModel);
+if (wmEls.offBtn) wmEls.offBtn.addEventListener("click", async () => {
+  wmEls.offBtn.disabled = true;
+  wmEls.status.textContent = "Deleting the model files…";
+  try { await webModelForget(); } catch { /* the files are gone either way */ }
+  state.browserModel = false;
+  dropBrowserModel();
+  save();
+  renderModelMenu();
+  els.modelName.textContent = selectedModel().name;
+  wmEls.offBtn.disabled = false;
+  toast("Freed the space. The model is no longer in the picker.");
+  renderBrowserModel();
+});
 
 /* Turns a raw failure into something a person can act on. The distinction that
    matters most: a connection that never arrived says nothing about the key. */

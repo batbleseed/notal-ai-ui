@@ -12,7 +12,7 @@ const BUILD_OUT = path.join(__dirname, "build");
 
 const FILES = [
   "index.html", "chat.html", "styles.css", "app.js", "prompts.js",
-  "syntax.js", "sw.js", "manifest.webmanifest", "gsap.min.js",
+  "syntax.js", "webmodel.js", "sw.js", "manifest.webmanifest", "gsap.min.js",
 ];
 const DIRS = ["icons", "chat"];
 

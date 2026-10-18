@@ -358,6 +358,24 @@ input, textarea { font: inherit; color: inherit; }
 
 /* providers — the guided setup */
 .panel-note { font-size: 13px; color: var(--text-soft); margin: 8px 0 14px; }
+/* the one row in Providers that is not about a key — the model that runs here */
+.web-model {
+  display: grid; gap: 10px;
+  padding: 14px; margin-bottom: 18px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface);
+}
+.web-model[hidden] { display: none; }
+.wm-line { display: flex; flex-wrap: wrap; gap: 8px; }
+.wm-line .ghost-btn[hidden] { display: none; }
+.wm-line .ghost-btn.danger { color: #c0392b; }
+.wm-bar {
+  width: 100%; height: 6px; appearance: none; border: none;
+  background: var(--surface-2); border-radius: 999px;
+}
+.wm-bar::-webkit-progress-bar { background: transparent; border-radius: 999px; }
+.wm-bar::-webkit-progress-value { background: var(--accent); border-radius: 999px; }
+.wm-bar::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
 .provider-list { list-style: none; display: grid; gap: 8px; margin-top: 16px; }
 .provider-item {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px;
