@@ -4608,7 +4608,11 @@ ctxMenu.addEventListener("click", async (e) => {
   }
 });
 
-document.addEventListener("click", closeCtx);
+/* Clicking anything else closes the menu; clicking inside the theme panel is
+   someone still setting a colour, so that must not count as going away. */
+document.addEventListener("click", e => {
+  if (!e.target.closest(".ctx-menu")) closeCtx();
+});
 window.addEventListener("resize", closeCtx);
 window.addEventListener("scroll", closeCtx, true);
 

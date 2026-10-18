@@ -1254,6 +1254,9 @@ button:disabled { opacity: .5; cursor: default; }
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--surface); box-shadow: var(--shadow); font-size: 13px;
 }
+/* display:grid above would otherwise beat the hidden attribute, and a closed
+   menu would stay on screen taking clicks away from the page */
+.ctx-menu[hidden] { display: none; }
 .ctx-item {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 9px; border: 0; border-radius: 8px; background: none;
