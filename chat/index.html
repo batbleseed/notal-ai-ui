@@ -319,6 +319,16 @@
             <input type="text" id="edDesc" placeholder="One line for the card" />
           </label>
         </div>
+        <div class="ft-pub">
+          <label class="ft-creator">Your name
+            <input type="text" id="edCreator" placeholder="Shown as the creator on the card" autocomplete="name" />
+          </label>
+          <label class="ft-shot">
+            <span>Card photo</span>
+            <input type="file" id="edShot" accept="image/*" />
+            <small id="edShotNote">Optional. Without one the card draws a live preview of the extension itself.</small>
+          </label>
+        </div>
         <div class="ed-start">
           <span class="ed-start-label">Start from an example:</span>
           <button type="button" class="ed-chip" data-starter="theme">Colour theme</button>
@@ -407,6 +417,16 @@
             <div id="ftPreview"></div>
             <figcaption>How it will look in the library</figcaption>
           </figure>
+        </div>
+        <div class="ft-pub">
+          <label class="ft-creator">Your name
+            <input type="text" id="ftCreator" placeholder="Shown as the creator on the card" autocomplete="name" />
+          </label>
+          <label class="ft-shot">
+            <span>Card photo</span>
+            <input type="file" id="ftShot" accept="image/*" />
+            <small id="ftShotNote">Optional. Without one the card draws a live preview of the extension itself.</small>
+          </label>
         </div>
         <div class="ed-actions">
           <button type="button" class="ghost-btn" id="ftPublish">Publish to library</button>
@@ -654,31 +674,62 @@
             <details class="adv">
               <summary>Library database (Supabase)</summary>
               <div class="adv-body">
-                <p class="adv-lead">Point the Extensions panel at a real Supabase table and the Library group lists what that database holds, with an Install button on every entry. Without it the panel shows a curated demo library. In your Supabase project's SQL editor, create the table once:</p>
-                <pre class="ext-sql">create table extensions (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  descr text,
-  prompt text default '',
-  ui jsonb,
-  created_at timestamptz default now()
-);
-alter table extensions enable row level security;
-create policy "read only" on extensions for select using (true);
--- the editor's Publish button needs this one too:
-create policy "anyone can publish" on extensions
-  for insert to anon with check (true);</pre>
-                <div class="pf-fields">
-                  <label>Project URL
-                    <input type="text" id="libUrlInput" placeholder="https://xxxx.supabase.co" autocomplete="off" />
-                  </label>
-                  <label>Anon key
-                    <input type="password" id="libKeyInput" placeholder="Public anon key — read access only" autocomplete="off" />
-                  </label>
-                </div>
-                <div class="pf-actions">
-                  <button class="ghost-btn" type="button" id="libSaveBtn">Save connection</button>
-                </div>
+                <p class="adv-lead">The Library group reads a Supabase table whose address and public anon key are fixed in <code>app.js</code>, so there is nothing to connect here. Run this once in that project's SQL editor. It adds the columns the cards show and replaces open writes with three guarded functions, so publishing is capped at ten per maker and only a maker can change or withdraw what they published.</p>
+                <pre class="ext-sql">alter table extensions
+  add column if not exists creator text,
+  add column if not exists screenshot text,
+  add column if not exists claim text;
+
+-- this key may read the table, and write only through the functions below
+revoke insert, update, delete on extensions from anon;
+-- and the secret a maker holds must not be readable through the open select
+revoke select (claim) on extensions from anon;
+
+create or replace function publish_extension(
+  which_row uuid, ext_name text, ext_descr text, ext_prompt text,
+  ext_ui jsonb, ext_creator text, ext_shot text, the_secret text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if the_secret is null or length(the_secret) &lt; 16 then
+    raise exception 'a maker secret is required';
+  end if;
+  if (select count(*) from extensions where claim = the_secret) &gt;= 10 then
+    raise exception 'ten published extensions is the limit for one maker';
+  end if;
+  insert into extensions (id, name, descr, prompt, ui, creator, screenshot, claim)
+  values (which_row, ext_name, ext_descr, ext_prompt, ext_ui,
+          ext_creator, ext_shot, the_secret);
+end $$;
+
+create or replace function revise_extension(
+  which_row uuid, ext_name text, ext_descr text, ext_prompt text,
+  ext_ui jsonb, ext_creator text, ext_shot text, the_secret text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from extensions
+                 where id = which_row and claim = the_secret) then
+    raise exception 'only the maker can change this extension';
+  end if;
+  update extensions
+  set name = ext_name, descr = ext_descr, prompt = ext_prompt, ui = ext_ui,
+      creator = ext_creator, screenshot = ext_shot
+  where id = which_row;
+end $$;
+
+create or replace function withdraw_extension(which_row uuid, the_secret text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from extensions
+                 where id = which_row and claim = the_secret) then
+    raise exception 'only the maker can withdraw this extension';
+  end if;
+  delete from extensions where id = which_row;
+end $$;
+
+grant execute on function publish_extension(uuid, text, text, text, jsonb, text, text, text) to anon;
+grant execute on function revise_extension(uuid, text, text, text, jsonb, text, text, text) to anon;
+grant execute on function withdraw_extension(uuid, text) to anon;</pre>
+                <p class="adv-lead">The secret lives in this browser's stored state, which is what lets its Publish, Edit and Delete buttons work. Wipe that storage and those rows stay in the library, unowned — you would manage them in Supabase's own table editor. Rows published before this ran have no secret at all, so they read as everyone's and no one's.</p>
               </div>
             </details>
           </section>

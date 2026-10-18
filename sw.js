@@ -1,5 +1,5 @@
 /* Notal AI service worker — offline shell for the landing page and the app. */
-const CACHE = "notal-ai-v11";
+const CACHE = "notal-ai-v14";
 const CORE = [
   "./",
   "./index.html",
@@ -18,7 +18,10 @@ const CORE = [
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
+  /* addAll would happily store whatever the HTTP cache already held, which is
+     how a fixed stylesheet stayed invisible for a whole release */
+  const reqs = CORE.map(href => new Request(href, { cache: "reload" }));
+  e.waitUntil(caches.open(CACHE).then(c => Promise.all(reqs.map(r => c.put(r, fetch(r)))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (e) => {
@@ -37,7 +40,7 @@ self.addEventListener("fetch", (e) => {
   if (req.mode === "navigate") {
     e.respondWith((async () => {
       try {
-        const res = await fetch(req);
+        const res = await fetch(new Request(req, { cache: "reload" }));
         const c = await caches.open(CACHE);
         c.put(req, res.clone());
         return res;
@@ -64,7 +67,10 @@ self.addEventListener("fetch", (e) => {
 
   e.respondWith((async () => {
     try {
-      const res = await fetch(req);
+      /* cache:'reload' — a plain fetch(req) can be answered by the HTTP cache
+         without touching the network at all, and then "fresh from the network"
+         is only a comment */
+      const res = await fetch(new Request(req, { cache: "reload" }));
       if (res.ok) (await caches.open(CACHE)).put(req, res.clone());
       return res;
     } catch {

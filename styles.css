@@ -1115,6 +1115,10 @@ button:disabled { opacity: .5; cursor: default; }
 .lib-foot { display: flex; align-items: center; gap: 8px; min-height: 30px; }
 .lib-foot .switch { margin-right: auto; }
 .lib-foot .ghost-btn:disabled { opacity: .5; cursor: default; }
+.lib-foot .ghost-btn.danger { color: var(--danger, #b3423a); border-color: color-mix(in srgb, var(--danger, #b3423a) 40%, var(--border)); }
+/* a photo the publisher brought, cropped into the same frame as a live mock */
+.ext-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lib-by { font-size: 11.5px; font-weight: 600; color: var(--text-faint); margin-top: -2px; }
 
 .ext-form { display: grid; gap: 10px; }
 .ext-form label { display: grid; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-soft); }
@@ -1234,6 +1238,18 @@ button:disabled { opacity: .5; cursor: default; }
 .feature-grid .ext-form label { display: grid; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-soft); }
 .feat-shot { display: grid; gap: 7px; justify-items: center; }
 .feat-shot figcaption { font-size: 11.5px; color: var(--text-faint); text-align: center; max-width: 260px; }
+/* who made it, and the picture the card will carry */
+.ft-pub { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; margin-top: 4px; }
+.ft-pub label { display: grid; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-soft); min-width: 0; }
+.ft-pub input[type="text"] {
+  padding: 8px 10px; font-size: 13.5px; font-weight: 400; color: var(--text);
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none;
+  min-width: 0; transition: border-color .15s;
+}
+.ft-pub input[type="text"]:focus { border-color: var(--accent); box-shadow: var(--ring); }
+.ft-pub input[type="file"] { font-size: 12px; font-weight: 400; color: var(--text-soft); }
+.ft-pub small { font-size: 11.5px; font-weight: 400; color: var(--text-faint); line-height: 1.4; }
+@media (max-width: 620px) { .ft-pub { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .feature-grid { grid-template-columns: 1fr; } }
 
 /* ---------- editor mode ---------- */
@@ -1272,6 +1288,8 @@ body.editing .greeting, body.editing .msg, body.editing .composer { cursor: move
   border-radius: 999px; background: var(--accent); color: #fff;
   font-size: 11px; font-weight: 700; white-space: nowrap;
 }
+/* a part flush with the top of the window has no room for its name above it */
+.ed-box-label.inverted { top: 5px; }
 .ed-handle {
   position: absolute; right: -7px; bottom: -7px; width: 16px; height: 16px;
   border: 1.5px solid var(--accent); border-radius: 4px;

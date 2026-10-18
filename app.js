@@ -205,8 +205,7 @@ const BUILTIN_EXTENSIONS = [
       js: "const bar = document.querySelector('.topbar');\nif (bar && !document.getElementById('ext-clock-time')) {\n  const s = document.createElement('span');\n  s.id = 'ext-clock-time';\n  bar.append(s);\n  const tick = () => { s.textContent = new Date().toLocaleTimeString(); };\n  tick();\n  setInterval(tick, 1000);\n}" } },
 ];
 
-/* What the Library group shows until a Supabase table is connected in
-   Settings → Extensions — and again if that table can't be reached. */
+/* What the Library group shows when the shared table can't be reached. */
 const EXT_LIBRARY_SEED = [
   { libId: "lib-focus", name: "Focus frame", desc: "The sidebar dims until you reach for it.",
     prompt: "", ui: { css: ".sidebar { opacity: .72; transition: opacity .25s; }\n.sidebar:hover { opacity: 1; }", html: "", js: "" } },
@@ -219,6 +218,13 @@ const EXT_LIBRARY_SEED = [
   { libId: "lib-careful", name: "Careful answers", desc: "Names the assumption each answer rests on.",
     prompt: "Before answering, state the one assumption your answer depends on most; if it is wrong, say how the answer would change.", ui: null },
 ];
+
+/* The shared library is one Supabase table reached over REST. This is the
+   public anon key, and there is deliberately no settings field to type one in:
+   the key is only ever as capable as the table lets it be, which is a read plus
+   three guarded functions. */
+const LIB_URL = "https://bgpptjdqosmzxbctclkv.supabase.co";
+const LIB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJncHB0amRxb3NtenhiY3RjbGt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNDM3NzYsImV4cCI6MjEwNzgxOTc3Nn0.evRfV8i4qYQ36Hfn23XkHLDoozq4wGgEOujThLDE0t8";
 
 let state = Object.assign({
   conversations: [],
@@ -242,8 +248,10 @@ let state = Object.assign({
   mode: "chat",
   relayVerified: null,
   advanced: {},
-  libUrl: "https://bgpptjdqosmzxbctclkv.supabase.co",
-  libKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJncHB0amRxb3NtenhiY3RjbGt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNDM3NzYsImV4cCI6MjEwNzgxOTc3Nn0.evRfV8i4qYQ36Hfn23XkHLDoozq4wGgEOujThLDE0t8",
+  /* the name shown as a card's creator, and the secrets that prove this
+     browser published the rows it can still change */
+  creatorName: "",
+  claims: {},
 }, store.load());
 
 const GENERIC_MODEL = { id: "notal-generic", name: "notal generic", provider: "Notal built-in" };
@@ -264,8 +272,8 @@ if (!Array.isArray(state.extensions)) state.extensions = [];
 for (const b of BUILTIN_EXTENSIONS)
   if (!state.extensions.some(x => x.id === b.id))
     state.extensions.push({ ...b, builtin: true, enabled: false });
-if (typeof state.libUrl !== "string") state.libUrl = "";
-if (typeof state.libKey !== "string") state.libKey = "";
+if (typeof state.creatorName !== "string") state.creatorName = "";
+if (!state.claims || typeof state.claims !== "object") state.claims = {};
 if (!state.projects.some(p => p.id === state.activeProject)) state.activeProject = null;
 if (state.mode !== "chat" && state.mode !== "coding") state.mode = "chat";
 if (!state.advanced || typeof state.advanced !== "object") state.advanced = {};
@@ -2337,8 +2345,6 @@ function openSettings(tab = "general") {
   renderProviders();
   renderRelayUI();
   renderDiagnostics();
-  $("#libUrlInput").value = state.libUrl || "";
-  $("#libKeyInput").value = state.libKey || "";
   els.overlay.hidden = false;
   motion.reveal(els.settingsModal);
   switchTab(tab);
@@ -3482,20 +3488,30 @@ els.libStatus = $("#libStatus");
 let libResult = null; // { entries, source, count? } — filled by loadLibrary()
 
 async function loadLibrary() {
-  const url = (state.libUrl || "").trim().replace(/\/+$/, "");
-  const key = (state.libKey || "").trim();
-  if (!url || !key) return { entries: EXT_LIBRARY_SEED, source: "demo" };
   try {
-    const res = await fetch(`${url}/rest/v1/extensions?select=name,descr,prompt,ui,created_at`, {
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
-    });
+    /* `claim` is deliberately not selected: the read is open to anyone, and a
+       row stays writable only by whoever still holds its secret. */
+    const res = await fetch(
+      `${LIB_URL}/rest/v1/extensions?select=id,name,descr,prompt,ui,created_at,creator,screenshot&order=created_at.desc`,
+      { headers: { apikey: LIB_KEY, Authorization: `Bearer ${LIB_KEY}` } },
+    );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rows = await res.json();
+    const live = new Set(rows.map(r => r.id));
+    /* a row removed elsewhere must not keep costing one of your ten slots */
+    let pruned = false;
+    for (const id of Object.keys(state.claims)) {
+      if (!live.has(id)) { delete state.claims[id]; pruned = true; }
+    }
+    if (pruned) save();
     return {
-      source: "supabase", count: rows.length,
+      source: "supabase", count: rows.length, mine: Object.keys(state.claims).length,
       entries: rows.map(r => ({
-        libId: `db:${r.name}|${r.created_at || ""}`,
+        libId: `db:${r.id}`,
+        rowId: r.id,
         name: r.name, desc: r.descr || "", prompt: r.prompt || "", ui: r.ui || null,
+        creator: r.creator || "", screenshot: r.screenshot || "",
+        mine: !!state.claims[r.id],
       })),
     };
   } catch (err) {
@@ -3513,17 +3529,15 @@ function renderLibrary() {
   }
   els.libStatus.textContent = libResult.source === "supabase"
     ? libResult.count
-      ? `${libResult.count} ${libResult.count === 1 ? "entry" : "entries"} from your Supabase table.`
-      : "Connected to your Supabase table — it is empty. Add rows in its SQL editor."
-    : libResult.source === "offline"
-      ? "Could not reach the database — showing the demo library."
-      : "Demo library. Connect a Supabase table in Settings → Extensions for the real one.";
+      ? `${libResult.count} ${libResult.count === 1 ? "entry" : "entries"} in the library — ${myPublications()} of ${LIB_LIMIT} yours.`
+      : "Connected to the library — it is empty. Publish something from Extension Maker."
+    : "Could not reach the library — showing the built-in demo set.";
   const installed = new Set(state.extensions.map(x => x.libId).filter(Boolean));
   for (const e of libResult.entries) {
     const li = document.createElement("li");
     li.className = "lib-card";
 
-    li.append(extPreview(e.ui));
+    li.append(extPreview(e.ui, e.screenshot));
 
     const h = document.createElement("strong");
     h.className = "lib-name";
@@ -3542,6 +3556,16 @@ function renderLibrary() {
       || (e.ui && (e.ui.css || e.ui.html || e.ui.js) ? "A UI extension." : "A prompt add-on.");
     li.append(p);
 
+    if (e.creator || e.mine) {
+      const by = document.createElement("small");
+      by.className = "lib-by";
+      by.textContent = e.creator ? `by ${e.creator}` : "by you";
+      li.append(by);
+    }
+
+    const foot = document.createElement("div");
+    foot.className = "lib-foot";
+
     const btn = document.createElement("button");
     btn.type = "button"; btn.className = "ghost-btn";
     if (installed.has(e.libId)) {
@@ -3559,12 +3583,47 @@ function renderLibrary() {
         toast(`"${e.name}" installed — switch it on above.`);
       });
     }
-    const foot = document.createElement("div");
-    foot.className = "lib-foot";
     foot.append(btn);
+
+    /* only the install that holds a row's secret offers to change it, and the
+       code editor is the door for UI rows — a feature has no UI to edit */
+    if (e.mine && e.ui) {
+      const edit = document.createElement("button");
+      edit.type = "button"; edit.className = "ghost-btn";
+      edit.textContent = "Edit";
+      edit.addEventListener("click", () => editLibraryEntry(e));
+      foot.append(edit);
+    }
+    if (e.mine) {
+      const del = document.createElement("button");
+      del.type = "button"; del.className = "ghost-btn danger";
+      del.textContent = "Delete";
+      del.addEventListener("click", () => deleteLibraryRow(e));
+      foot.append(del);
+    }
+
     li.append(foot);
     els.extLibraryList.append(li);
   }
+}
+
+/* Editing something you already published opens your installed copy of it and
+   remembers the row, so the next Publish updates that row instead of shipping
+   a second entry under the same name. */
+function editLibraryEntry(e) {
+  let x = state.extensions.find(y => y.libId === e.libId);
+  if (!x) {
+    x = {
+      id: crypto.randomUUID(), libId: e.libId, name: e.name, desc: e.desc,
+      prompt: e.prompt || "", ui: e.ui || undefined, builtin: false, enabled: false,
+    };
+    state.extensions.push(x);
+  }
+  x.pubId = e.rowId;
+  x.creator = e.creator || state.creatorName || "";
+  x.screenshot = e.screenshot || "";
+  save();
+  openExtEditor(x);
 }
 
 /* Switched-on UI extensions write into one style tag and one mount point, so
@@ -3599,7 +3658,7 @@ function extRow(x, deletable) {
   const li = document.createElement("li");
   li.className = "lib-card" + (x.enabled ? "" : " off");
 
-  li.append(extPreview(x.ui));
+  li.append(extPreview(x.ui, x.screenshot));
 
   const h = document.createElement("strong");
   h.className = "lib-name";
@@ -3683,6 +3742,7 @@ function renderExtensions() {
 const edBuffers = { css: "", html: "", js: "" };
 let edLang = "css";
 let edTarget = null; // the extension being edited, null while composing a new one
+let edShot = ""; // a photo chosen for this extension's library card
 
 function edHighlight() {
   $("#edHl").replaceChildren(...syntaxNodes(edBuffers[edLang] + "\n", edLang));
@@ -3708,6 +3768,10 @@ function openExtEditor(x) {
   $("#extEditorTitle").textContent = x ? `Edit — ${x.name}` : "New UI extension";
   $("#edName").value = x?.name || "";
   $("#edDesc").value = x?.desc || "";
+  $("#edCreator").value = x?.creator || state.creatorName || "";
+  edShot = x?.screenshot || "";
+  $("#edShot").value = "";
+  edShotNote();
   edBuffers.css = x?.ui?.css || "";
   edBuffers.html = x?.ui?.html || "";
   edBuffers.js = x?.ui?.js || "";
@@ -3887,53 +3951,137 @@ $("#edDownload").addEventListener("click", () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 });
 
-/* Publish writes an extension into the shared library, so the next person to
-   open Extensions finds it in their list. That is a write, and the anon key can
-   only do one if the table has an insert policy — Settings → Extensions prints
-   the single line that adds it. */
+/* A maker's identity is one secret per browser, written into every row this
+   browser publishes and never read back through the open select. Updates and
+   deletions hand it to Postgres again, and the guarded functions refuse any
+   call that does not match — so "only the maker can change it", and "ten
+   extensions to a name", are rules in the database rather than buttons we
+   chose to hide. Losing this browser's storage means losing the right to
+   change what you published; that is the trade for the rule meaning something. */
+const LIB_LIMIT = 10;
+
+async function libraryRpc(call, args) {
+  const res = await fetch(`${LIB_URL}/rest/v1/rpc/${call}`, {
+    method: "POST",
+    headers: {
+      apikey: LIB_KEY,
+      Authorization: `Bearer ${LIB_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    if (res.status === 401 || res.status === 403)
+      throw new Error("this key is not allowed to write to the library");
+    const m = /"message"\s*:\s*"([^"]+)"/.exec(detail) || /ERROR:\s+(.+)/.exec(detail);
+    throw new Error(m ? m[1].trim() : `HTTP ${res.status}`);
+  }
+  return res.text();
+}
+
+function myPublications() {
+  return Object.keys(state.claims).length;
+}
+
 let publishing = false;
 async function publishToLibrary(d, onDone) {
   if (publishing) return;
-  const url = (state.libUrl || "").trim().replace(/\/+$/, "");
-  const key = (state.libKey || "").trim();
-  if (!url || !key) {
-    toast("Publishing needs the library database — connect one in Settings → Extensions.");
+  const updating = !!d.rowId;
+  const rowId = updating ? d.rowId : crypto.randomUUID();
+  const secret = updating ? state.claims[d.rowId] : crypto.randomUUID();
+  if (!secret) {
+    toast("Only the maker can change that one — it was published from another browser.");
     return;
   }
+  if (!updating && myPublications() >= LIB_LIMIT) {
+    toast(`Ten published extensions is the limit for one maker — withdraw one first.`);
+    return;
+  }
+  const creator = d.creator || state.creatorName || "";
   publishing = true;
   document.querySelectorAll("#edPublish,#ftPublish").forEach(b => { b.disabled = true; });
   try {
-    const res = await fetch(`${url}/rest/v1/extensions`, {
-      method: "POST",
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify({ name: d.name, descr: d.desc, prompt: d.prompt || "", ui: d.ui || null }),
+    await libraryRpc(updating ? "revise_extension" : "publish_extension", {
+      which_row: rowId,
+      ext_name: d.name,
+      ext_descr: d.desc,
+      ext_prompt: d.prompt || "",
+      ext_ui: d.ui || null,
+      ext_creator: creator,
+      ext_shot: d.screenshot || "",
+      the_secret: secret,
     });
-    if (!res.ok) {
-      throw new Error(res.status === 401 || res.status === 403
-        ? "the table has no insert policy for this key yet"
-        : `HTTP ${res.status}`);
-    }
+    state.claims[rowId] = secret;
+    state.creatorName = creator;
+    save();
     libResult = null; // the next library read shows the new row
     renderExtensions();
-    onDone?.();
-    toast(`"${d.name}" is published to the library.`);
+    onDone?.(rowId);
+    toast(updating
+      ? `"${d.name}" updated in the library.`
+      : `"${d.name}" is published — ${myPublications()} of ${LIB_LIMIT}.`);
   } catch (err) {
     console.warn("Publish failed:", err);
-    toast(`Could not publish — ${err.message}. Add the insert policy in Settings → Extensions.`);
+    toast(`Could not publish — ${err.message}`);
   } finally {
     publishing = false;
     document.querySelectorAll("#edPublish,#ftPublish").forEach(b => { b.disabled = false; });
   }
 }
 
+async function deleteLibraryRow(entry) {
+  const secret = state.claims[entry.rowId];
+  if (!secret) {
+    toast("Only the maker can withdraw that one.");
+    return;
+  }
+  if (!confirm(`Remove "${entry.name}" from the library? Anyone who already installed it keeps their copy.`)) return;
+  try {
+    await libraryRpc("withdraw_extension", { which_row: entry.rowId, the_secret: secret });
+    delete state.claims[entry.rowId];
+    save();
+    libResult = null;
+    renderExtensions();
+    toast(`"${entry.name}" is out of the library.`);
+  } catch (err) {
+    console.warn("Withdraw failed:", err);
+    toast(`Could not withdraw — ${err.message}`);
+  }
+}
+
+function edShotNote() {
+  $("#edShotNote").textContent = edShot
+    ? "Using your image. Clear the field to go back to the live preview."
+    : SHOT_NOTE;
+}
+
+$("#edShot").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) { edShot = ""; edShotNote(); return; }
+  try {
+    edShot = await shotFromFile(file);
+    edShotNote();
+  } catch (err) {
+    console.warn("Card photo rejected:", err);
+    toast("That image could not be read — try a PNG or JPG.");
+  }
+});
+
 $("#edPublish").addEventListener("click", () => {
+  const creator = $("#edCreator").value.trim();
+  if (!creator) {
+    toast("Publishing needs your name on the card.");
+    $("#edCreator").focus();
+    return;
+  }
   const { name, desc, ui } = edCollect();
-  publishToLibrary({ name, desc, prompt: "", ui });
+  publishToLibrary({
+    name, desc, prompt: "", ui,
+    rowId: edTarget?.pubId,
+    creator,
+    screenshot: edShot,
+  }, (rowId) => { if (edTarget) edTarget.pubId = rowId; });
 });
 
 /* ----- the extension preview -----
@@ -3977,9 +4125,16 @@ const SHOT_PAGE = `
   </div>
 </div>`;
 
-function extPreview(ui) {
+function extPreview(ui, shot) {
   const wrap = document.createElement("div");
   wrap.className = "ext-shot";
+  if (shot) {
+    /* a photo the publisher brought, trusted as an image and nothing else */
+    const img = document.createElement("img");
+    img.alt = ""; img.decoding = "async"; img.src = shot;
+    wrap.append(img);
+    return wrap;
+  }
   const f = document.createElement("iframe");
   f.setAttribute("sandbox", "allow-scripts");
   f.setAttribute("title", "Extension preview");
@@ -3991,15 +4146,34 @@ function extPreview(ui) {
   return wrap;
 }
 
+/* A pasted or chosen image becomes a card photo: drawn down to the card's own
+   width on a canvas, so a phone screenshot arrives as tens of kilobytes
+   instead of megabytes, and the library stays a table rather than a bucket. */
+async function shotFromFile(file) {
+  const bmp = await createImageBitmap(file);
+  const w = Math.min(640, bmp.width);
+  const h = Math.round(bmp.height * (w / bmp.width));
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").drawImage(bmp, 0, 0, w, h);
+  bmp.close();
+  return c.toDataURL("image/jpeg", 0.82);
+}
+
 /* ---------- Extension Maker: two doors ---------- */
 const makerPick = $("#extMakerPick");
 const nameDialog = $("#extNameDialog");
 let nameKind = "feature"; // "feature" is a prompt add-on, "ui" comes from editor mode
 let pendingUi = null;     // the CSS editor mode just produced
+let pendingShot = "";     // a photo chosen for the library card
+const SHOT_NOTE = "Optional. Without one the card draws a live preview of the extension itself.";
 
 function openNameDialog(kind, ui) {
   nameKind = kind;
   pendingUi = ui || null;
+  pendingShot = "";
+  $("#ftShot").value = "";
+  $("#ftShotNote").textContent = SHOT_NOTE;
   $("#featureTitle").textContent = kind === "feature" ? "New feature" : "New UI extension";
   $("#featureSub").textContent = kind === "feature"
     ? "Say what it should do. While its switch is on, those words ride along with every message you send."
@@ -4008,11 +4182,29 @@ function openNameDialog(kind, ui) {
   $("#ftName").value = "";
   $("#ftDesc").value = "";
   $("#ftPrompt").value = "";
-  $("#ftPreview").replaceChildren(extPreview(nameKind === "feature" ? null : pendingUi));
+  $("#ftCreator").value = state.creatorName || "";
+  showNameShot();
   nameDialog.hidden = false;
   motion.reveal(nameDialog.querySelector(".modal"));
   $("#ftName").focus();
 }
+
+function showNameShot() {
+  $("#ftPreview").replaceChildren(extPreview(nameKind === "feature" ? null : pendingUi, pendingShot));
+}
+
+$("#ftShot").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) { pendingShot = ""; showNameShot(); $("#ftShotNote").textContent = SHOT_NOTE; return; }
+  try {
+    pendingShot = await shotFromFile(file);
+    showNameShot();
+    $("#ftShotNote").textContent = "Using your image. Clear the field to go back to the live preview.";
+  } catch (err) {
+    console.warn("Card photo rejected:", err);
+    toast("That image could not be read — try a PNG or JPG.");
+  }
+});
 
 function closeNameDialog() { nameDialog.hidden = true; }
 
@@ -4050,6 +4242,8 @@ function nameCollect() {
       || (nameKind === "feature" ? "Your own feature." : "Your own UI extension."),
     prompt: nameKind === "feature" ? $("#ftPrompt").value.trim() : "",
     ui: nameKind === "feature" ? null : pendingUi,
+    creator: $("#ftCreator").value.trim(),
+    screenshot: pendingShot,
   };
 }
 
@@ -4072,6 +4266,11 @@ $("#ftSave").addEventListener("click", () => {
 $("#ftPublish").addEventListener("click", () => {
   const d = nameCollect();
   if (!d) return;
+  if (!d.creator) {
+    toast("Publishing needs your name on the card.");
+    $("#ftCreator").focus();
+    return;
+  }
   publishToLibrary(d, () => {
     state.extensions.push({ id: crypto.randomUUID(), ...d, builtin: false, enabled: true });
     save();
@@ -4114,17 +4313,39 @@ function applyEdit(sel) {
     el.style.position = e.left || e.top ? "relative" : "";
     el.style.left = e.left ? `${e.left}px` : "";
     el.style.top = e.top ? `${e.top}px` : "";
+    /* several parts are capped by their own max-width, so a drag you can see
+       on the box produced no change on the page at all */
+    el.style.maxWidth = e.width ? "none" : "";
     el.style.width = e.width ? `${e.width}px` : "";
+    /* a flex child is stretched by its container and pays no attention to a
+       height you dragged, so take it out of the stretch first */
+    el.style.flex = e.height ? "0 0 auto" : "";
     el.style.height = e.height ? `${e.height}px` : "";
   }
 }
 
+/* The box follows the element, but the grab handle lives at its bottom-right
+   corner — so a full-height part like the sidebar parked the handle below the
+   window edge, where it could be neither seen nor pressed. The drawn box is
+   clamped to what is actually on screen; the drag still measures the element's
+   true size, so the CSS keeps the part you cannot see. */
+const ED_GUTTER = 10;
 function moveEdBox() {
   if (!editing || !edHover || !edHover.el.isConnected) { edBox.hidden = true; return; }
   const r = edHover.el.getBoundingClientRect();
+  if (r.right <= 0 || r.bottom <= 0 || r.left >= innerWidth || r.top >= innerHeight) {
+    edBox.hidden = true; // off screen entirely, like a closed sidebar
+    return;
+  }
+  const left = Math.min(Math.max(r.left, 1), innerWidth - ED_GUTTER * 2);
+  const top = Math.min(Math.max(r.top, 1), innerHeight - ED_GUTTER * 2);
+  const right = Math.max(left + 1, Math.min(r.right, innerWidth - ED_GUTTER));
+  const bottom = Math.max(top + 1, Math.min(r.bottom, innerHeight - ED_GUTTER));
   edBox.hidden = false;
-  edBox.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
-  edBox.querySelector(".ed-box-label").textContent = edHover.label;
+  edBox.style.cssText = `left:${left}px;top:${top}px;width:${right - left}px;height:${bottom - top}px`;
+  const label = edBox.querySelector(".ed-box-label");
+  label.textContent = edHover.label;
+  label.classList.toggle("inverted", top < 26);
 }
 
 function startEditorMode() {
@@ -4163,8 +4384,8 @@ function editorCss() {
     if (e.left || e.top) rules.push("position: relative");
     if (e.left) rules.push(`left: ${e.left}px`);
     if (e.top) rules.push(`top: ${e.top}px`);
-    if (e.width) rules.push(`width: ${e.width}px`);
-    if (e.height) rules.push(`height: ${e.height}px`);
+    if (e.width) rules.push("max-width: none", `width: ${e.width}px`);
+    if (e.height) rules.push("flex: 0 0 auto", `height: ${e.height}px`);
     if (rules.length) blocks.push(`${sel} {\n  ${rules.join(";\n  ")};\n}`);
   }
   return blocks.join("\n\n");
@@ -4277,17 +4498,6 @@ $("#extForm").addEventListener("submit", (e) => {
   save();
   renderExtensions();
   toast(`Extension "${name}" added and switched on.`);
-});
-
-$("#libSaveBtn").addEventListener("click", () => {
-  state.libUrl = $("#libUrlInput").value.trim();
-  state.libKey = $("#libKeyInput").value.trim();
-  save();
-  libResult = null; // the next panel open reads the new source
-  renderExtensions();
-  toast(state.libUrl && state.libKey
-    ? "Library pointed at your Supabase table."
-    : "Library connection cleared — back to the demo list.");
 });
 
 /* ---------- global dismiss ---------- */
