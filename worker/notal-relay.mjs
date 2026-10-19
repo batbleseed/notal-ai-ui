@@ -11,6 +11,10 @@
  * response, status included. It can also read one public web page for the app
  * (POST /browse), because sites send no CORS header for their own HTML, and it
  * can carry the two GitHub device-flow calls (POST /github) for the same reason.
+ * POST /google carries Google's device-flow steps too — not for CORS, which
+ * Google answers happily, but because Google's polling call requires a client
+ * secret a browser must never hold. That secret lives in this worker's own
+ * configuration, is added to the form on the way out, and is never sent back.
  *
  * Deploy: Cloudflare dashboard → Workers → Create → paste this file, or
  * `wrangler deploy` with the included wrangler.toml.
@@ -331,6 +335,89 @@ async function handleGithub(request, cors) {
   return json(payload, { status: answer.status, headers: { ...cors, "x-relay": "notal" } });
 }
 
+/* ---------- Google sign-in, where the secret never leaves here ----------
+   Google's device flow is not GitHub's. Its own docs mark client_secret Required
+   on the polling call, so a browser tab cannot finish the flow on its own no
+   matter what headers the endpoint sends — and measured here, Google's OAuth and
+   API endpoints *do* answer a browser cross-origin, which is why only the three
+   token steps go through this relay while Gmail and Drive calls go direct.
+   The caller names the step and sends its own public client_id; the secret is
+   added here from the Worker's configuration and is never sent back out. Three
+   fixed URLs, a handful of field names, nothing stored: the token goes straight
+   to the tab that asked for it. */
+const GOOGLE_TIMEOUT_MS = 20_000;
+const GOOGLE_STEPS = {
+  device: {
+    url: "https://oauth2.googleapis.com/device/code",
+    fields: ["client_id", "scope"],
+  },
+  /* the poll is the one call Google insists carries the secret */
+  token: {
+    url: "https://oauth2.googleapis.com/token",
+    fields: ["client_id", "device_code", "grant_type"],
+    needsSecret: true,
+  },
+  // an access token lives an hour, so the refresh grant has to be reachable too;
+  // Google marks the secret optional there, and it is sent when this relay has one
+  refresh: {
+    url: "https://oauth2.googleapis.com/token",
+    fields: ["client_id", "refresh_token", "grant_type", "scope"],
+  },
+};
+
+async function handleGoogle(request, env, cors) {
+  let input;
+  try { input = await request.json(); }
+  catch { return refuse('google expects JSON like {"step":"device","fields":{"client_id":"…","scope":"…"}}', 400, cors); }
+
+  const step = GOOGLE_STEPS[input?.step];
+  if (!step) return refuse('google step must be "device", "token" or "refresh"', 400, cors);
+
+  const given = input.fields || {};
+  if (typeof given !== "object" || Array.isArray(given))
+    return refuse("google fields must be an object of strings", 400, cors);
+
+  const form = new URLSearchParams();
+  for (const name of step.fields) {
+    const value = given[name];
+    if (value === undefined || value === null || value === "") continue;
+    if (typeof value !== "string" || value.length > MAX_FIELD_LEN)
+      return refuse(`google field "${name}" is not a short string`, 400, cors);
+    form.set(name, value);
+  }
+  if (!form.get("client_id")) return refuse("google needs a client_id", 400, cors);
+
+  /* the caller cannot send a secret even if it wants to — client_secret is not on
+     any of the lists above, so the only one that reaches Google is this Worker's */
+  const secret = env?.GOOGLE_CLIENT_SECRET || "";
+  if (step.needsSecret && !secret)
+    return refuse("this relay has no Google client secret, so Google would refuse the poll. Set GOOGLE_CLIENT_SECRET for the worker, or sign in from Notal AI Studio, which keeps one on this machine.", 501, cors);
+  if (secret) form.set("client_secret", secret);
+
+  let answer;
+  try {
+    answer = await fetchToHeaders(step.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "application/json",
+      },
+      body: form.toString(),
+    }, GOOGLE_TIMEOUT_MS);
+  } catch (err) {
+    const reason = err?.name === "TimeoutError" ? "timed out" : "could not be reached";
+    return refuse(`Google ${reason}`, 502, cors);
+  }
+
+  /* like GitHub, Google answers an error with a 200 and an error field, and the
+     app has to read that field to know whether to keep polling. */
+  const text = await answer.text();
+  let payload;
+  try { payload = JSON.parse(text); }
+  catch { payload = Object.fromEntries(new URLSearchParams(text)); }
+  return json(payload, { status: answer.status, headers: { ...cors, "x-relay": "notal" } });
+}
+
 export default {
   async fetch(request, env) {
     const cors = corsHeaders(request, env);
@@ -339,9 +426,11 @@ export default {
     if (request.method === "OPTIONS")
       return new Response(null, { status: 204, headers: cors });
 
+    /* a caller can ask what this relay is actually able to do, rather than
+       finding out by failing: google is only true when the secret is set */
     if (pathname === "/health")
-      return json({ ok: true, relay: "notal", hosts: ALLOWED_HOSTS.size, browse: true, github: true },
-        { headers: cors });
+      return json({ ok: true, relay: "notal", hosts: ALLOWED_HOSTS.size, browse: true, github: true,
+        google: Boolean(env?.GOOGLE_CLIENT_SECRET) }, { headers: cors });
 
     if (pathname === "/browse") {
       if (request.method !== "POST")
@@ -355,8 +444,14 @@ export default {
       return handleGithub(request, cors);
     }
 
+    if (pathname === "/google") {
+      if (request.method !== "POST")
+        return json({ error: { message: "google sign-in is a POST endpoint" } }, { status: 405, headers: cors });
+      return handleGoogle(request, env, cors);
+    }
+
     if (pathname !== "/relay" || request.method !== "POST")
-      return json({ error: { message: "unknown endpoint — use POST /relay, POST /browse, POST /github or GET /health" } },
+      return json({ error: { message: "unknown endpoint — use POST /relay, POST /browse, POST /github, POST /google or GET /health" } },
         { status: 404, headers: cors });
 
     return handleRelay(request, env, cors);

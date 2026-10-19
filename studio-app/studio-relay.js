@@ -9,6 +9,8 @@
      POST /relay    forward one provider call, body untouched, stream preserved
      POST /browse   read one public page and hand the HTML back
      POST /github   carry one GitHub device-flow call
+     POST /google   carry one Google device-flow step, adding the client secret
+                    this machine holds so the browser never has to
      GET  /health   say what this relay is
 
    Three things this does better than the hosted relay, because it is local:
@@ -258,8 +260,13 @@ async function handleOllama(req, res) {
 }
 
 function handleHealth(res, info) {
+  /* asked and answered truthfully: google is only true when this machine actually
+     holds the client secret the poll needs */
+  let hasGoogle = false;
+  try { hasGoogle = Boolean(googleSecret()); } catch { hasGoogle = false; }
   json(res, 200, {
-    ok: true, relay: "notal", browse: true, github: true, hosts: ALLOWED_HOSTS.size,
+    ok: true, relay: "notal", browse: true, github: true, google: hasGoogle,
+    hosts: ALLOWED_HOSTS.size,
     studio: info, "x-notal-relay": "studio",
   });
 }
@@ -338,4 +345,103 @@ async function handleGithub(req, res) {
   return json(res, answer.status, payload);
 }
 
-module.exports = { handleRelay, handleBrowse, handleGithub, handleOllama, handleHealth, json };
+module.exports = { handleRelay, handleBrowse, handleGithub, handleGoogle, handleOllama, handleHealth, json };
+
+/* ---------- Google sign-in, where the secret stays on this machine ----------
+   Google's device flow differs from GitHub's in one load-bearing way: its own
+   docs mark client_secret Required on the polling call. Unlike GitHub its OAuth
+   endpoints do answer a browser cross-origin, so the wall here is not CORS but
+   the secret itself — and a secret a browser holds is not a secret. So this
+   route is the place it lives: read off disk, added to the form on the way out,
+   never sent back to the caller.
+
+   Put the value in GOOGLE_CLIENT_SECRET, either in the environment Studio is
+   launched with or on the first line of
+     ~/.config/notal-ai-studio/google_secret   (Linux)
+     %APPDATA%\notal-ai-studio\google_secret   (Windows)
+     ~/Library/Application Support/notal-ai-studio/google_secret   (macOS)
+   A file rather than only an environment variable because a desktop app is
+   usually opened from a dock or a double-click, which inherits no shell. */
+const GOOGLE_STEPS = {
+  device: {
+    url: "https://oauth2.googleapis.com/device/code",
+    fields: ["client_id", "scope"],
+  },
+  /* the poll is the call Google insists carries the secret */
+  token: {
+    url: "https://oauth2.googleapis.com/token",
+    fields: ["client_id", "device_code", "grant_type"],
+    needsSecret: true,
+  },
+  // an access token lives an hour, so the refresh grant has to be reachable too;
+  // Google marks the secret optional there, and it is sent when this relay has one
+  refresh: {
+    url: "https://oauth2.googleapis.com/token",
+    fields: ["client_id", "refresh_token", "grant_type", "scope"],
+  },
+};
+const GOOGLE_TIMEOUT_MS = 20_000;
+
+function googleSecret() {
+  const fromEnv = String(process.env.GOOGLE_CLIENT_SECRET || "").trim();
+  if (fromEnv) return fromEnv;
+  const dir = process.env.XDG_CONFIG_HOME
+    || (process.platform === "win32" ? process.env.APPDATA : undefined)
+    || require("path").join(require("os").homedir(),
+      process.platform === "darwin" ? "Library/Application Support" : ".config");
+  const file = require("fs").readFileSync(require("path").join(dir,
+    "notal-ai-studio", "google_secret"), "utf8");
+  return String(file).split(/\r?\n/)[0].trim();
+}
+
+async function handleGoogle(req, res) {
+  let input;
+  try { input = await readJsonBody(req); }
+  catch { return refuse(res, 'google expects JSON like {"step":"device","fields":{"client_id":"…","scope":"…"}}', 400); }
+
+  const step = GOOGLE_STEPS[input?.step];
+  if (!step) return refuse(res, 'google step must be "device", "token" or "refresh"', 400);
+
+  const given = input.fields || {};
+  if (typeof given !== "object" || Array.isArray(given))
+    return refuse(res, "google fields must be an object of strings", 400);
+
+  const form = new URLSearchParams();
+  for (const name of step.fields) {
+    const value = given[name];
+    if (value === undefined || value === null || value === "") continue;
+    if (typeof value !== "string" || value.length > MAX_FIELD_LEN)
+      return refuse(res, `google field "${name}" is not a short string`, 400);
+    form.set(name, value);
+  }
+  if (!form.get("client_id")) return refuse(res, "google needs a client_id", 400);
+
+  /* client_secret is on none of the lists above, so the only one that can reach
+     Google is the one this machine already holds */
+  let secret = "";
+  try { secret = googleSecret(); } catch { secret = ""; }
+  if (step.needsSecret && !secret)
+    return refuse(res, "this relay has no Google client secret, so Google would refuse the poll. Put it in GOOGLE_CLIENT_SECRET, or in the first line of notal-ai-studio/google_secret in your config folder.", 501);
+  if (secret) form.set("client_secret", secret);
+
+  let answer;
+  try {
+    answer = await fetchToHeaders(step.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "application/json",
+      },
+      body: form.toString(),
+    }, GOOGLE_TIMEOUT_MS);
+  } catch (err) {
+    const reason = err?.name === "TimeoutError" ? "timed out" : "could not be reached";
+    return refuse(res, `Google ${reason}`, 502);
+  }
+
+  const text = await answer.text();
+  let payload;
+  try { payload = JSON.parse(text); }
+  catch { payload = Object.fromEntries(new URLSearchParams(text)); }
+  return json(res, answer.status, payload);
+}
