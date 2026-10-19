@@ -1,4 +1,20 @@
 /* ============ Notal AI workspace ============ */
+
+/* ---------- reaching this page from a phone ----------
+   A phone opens a local app over the network as plain http, and plain http on
+   anything but localhost is not a secure context — where the browser withholds
+   crypto.randomUUID, which is how every id in this file is made. Its source of
+   randomness is still there, so the uuid is built from that instead of lost. */
+if (typeof crypto !== "undefined" && !crypto.randomUUID) {
+  crypto.randomUUID = () => {
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    const h = [...b].map(x => x.toString(16).padStart(2, "0")).join("");
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+  };
+}
+
 const $ = (sel) => document.querySelector(sel);
 
 const els = {
@@ -2089,8 +2105,13 @@ els.composer.addEventListener("submit", (e) => {
   sendMessage(els.input.value);
 });
 
+/* On a phone the only Enter key is the one on the soft keyboard, and there is no
+   shift beside it — so there it writes the line break you pressed it for, and the
+   send button does the sending. */
+const coarsePointer = window.matchMedia("(pointer: coarse)");
+
 els.input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
+  if (e.key === "Enter" && !e.shiftKey && !coarsePointer.matches) {
     e.preventDefault();
     sendMessage(els.input.value);
   }
@@ -2192,7 +2213,7 @@ let rec = null, recOn = false;
 els.micBtn.addEventListener("click", () => {
   if (DESKTOP) { toggleDesktopDictation(); return; }
   if (!SRClass) {
-    toast("Dictation needs Chrome or Edge.");
+    toast("Dictation needs Chrome or Edge — on a phone, the microphone key on your keyboard.");
     return;
   }
   if (recOn) { rec?.stop(); return; }
@@ -2432,11 +2453,23 @@ function setSidebar(open) {
   els.sidebar.classList.toggle("collapsed", !open);
   els.sidebarClose.title = open ? "Collapse sidebar" : "Show sidebar";
   els.sidebarClose.setAttribute("aria-label", els.sidebarClose.title);
-  state.sidebarOpen = open;
-  save();
+  /* below the drawer width the sidebar floats over the chat, and whether it was
+     open there is nobody's preference — remembering it would greet the next
+     desktop visit with a folded rail */
+  if (window.innerWidth > 860) { state.sidebarOpen = open; save(); }
 }
 els.sidebarClose.addEventListener("click", () => setSidebar(els.sidebar.classList.contains("collapsed")));
 els.sidebarOpen.addEventListener("click", () => setSidebar(true));
+
+/* The drawer floats over the chat, so tapping anything — a view, a conversation,
+   the page behind it — is also what puts it away. Only the search field, and the
+   two buttons that open and close the drawer themselves, are worth keeping it for. */
+document.addEventListener("click", (e) => {
+  if (window.innerWidth > 860) return;
+  if (els.sidebar.classList.contains("collapsed")) return;
+  if (e.target.closest("#sidebarOpen, #sidebarClose, .search-wrap")) return;
+  setSidebar(false);
+}, true);
 
 document.querySelectorAll(".nav-item").forEach(btn => {
   btn.addEventListener("click", () => setView(btn.dataset.view));
@@ -4237,11 +4270,19 @@ document.querySelectorAll("[data-starter]").forEach(b =>
 const ED_MIN = { w: 520, h: 340 };
 const edModal = $("#extEditor .ext-editor");
 
+/* A size remembered on a desk monitor cannot be trusted on a phone: the editor
+   is a modal, so the floor has to come down to whatever room the screen
+   actually has, or the grips end up off the edge with nothing left to grab. */
+function edClampAxis(v, pixels, min) {
+  const ceiling = Math.max(160, pixels - 24);
+  return Math.round(Math.min(Math.max(v, Math.min(min, ceiling)), ceiling));
+}
+
 function edApplySize() {
   const s = state.advanced.edSize;
   if (s && Number.isFinite(s.w) && Number.isFinite(s.h)) {
-    edModal.style.width = s.w + "px";
-    edModal.style.height = s.h + "px";
+    edModal.style.width = edClampAxis(s.w, innerWidth, ED_MIN.w) + "px";
+    edModal.style.height = edClampAxis(s.h, innerHeight, ED_MIN.h) + "px";
   } else {
     edModal.style.width = edModal.style.height = "";
   }
@@ -4258,11 +4299,10 @@ for (const grip of document.querySelectorAll(".ed-grip")) {
   });
   grip.addEventListener("pointermove", (e) => {
     if (!edDrag) return;
-    const maxW = innerWidth - 40, maxH = innerHeight - 40;
     if (edDrag.axes !== "s")
-      edModal.style.width = Math.min(maxW, Math.max(ED_MIN.w, edDrag.w + e.clientX - edDrag.x)) + "px";
+      edModal.style.width = edClampAxis(edDrag.w + e.clientX - edDrag.x, innerWidth, ED_MIN.w) + "px";
     if (edDrag.axes !== "e")
-      edModal.style.height = Math.min(maxH, Math.max(ED_MIN.h, edDrag.h + e.clientY - edDrag.y)) + "px";
+      edModal.style.height = edClampAxis(edDrag.h + e.clientY - edDrag.y, innerHeight, ED_MIN.h) + "px";
   });
   const end = (e) => {
     if (!edDrag) return;
@@ -4270,7 +4310,10 @@ for (const grip of document.querySelectorAll(".ed-grip")) {
     grip.classList.remove("on");
     if (grip.hasPointerCapture(e.pointerId)) grip.releasePointerCapture(e.pointerId);
     const r = edModal.getBoundingClientRect();
-    state.advanced.edSize = { w: Math.round(r.width), h: Math.round(r.height) };
+    state.advanced.edSize = {
+      w: edClampAxis(r.width, innerWidth, ED_MIN.w),
+      h: edClampAxis(r.height, innerHeight, ED_MIN.h),
+    };
     save();
   };
   grip.addEventListener("pointerup", end);
@@ -4784,8 +4827,7 @@ function editorCss() {
 
 document.addEventListener("pointermove", (e) => {
   if (!editing || editDrag) return;
-  edHover = editTarget(e.target);
-  moveEdBox();
+  if (e.pointerType === "mouse") { edHover = editTarget(e.target); moveEdBox(); }
 }, true);
 
 document.addEventListener("pointerdown", (e) => {
@@ -4796,10 +4838,15 @@ document.addEventListener("pointerdown", (e) => {
     beginEditDrag(e, "resize");
     return;
   }
-  const t = editTarget(e.target);
-  if (!t) return;
-  edHover = t;
-  moveEdBox();
+  /* On a desk the part under the cursor is the part you mean. A finger only
+     announces itself once it is already down, so the press has to do the hover's
+     job first. */
+  if (e.pointerType !== "mouse") {
+    const hit = editTarget(e.target);
+    if (!hit) return;
+    edHover = hit;
+    moveEdBox();
+  }
   beginEditDrag(e, "move");
 }, true);
 
@@ -4880,24 +4927,83 @@ function ctxText() {
   return el ? (el.innerText || "").trim().slice(0, 4000) : "";
 }
 
-document.addEventListener("contextmenu", (e) => {
-  if (e.target.closest(".ctx-menu")) return; // the colour pickers keep their own menus
-  e.preventDefault();
+/* The menu comes from a point and the element under it, so a right-click and a
+   thumb held still over the same spot raise the very same one. */
+function openCtxAt(el, x, y) {
   const wasOpen = !ctxMenu.hidden || !ctxTheme.hidden;
   closeCtx();
   if (wasOpen) return; // a second right-click closes it, like any menu
-  ctxPart = editTarget(e.target);
+  ctxPart = editTarget(el);
   if (theming) {
-    if (ctxPart) openThemeControls(ctxPart, e.clientX, e.clientY);
-    else toast("Right-click one of the page's parts — the message box, sidebar, top bar.");
+    if (ctxPart) openThemeControls(ctxPart, x, y);
+    else toast("Nothing there to recolour — aim at the message box, sidebar, top bar.");
     return;
   }
   const text = ctxText();
   ctxMenu.querySelector('[data-ctx="copy"]').disabled = !text;
   ctxMenu.querySelector('[data-ctx="ask"]').disabled = !text;
   ctxMenu.querySelector('[data-ctx="theme-part"]').hidden = !ctxPart;
-  placeCtx(ctxMenu, e.clientX, e.clientY);
+  placeCtx(ctxMenu, x, y);
+}
+
+document.addEventListener("contextmenu", (e) => {
+  if (e.target.closest(".ctx-menu")) return; // the colour pickers keep their own menus
+  e.preventDefault();
+  /* Android raises a contextmenu at the end of its own long press. The touch
+     handler below has already raised this menu by then, and a second pass would
+     read as the toggle and shut it again. */
+  if (Date.now() - ctxRaisedAt < LONG_PRESS_SWALLOW_MS) return;
+  openCtxAt(e.target, e.clientX, e.clientY);
 });
+
+/* ---------- long press, the touch version of a right-click ----------
+   iOS never fires contextmenu for anything but an editable field, so without
+   this the menu simply does not exist on an iPhone. A field is left alone:
+   selecting the words you typed stays a native thing. */
+const LONG_PRESS_MS = 450;
+const LONG_PRESS_SLACK = 10;
+const LONG_PRESS_SWALLOW_MS = 700;
+let ctxRaisedAt = 0;
+let ctxPress = null;
+
+function endCtxPress() {
+  if (!ctxPress) return;
+  clearTimeout(ctxPress.timer);
+  ctxPress = null;
+}
+
+document.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "mouse" || !e.isPrimary || editing) return;
+  if (e.target.closest("input, textarea, [contenteditable], .ctx-menu, #editorBar")) return;
+  ctxPress = {
+    id: e.pointerId, x: e.clientX, y: e.clientY, el: e.target,
+    timer: setTimeout(() => {
+      ctxRaisedAt = Date.now();
+      openCtxAt(ctxPress.el, ctxPress.x, ctxPress.y);
+      ctxPress = null;
+    }, LONG_PRESS_MS),
+  };
+});
+
+document.addEventListener("pointermove", (e) => {
+  if (!ctxPress || e.pointerId !== ctxPress.id) return;
+  if (Math.abs(e.clientX - ctxPress.x) > LONG_PRESS_SLACK
+    || Math.abs(e.clientY - ctxPress.y) > LONG_PRESS_SLACK) endCtxPress();
+});
+
+document.addEventListener("pointerup", endCtxPress);
+document.addEventListener("pointercancel", endCtxPress);
+
+/* the lift that ends a long press is still a click, and by then the menu is
+   under the thumb — let it act on whatever it lands on and the press would run
+   an item on its own, before you ever chose one */
+document.addEventListener("click", (e) => {
+  if (Date.now() - ctxRaisedAt < LONG_PRESS_SWALLOW_MS) {
+    ctxRaisedAt = 0;
+    e.stopPropagation();
+    e.preventDefault();
+  }
+}, true);
 
 ctxMenu.addEventListener("click", async (e) => {
   const item = e.target.closest("[data-ctx]");
@@ -4940,7 +5046,15 @@ ctxMenu.addEventListener("click", async (e) => {
 document.addEventListener("click", e => {
   if (!e.target.closest(".ctx-menu")) closeCtx();
 });
-window.addEventListener("resize", closeCtx);
+/* A phone rewrites the height every time its URL bar tucks away or the keyboard
+   comes up. That is not the user moving the page, so the menu keeps its place —
+   only a change of width, which is a rotation, takes it away. */
+let ctxLastWidth = innerWidth;
+window.addEventListener("resize", () => {
+  if (innerWidth === ctxLastWidth) return;
+  ctxLastWidth = innerWidth;
+  closeCtx();
+});
 window.addEventListener("scroll", closeCtx, true);
 
 /* ---------- theme mode ----------
