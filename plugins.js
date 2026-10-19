@@ -112,11 +112,19 @@ function rememberGithubToken(cfg, r) {
   return cfg.oauth;
 }
 
+/* The scopes are asked for here, at sign-in, because an OAuth App's settings page
+   has no scope picker — GitHub decides that per request. public_repo is the
+   default so a token sitting in a browser cannot reach anything private unless
+   the person using it typed that in on purpose. */
+function ghScopes(cfg) {
+  return String(cfg.scopes || "").trim() || "public_repo";
+}
+
 async function githubSignIn(cfg, onStatus, signal) {
   const clientId = String(cfg.clientId || "").trim();
   if (!clientId) throw new Error("Notal signs in with an OAuth app of your own, so its client ID goes in the field above.");
 
-  const start = await githubRelayStep("device", { client_id: clientId });
+  const start = await githubRelayStep("device", { client_id: clientId, scope: ghScopes(cfg) });
   if (start.error)
     throw new Error(`GitHub would not hand out a code: ${start.error_description || start.error}. ` +
       "Check the client ID, and that Device Flow is switched on for that OAuth app.");
@@ -330,7 +338,7 @@ const GITHUB_PLUGIN = {
     "On GitHub: Settings → Developer settings → OAuth Apps → New OAuth App. The homepage can be the address this page is on, and the callback URL can stay empty — this sign-in never redirects a browser back here.",
     "Open the app you just made and turn on Device Flow. GitHub leaves it off, and without it GitHub refuses to hand out a code.",
     "Copy that app's Client ID into the field below. The client secret is not needed and never leaves GitHub: the device flow exists for an application that cannot keep one.",
-    "Give the OAuth App only the scopes Notal should have, because the token GitHub returns carries exactly those.",
+    "That page has no scope picker — GitHub grants scopes per request, not per app — so the scopes are asked for at sign-in instead: public_repo unless you type others below, and Test reads back whatever GitHub actually granted.",
     "Put a relay address in Settings → Providers, or use Notal AI Studio, which ships one. GitHub's code and token endpoints answer no browser tab, so the exchange itself is the one thing this app cannot do alone.",
     "Press Sign in with GitHub, type the code it shows into github.com/login/device, and wait. Nothing else: the token arrives here and renews itself.",
   ],
@@ -342,6 +350,12 @@ const GITHUB_PLUGIN = {
     optional: true,
     placeholder: "the public id of your own OAuth app",
     help: "From an OAuth App you make on GitHub, with Device Flow turned on. This one is public by design and is what GitHub shows you at the code screen — it is not a secret and grants nothing by itself.",
+  }, {
+    key: "scopes",
+    label: "Scopes to ask GitHub for",
+    optional: true,
+    placeholder: "public_repo",
+    help: "Asked for at sign-in, not chosen on the OAuth App's page. Left empty it asks for public_repo: enough to read and commit to public repositories, and blind to your private ones. Widen it to repo only if you mean Notal to reach private code.",
   }, {
     key: "token",
     label: "or a personal access token",
