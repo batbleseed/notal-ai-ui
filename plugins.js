@@ -335,7 +335,7 @@ const GITHUB_PLUGIN = {
   name: "GitHub",
   desc: "Read a repository, its issues and its files, and commit files back through GitHub's own API. Nothing is cloned: the change is made from this tab, one commit at a time.",
   setup: [
-    "On GitHub: Settings → Developer settings → OAuth Apps → New OAuth App. The homepage can be the address this page is on, and the callback URL can stay empty — this sign-in never redirects a browser back here.",
+    "On GitHub: Settings → Developer settings → OAuth Apps → New OAuth App. Homepage and callback URL both want a real address, and GitHub will not let the callback be blank — put the address Notal is served from in both. Neither one is used: the device flow never redirects a browser back here.",
     "Open the app you just made and turn on Device Flow. GitHub leaves it off, and without it GitHub refuses to hand out a code.",
     "Copy that app's Client ID into the field below. The client secret is not needed and never leaves GitHub: the device flow exists for an application that cannot keep one.",
     "That page has no scope picker — GitHub grants scopes per request, not per app — so the scopes are asked for at sign-in instead: public_repo unless you type others below, and Test reads back whatever GitHub actually granted.",
