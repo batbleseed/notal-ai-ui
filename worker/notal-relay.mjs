@@ -9,7 +9,8 @@
  * The relay never sees an account and never stores anything: it forwards the
  * caller's own key to a host on the allow-list and returns the provider's
  * response, status included. It can also read one public web page for the app
- * (POST /browse), because sites send no CORS header for their own HTML.
+ * (POST /browse), because sites send no CORS header for their own HTML, and it
+ * can carry the two GitHub device-flow calls (POST /github) for the same reason.
  *
  * Deploy: Cloudflare dashboard → Workers → Create → paste this file, or
  * `wrangler deploy` with the included wrangler.toml.
@@ -251,6 +252,85 @@ async function handleBrowse(request, cors) {
     { headers: { ...cors, "x-relay": "notal" } });
 }
 
+/* ---------- GitHub sign-in, without a token to paste ----------
+   GitHub's OAuth token endpoints send no CORS header, so a browser tab cannot
+   reach them — the same wall that makes /browse necessary. This endpoint steps
+   through the device flow on the caller's behalf: it forwards one of two fixed
+   URLs, and only the handful of form fields that flow defines. No key, no
+   cookie, no other host can ride through it, and nothing is stored here: the
+   token goes straight back to the tab that asked. */
+const GITHUB_TIMEOUT_MS = 20_000;
+const GITHUB_STEPS = {
+  device: {
+    url: "https://github.com/login/device/code",
+    fields: ["client_id", "scope"],
+  },
+  token: {
+    url: "https://github.com/login/oauth/access_token",
+    fields: ["client_id", "device_code", "grant_type"],
+  },
+  // a GitHub access token lives eight hours, so the refresh grant has to be
+  // reachable too — otherwise every sign-in needs the browser flow again
+  refresh: {
+    url: "https://github.com/login/oauth/access_token",
+    fields: ["client_id", "refresh_token", "grant_type", "scope"],
+  },
+};
+const MAX_FIELD_LEN = 512;
+
+/* GitHub's own answers, refusals included, are handed back as they arrived; this
+   marker says "that one was us", so the caller never mistakes a bad request for
+   a bad client ID. */
+const refuse = (message, status, cors) =>
+  json({ error: message, refused_by: "relay" }, { status, headers: cors });
+
+async function handleGithub(request, cors) {
+  let input;
+  try { input = await request.json(); }
+  catch { return refuse('github expects JSON like {"step":"device","client_id":"…"}', 400, cors); }
+
+  const step = GITHUB_STEPS[input?.step];
+  if (!step) return refuse('github step must be "device", "token" or "refresh"', 400, cors);
+
+  const given = input.fields || {};
+  if (typeof given !== "object" || Array.isArray(given))
+    return refuse("github fields must be an object of strings", 400, cors);
+
+  const form = new URLSearchParams();
+  for (const name of step.fields) {
+    const value = given[name];
+    if (value === undefined || value === null || value === "") continue;
+    if (typeof value !== "string" || value.length > MAX_FIELD_LEN)
+      return refuse(`github field "${name}" is not a short string`, 400, cors);
+    form.set(name, value);
+  }
+  if (!form.get("client_id")) return refuse("github needs a client_id", 400, cors);
+
+  let answer;
+  try {
+    answer = await fetchToHeaders(step.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "application/json",
+      },
+      body: form.toString(),
+    }, GITHUB_TIMEOUT_MS);
+  } catch (err) {
+    const reason = err?.name === "TimeoutError" ? "timed out" : "could not be reached";
+    return refuse(`GitHub ${reason}`, 502, cors);
+  }
+
+  /* GitHub replies as form-encoded unless asked otherwise, and it answers errors
+     with 200 and an error field, so the status alone is not the story. Hand back
+     whatever JSON came and let the app read it. */
+  const text = await answer.text();
+  let payload;
+  try { payload = JSON.parse(text); }
+  catch { payload = Object.fromEntries(new URLSearchParams(text)); }
+  return json(payload, { status: answer.status, headers: { ...cors, "x-relay": "notal" } });
+}
+
 export default {
   async fetch(request, env) {
     const cors = corsHeaders(request, env);
@@ -260,7 +340,7 @@ export default {
       return new Response(null, { status: 204, headers: cors });
 
     if (pathname === "/health")
-      return json({ ok: true, relay: "notal", hosts: ALLOWED_HOSTS.size, browse: true },
+      return json({ ok: true, relay: "notal", hosts: ALLOWED_HOSTS.size, browse: true, github: true },
         { headers: cors });
 
     if (pathname === "/browse") {
@@ -269,8 +349,14 @@ export default {
       return handleBrowse(request, cors);
     }
 
+    if (pathname === "/github") {
+      if (request.method !== "POST")
+        return json({ error: { message: "github sign-in is a POST endpoint" } }, { status: 405, headers: cors });
+      return handleGithub(request, cors);
+    }
+
     if (pathname !== "/relay" || request.method !== "POST")
-      return json({ error: { message: "unknown endpoint — use POST /relay, POST /browse or GET /health" } },
+      return json({ error: { message: "unknown endpoint — use POST /relay, POST /browse, POST /github or GET /health" } },
         { status: 404, headers: cors });
 
     return handleRelay(request, env, cors);

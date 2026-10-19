@@ -8,6 +8,7 @@
 
      POST /relay    forward one provider call, body untouched, stream preserved
      POST /browse   read one public page and hand the HTML back
+     POST /github   carry one GitHub device-flow call
      GET  /health   say what this relay is
 
    Three things this does better than the hosted relay, because it is local:
@@ -258,9 +259,83 @@ async function handleOllama(req, res) {
 
 function handleHealth(res, info) {
   json(res, 200, {
-    ok: true, relay: "notal", browse: true, hosts: ALLOWED_HOSTS.size,
+    ok: true, relay: "notal", browse: true, github: true, hosts: ALLOWED_HOSTS.size,
     studio: info, "x-notal-relay": "studio",
   });
 }
 
-module.exports = { handleRelay, handleBrowse, handleOllama, handleHealth, json };
+/* GitHub sign-in without a token to paste. The token endpoints send no CORS
+   header, so a tab cannot reach them; this carries the two device-flow calls
+   instead, from one of two fixed URLs, with only the fields that flow defines.
+   Same contract as worker/notal-relay.mjs, so the app cannot tell them apart. */
+const GITHUB_STEPS = {
+  device: {
+    url: "https://github.com/login/device/code",
+    fields: ["client_id", "scope"],
+  },
+  token: {
+    url: "https://github.com/login/oauth/access_token",
+    fields: ["client_id", "device_code", "grant_type"],
+  },
+  // a GitHub access token lives eight hours, so the refresh grant has to be
+  // reachable too — otherwise every sign-in needs the browser flow again
+  refresh: {
+    url: "https://github.com/login/oauth/access_token",
+    fields: ["client_id", "refresh_token", "grant_type", "scope"],
+  },
+};
+const GITHUB_TIMEOUT_MS = 20_000;
+const MAX_FIELD_LEN = 512;
+
+/* GitHub's own answers, refusals included, are handed back as they arrived; this
+   marker says "that one was us", so the caller never mistakes a bad request for
+   a bad client ID. */
+const refuse = (res, message, status) => json(res, status, { error: message, refused_by: "relay" });
+
+async function handleGithub(req, res) {
+  let input;
+  try { input = await readJsonBody(req); }
+  catch { return refuse(res, 'github expects JSON like {"step":"device","client_id":"…"}', 400); }
+
+  const step = GITHUB_STEPS[input?.step];
+  if (!step) return refuse(res, 'github step must be "device", "token" or "refresh"', 400);
+
+  const given = input.fields || {};
+  if (typeof given !== "object" || Array.isArray(given))
+    return refuse(res, "github fields must be an object of strings", 400);
+
+  const form = new URLSearchParams();
+  for (const name of step.fields) {
+    const value = given[name];
+    if (value === undefined || value === null || value === "") continue;
+    if (typeof value !== "string" || value.length > MAX_FIELD_LEN)
+      return refuse(res, `github field "${name}" is not a short string`, 400);
+    form.set(name, value);
+  }
+  if (!form.get("client_id")) return refuse(res, "github needs a client_id", 400);
+
+  let answer;
+  try {
+    answer = await fetchToHeaders(step.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "application/json",
+      },
+      body: form.toString(),
+    }, GITHUB_TIMEOUT_MS);
+  } catch (err) {
+    const reason = err?.name === "TimeoutError" ? "timed out" : "could not be reached";
+    return refuse(res, `GitHub ${reason}`, 502);
+  }
+
+  /* GitHub answers errors with a 200 and an error field, and replies as
+     form-encoded unless asked otherwise, so the body is the real story. */
+  const text = await answer.text();
+  let payload;
+  try { payload = JSON.parse(text); }
+  catch { payload = Object.fromEntries(new URLSearchParams(text)); }
+  return json(res, answer.status, payload);
+}
+
+module.exports = { handleRelay, handleBrowse, handleGithub, handleOllama, handleHealth, json };

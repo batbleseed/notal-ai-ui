@@ -124,6 +124,7 @@ function route(req, res) {
 
   if (req.method === "POST" && pathname === "/relay") return relay.handleRelay(req, res);
   if (req.method === "POST" && pathname === "/browse") return relay.handleBrowse(req, res);
+  if (req.method === "POST" && pathname === "/github") return relay.handleGithub(req, res);
   if (req.method === "GET" && pathname === "/health")
     return relay.handleHealth(res, { version: VERSION, platform: process.platform, name: APP_NAME, local: true });
 
