@@ -1,5 +1,5 @@
 /* Notal AI service worker — offline shell for the landing page and the app. */
-const CACHE = "notal-ai-v24";
+const CACHE = "notal-ai-v26";
 const CORE = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const CORE = [
   "./styles.css",
   "./app.js",
   "./prompts.js",
+  "./plugins.js",
   "./syntax.js",
   "./webmodel.js",
   "./gsap.min.js",

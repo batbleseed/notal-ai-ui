@@ -42,6 +42,7 @@ const els = {
   fileInput: $("#fileInput"),
   attachTray: $("#attachTray"),
   micBtn: $("#micBtn"),
+  pluginRows: $("#pluginRows"),
   toast: $("#toast"),
   lightbox: $("#lightbox"),
   lightboxImg: $("#lightboxImg"),
@@ -262,6 +263,7 @@ let state = Object.assign({
   memories: [],
   skills: [],
   extensions: [],
+  plugins: {},
   activeProject: null,
   relayUrl: "",
   showThinking: false,
@@ -306,6 +308,65 @@ if (!state.projects.some(p => p.id === state.activeProject)) state.activeProject
 if (state.mode !== "chat" && state.mode !== "coding") state.mode = "chat";
 if (!state.advanced || typeof state.advanced !== "object") state.advanced = {};
 if (!state.relayVerified || typeof state.relayVerified !== "object") state.relayVerified = null;
+
+/* ---------- plugins ----------
+   A plugin is seeded rather than saved once, the same way built-in extensions
+   are: one added in a later version of this file appears switched off, not
+   missing. What it needs — a token, a companion — comes back from storage as
+   text, or as an empty string when this browser has never been given one. */
+const PLUGINS = typeof PLUGIN_DEFS === "object" ? PLUGIN_DEFS : [];
+if (!state.plugins || typeof state.plugins !== "object") state.plugins = {};
+for (const def of PLUGINS) {
+  const saved = state.plugins[def.id];
+  const cfg = { enabled: Boolean(saved?.enabled) };
+  for (const field of def.fields || [])
+    cfg[field.key] = typeof saved?.[field.key] === "string" ? saved[field.key] : "";
+  /* a token this app signed in for, rather than one that was pasted: it comes
+     with an expiry and a refresh, so it is kept as one object, not a field */
+  if (def.signIn)
+    cfg.oauth = saved?.oauth?.token ? { ...saved.oauth, token: String(saved.oauth.token) } : null;
+  state.plugins[def.id] = cfg;
+}
+
+/* plugins.js declares the how and never the where: it has to be readable on its
+   own. These two are what it cannot know — the relay address, and the way to
+   keep a token sign-in just obtained. */
+if (typeof pluginHooks === "object") {
+  pluginHooks.relay = relayBase;
+  pluginHooks.persist = save;
+}
+
+function pluginConfig(def) {
+  return state.plugins[def.id] || { enabled: false };
+}
+
+/* Switched on, and actually able to run: a plugin missing the thing it needs is
+   left out of the system prompt, because a model told it has a hand it does not
+   have will spend its turn reaching for one. */
+function livePlugins() {
+  return PLUGINS.filter(def => {
+    const cfg = pluginConfig(def);
+    if (!cfg.enabled) return false;
+    /* a field marked optional is one half of a choice — a signed-in GitHub
+       needs no pasted token — so such a plugin decides for itself whether it
+       can run */
+    for (const f of def.fields || []) {
+      if (f.optional) continue;
+      if (!String(cfg[f.key] || "").trim()) return false;
+    }
+    return def.ready ? Boolean(def.ready(cfg)) : true;
+  });
+}
+
+/* The action is named whole, "github.push", so a lookup is one pass over the
+   registry rather than a split on a dot that a plugin id could also contain. */
+function findAction(name) {
+  for (const def of PLUGINS) {
+    const action = def.actions?.[name];
+    if (action) return { def, action, cfg: pluginConfig(def) };
+  }
+  return null;
+}
 
 function selectedModel() {
   return state.models.find(m => m.id === state.selectedModel) ?? state.models[0];
@@ -1111,23 +1172,29 @@ async function sendMessage(text) {
       if (DESKTOP) await refreshStudioBrief();
       /* Browsing is a loop, not a side quest: the model asks for one page, this
          tab reads it, the page text comes back as context for the next turn,
-         and only the final tag-free reply lands on the page. The pages go into
-         `context`, never into `conv.messages`, so a lookup does not live in the
-         chat history forever. Attached documents join that same context. */
+         and only the final tag-free reply lands on the page. A plugin call runs
+         through that same loop — ask, do, report what the service actually
+         said — with an approval card in front of anything that changes something
+         outside here. The pages and the results go into `context`, never into
+         `conv.messages`, so a lookup does not live in the chat history forever.
+         Attached documents join that same context. */
       let context = withDocuments(conv.messages);
-      let hops = 0;
+      let browses = 0, calls = 0;
       /* An address the user typed themselves is read first, so a page lookup
          never depends on the model volunteering to ask for one. */
       const typed = findBrowseRequest(trimmed);
       if (typed) {
         context = await readIntoContext(turn, context, typed, ac.signal,
           "(The user gave me a page to read; the app fetched it.)");
-        hops++;
+        browses++;
       }
       for (;;) {
         const raw = await callProvider(model, context, onDelta, ac.signal);
-        const url = hops < MAX_BROWSES ? findBrowseRequest(raw) : null;
-        if (!url) { answer = raw; break; }
+        let ask = findNextRequest(raw);
+        /* each kind gets its own allowance, so a question that needed three
+           lookups is not left unable to make one phone call */
+        if (ask && (ask.kind === "browse" ? browses >= MAX_BROWSES : calls >= MAX_TOOL_CALLS)) ask = null;
+        if (!ask) { answer = raw; break; }
         const note = cleanAnswer(raw);
         turn.addNote(note);
         /* the words that came with the tag are now a step in the trail, so the
@@ -1136,8 +1203,10 @@ async function sendMessage(text) {
         answer = "";
         if (frame) cancelAnimationFrame(frame);
         draw();
-        context = await readIntoContext(turn, context, url, ac.signal, note);
-        hops++;
+        context = ask.kind === "browse"
+          ? await readIntoContext(turn, context, ask.url, ac.signal, note)
+          : await runIntoContext(turn, context, ask, ac.signal, note);
+        if (ask.kind === "browse") browses++; else calls++;
       }
       /* a finished reply is better evidence than any test button */
       recordProviderResult(model.providerId, true, "Answered a real message");
@@ -1425,6 +1494,14 @@ function systemPrompt() {
   if (facts.length) s += `\nThings the user wants you to remember:\n- ${facts.join("\n- ")}`;
   for (const x of state.extensions)
     if (x.enabled) s += `\nExtension "${x.name}": ${x.prompt}`;
+  /* Only the plugins that can actually run are described — one switched off, or
+     waiting for a token that was never typed, would have the model calling for
+     an action that comes back unavailable every turn. */
+  const armed = livePlugins();
+  if (armed.length && typeof PLUGIN_PROTOCOL === "string") {
+    s += PLUGIN_PROTOCOL;
+    for (const def of armed) s += def.brief || "";
+  }
   /* in the desktop app this carries the Studio brief and the owner's skills.md,
      both read from disk moments ago — see refreshStudioBrief() */
   if (studioBrief) s += studioBrief;
@@ -1885,6 +1962,29 @@ function findBrowseRequest(text) {
   return m ? m[1] : null;
 }
 
+/* A plugin call, in the shape the brief teaches: the action named on the tag,
+   one JSON object as its body. The closing tag is optional here for the same
+   reason browse allows it — a model that stops the moment it has asked sometimes
+   stops before typing it. */
+const TOOL_RE = /\[tool:([a-z0-9][a-z0-9_.-]*)\]([\s\S]*?)(?:\[\/tool\]|$)/i;
+
+function findToolRequest(text) {
+  const m = TOOL_RE.exec(text || "");
+  return m ? { name: m[1].toLowerCase(), body: m[2].trim(), at: m.index } : null;
+}
+
+/* One question can earn either kind of ask, and only the earlier one is real: a
+   model that wrote a browse tag and then a tool tag stopped at the browse tag. */
+function findNextRequest(text) {
+  const tool = findToolRequest(text);
+  BROWSE_RE_ALL.lastIndex = 0;
+  const browse = BROWSE_RE_ALL.exec(text || "");
+  if (tool && (!browse || tool.at <= browse.index))
+    return { kind: "tool", name: tool.name, body: tool.body };
+  if (browse) return { kind: "browse", url: browse[1] };
+  return null;
+}
+
 function withoutBrowseTags(text) {
   return (text || "").replace(BROWSE_RE_ALL, "");
 }
@@ -1893,6 +1993,10 @@ function withoutBrowseTags(text) {
    the raw markup flashes in the answer before the page is even asked for. */
 function hidePartialTag(text) {
   const lower = text.toLowerCase();
+  /* a tool body is JSON, which no prefix test can recognise, so from "[tool:"
+     onward there is nothing to show — the model stops writing there anyway */
+  const toolAt = lower.indexOf("[tool:");
+  if (toolAt >= 0) return text.slice(0, toolAt);
   for (let i = lower.lastIndexOf("["); i >= 0; i = lower.lastIndexOf("[", i - 1)) {
     const rest = lower.slice(i);
     if ("[browse]".startsWith(rest) || "[/browse]".startsWith(rest)) return text.slice(0, i);
@@ -1982,6 +2086,128 @@ async function readIntoContext(turn, context, url, signal, noteText) {
        the same page again */
     return [...context, bridge,
       { role: "user", text: `[browse failed] ${url} — ${err?.message || "the page could not be read"}` }];
+  }
+}
+
+/* ---------- plugins ----------
+   The same loop that reads a page, with a hand instead of a fetch: the model
+   names an action, this tab runs it, and whatever the service said comes back as
+   context — including the refusal, because a model that is not told a push was
+   declined will try the push again on the next line. */
+const MAX_TOOL_CALLS = 4;
+const TOOL_RESULT_LIMIT = 9000;
+
+function clip(text, limit) {
+  const s = String(text ?? "");
+  return s.length > limit ? `${s.slice(0, limit)}\n… ${s.length - limit} more characters` : s;
+}
+
+/* An approval card must not show a whole file: the user is being asked to agree
+   to a change, and a wall of text is how a rubber stamp gets made. */
+function argsPreview(args) {
+  const brief = (v) => {
+    if (v == null) return "—";
+    if (typeof v === "string") return v.length > 70 ? `${v.slice(0, 70)}…` : v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    if (Array.isArray(v)) return `${v.length} item${v.length === 1 ? "" : "s"}`;
+    return Object.keys(v).join(", ");
+  };
+  return Object.entries(args || {}).map(([k, v]) => `${k}: ${brief(v)}`).join("\n");
+}
+
+/* Approve, decline, or have the turn stopped while the card is still up — all
+   three settle, so a pending card can never hold a send open forever. */
+function askApproval(turn, found, args, signal) {
+  return new Promise((resolve) => {
+    const host = turn.wrap.querySelector(".msg-body") || turn.wrap;
+    const card = document.createElement("div");
+    card.className = "plugin-ask";
+    card.innerHTML = `
+      <div class="pa-head">
+        <span class="pa-plugin"></span>
+        <span class="pa-kind">changes something outside this app</span>
+      </div>
+      <p class="pa-what"></p>
+      <pre class="pa-args"></pre>
+      <div class="pa-actions">
+        <button class="primary-btn" type="button">Approve</button>
+        <button class="ghost-btn" type="button">Cancel</button>
+      </div>`;
+    card.querySelector(".pa-plugin").textContent = found.def.name;
+    card.querySelector(".pa-what").textContent = found.what;
+    card.querySelector(".pa-args").textContent = argsPreview(args);
+    const approve = card.querySelector(".primary-btn");
+    const decline = card.querySelectorAll("button")[1];
+
+    const answer = (yes) => {
+      if (card.classList.contains("answered")) return;
+      card.classList.add("answered", yes ? "approved" : "declined");
+      card.querySelector(".pa-actions").remove();
+      const line = document.createElement("p");
+      line.className = "pa-answered";
+      line.textContent = yes ? "Approved — running now."
+        : "Cancelled. Nothing was changed.";
+      card.append(line);
+      resolve(yes);
+    };
+    approve.addEventListener("click", () => answer(true));
+    decline.addEventListener("click", () => answer(false));
+    host.append(card);
+    card.scrollIntoView({ block: "nearest" });
+    /* a Stop press has to settle the card too, or the turn waits on a decision
+       the user already took away */
+    const stopper = () => answer(false);
+    signal?.addEventListener?.("abort", stopper, { once: true });
+  });
+}
+
+async function runIntoContext(turn, context, req, signal, noteText) {
+  const bridge = { role: "assistant", text: noteText || "(Doing that before answering.)" };
+  const reply = (text) => [...context, bridge, { role: "user", text }];
+
+  const found = findAction(req.name);
+  if (!found) {
+    const known = PLUGINS.flatMap(d => Object.keys(d.actions || {})).join(", ");
+    return reply(`[tool failed] there is no action "${req.name}". The actions this app has: ${known || "none — no plugin is switched on"}.`);
+  }
+  const { def, action, cfg } = found;
+  if (!pluginConfig(def).enabled)
+    return reply(`[tool unavailable] the ${def.name} plugin is switched off in Settings → Plugins, so nothing ran. Do not ask again for it.`);
+  const missing = (def.fields || []).filter(f => !String(cfg[f.key] || "").trim());
+  if (missing.length)
+    return reply(`[tool unavailable] ${def.name} has nothing set for ${missing.map(f => f.label).join(", ")} — say so and stop; nothing ran, and Settings → Plugins is where it belongs.`);
+
+  let args;
+  try { args = req.body ? JSON.parse(req.body) : {}; }
+  catch (err) {
+    return reply(`[tool failed] the body for ${req.name} was not valid JSON (${err.message}). Send the tag again with one object inside, and nothing outside it.`);
+  }
+  if (!args || typeof args !== "object" || Array.isArray(args))
+    return reply(`[tool failed] ${req.name} wants one JSON object, not ${Array.isArray(args) ? "a list" : typeof args}.`);
+
+  let what;
+  try { what = action.summary ? action.summary(args, cfg) : req.name; }
+  catch { what = req.name; }
+  const step = trailStep(turn, `${def.name} · ${what}`);
+  found.what = what;
+
+  if (action.write) {
+    const yes = await askApproval(turn, found, args, signal);
+    if (signal?.aborted) { step.done(); throw Object.assign(new Error("stopped"), { name: "AbortError" }); }
+    if (!yes) {
+      step.finish(`${def.name} · ${what} — the user declined`);
+      return reply(`[tool declined] The user would not approve this: ${what}. Do not call it again. If they had a reason, follow it; otherwise offer something safer and stop there.`);
+    }
+  }
+
+  try {
+    const text = await action.run(args, cfg, signal);
+    step.finish(`${def.name} · ${what} — done`);
+    return reply(`[tool result] ${req.name}\n${clip(text, TOOL_RESULT_LIMIT)}`);
+  } catch (err) {
+    if (err?.name === "AbortError") { step.done(); throw err; }
+    step.finish(`${def.name} · ${what} — did not work`);
+    return reply(`[tool failed] ${req.name} — ${err?.message || "no reason given"}`);
   }
 }
 
@@ -2542,6 +2768,7 @@ function openSettings(tab = "general") {
   /* these readouts are snapshots of what just happened — a chat turn can change
      a provider's status, so they are refreshed on every open, not at load */
   renderProviders();
+  renderPlugins();
   renderRelayUI();
   renderDiagnostics();
   renderBrowserModel();
@@ -2888,6 +3115,221 @@ function removeProvider(id) {
   renderProviders();
   renderModelMenu();
   els.modelName.textContent = selectedModel().name;
+}
+
+/* ---------- plugin settings ----------
+   One row per plugin, built from the registry, so a plugin added to plugins.js
+   turns up here with no markup written for it. The switch is the whole decision:
+   off, the model is never told the hand exists, and a call to it comes back
+   unavailable rather than imagined. */
+function pluginNote(def, tested) {
+  const cfg = pluginConfig(def);
+  if (!cfg.enabled) return { tone: "idle", text: `Switched off — ${def.name} is not offered to the model at all.` };
+  /* an optional field is one half of a choice, so its being empty is not the
+     problem — the plugin itself decides whether what it holds is enough */
+  const missing = (def.fields || []).filter(f => !f.optional && !String(cfg[f.key] || "").trim());
+  if (missing.length)
+    return { tone: "bad", text: `Needs ${missing.map(f => f.label.toLowerCase()).join(" and ")} above before it can run.` };
+  /* what the service last said, or what the sign-in is last doing, is the
+     freshest true sentence there is — it is shown before the complaint about
+     nothing being connected, which is otherwise the one that never lifts */
+  if (tested) return { tone: tested.tone, text: tested.text };
+  if (def.ready && !def.ready(cfg))
+    return { tone: "bad", text: def.notReady || "Nothing is connected yet — press Test to see what the service says." };
+  return { tone: "idle", text: "Armed. Press Test to check it against the real service." };
+}
+
+function pluginRow(def) {
+  const cfg = pluginConfig(def);
+  const item = document.createElement("div");
+  item.className = "plugin-item";
+
+  const row = document.createElement("div");
+  row.className = "setting-row";
+  const info = document.createElement("div");
+  info.className = "setting-info";
+  const name = document.createElement("span");
+  name.className = "setting-name";
+  name.textContent = def.name;
+  const desc = document.createElement("small");
+  desc.textContent = def.desc || "";
+  const note = document.createElement("small");
+  note.className = "pl-note";
+  info.append(name, desc, note);
+
+  const actions = document.createElement("div");
+  actions.className = "auth-actions";
+  const sw = document.createElement("label");
+  sw.className = "switch";
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = Boolean(cfg.enabled);
+  input.title = `Let Notal use ${def.name}`;
+  const track = document.createElement("span");
+  track.className = "sl track";
+  sw.append(input, track);
+
+  const testBtn = document.createElement("button");
+  testBtn.type = "button";
+  testBtn.className = "ghost-btn";
+  testBtn.textContent = "Test";
+
+  const settle = () => {
+    const st = pluginNote(def, pluginTested[def.id]);
+    note.textContent = st.text;
+    note.className = `pl-note ${st.tone}`;
+  };
+
+  /* A plugin that signs in brings its own button, its own line of code while the
+     service waits for a human, and its own way to give up. Nothing here knows
+     what GitHub's screen looks like — it only shows what the flow hands over. */
+  const device = document.createElement("div");
+  device.className = "pl-device";
+  device.hidden = true;
+  const deviceCode = document.createElement("code");
+  const deviceLink = document.createElement("a");
+  deviceLink.textContent = "github.com/login/device";
+  deviceLink.target = "_blank";
+  deviceLink.rel = "noopener";
+  device.append(document.createTextNode("Enter "), deviceCode,
+    document.createTextNode(" at "), deviceLink,
+    document.createTextNode(" and this finishes on its own."));
+
+  if (def.signIn) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost-btn";
+    let signing = null;
+    const label = () => {
+      btn.textContent = signing ? "Cancel"
+        : cfg.oauth?.token ? (def.signOutLabel || "Sign out")
+        : (def.signInLabel || "Sign in");
+    };
+    label();
+    btn.addEventListener("click", async () => {
+      if (signing) { signing.abort(); return; }
+      if (cfg.oauth?.token) {
+        def.signOut?.(cfg);
+        pluginTested[def.id] = null;
+        label();
+        settle();
+        toast(`${def.name} is signed out — its token is gone from this browser.`);
+        return;
+      }
+      signing = new AbortController();
+      label();
+      try {
+        const saved = await def.signIn(cfg, (status) => {
+          if (status.stage !== "code") return;
+          deviceCode.textContent = status.code;
+          deviceLink.href = status.link;
+          device.hidden = false;
+          pluginTested[def.id] = { text: "Waiting for that code to be entered.", tone: "idle" };
+          settle();
+        }, signing.signal);
+        pluginTested[def.id] = {
+          text: `Signed in${saved.login ? ` as ${saved.login}` : ""} — Notal holds a token that renews itself.`,
+          tone: "ok",
+        };
+        toast(`${def.name} is connected${saved.login ? ` as ${saved.login}` : ""}.`);
+      } catch (err) {
+        pluginTested[def.id] = err?.name === "AbortError" ? null
+          : { text: String(err?.message || err), tone: "bad" };
+      } finally {
+        signing = null;
+        device.hidden = true;
+        label();
+        settle();
+      }
+    });
+    actions.append(sw, btn, testBtn);
+  } else {
+    actions.append(sw, testBtn);
+  }
+
+  input.addEventListener("change", () => {
+    cfg.enabled = input.checked;
+    save();
+    settle();
+    /* the brief the model reads is built per send, so this changes what the next
+       question is told without a reload */
+    toast(input.checked ? `${def.name} is on — the next message tells the model about it.`
+      : `${def.name} is off.`);
+  });
+
+  testBtn.addEventListener("click", async () => {
+    if (!def.test) { toast(`${def.name} has nothing to test.`); return; }
+    if (!cfg.enabled) { toast("Switch it on first — Test checks the plugin as the model would use it."); return; }
+    testBtn.disabled = true;
+    testBtn.textContent = "Checking…";
+    try {
+      const out = await def.test(cfg);
+      pluginTested[def.id] = { text: out.message, tone: out.ok ? "ok" : "bad" };
+      note.textContent = out.message;
+      note.className = `pl-note ${out.ok ? "ok" : "bad"}`;
+    } catch (err) {
+      const text = String(err?.message || err);
+      pluginTested[def.id] = { text, tone: "bad" };
+      note.textContent = text;
+      note.className = "pl-note bad";
+    } finally {
+      testBtn.disabled = false;
+      testBtn.textContent = "Test";
+    }
+  });
+
+  row.append(info, actions);
+  item.append(row, device);
+
+  for (const field of def.fields || []) {
+    const label = document.createElement("label");
+    label.className = "adv-field plugin-field";
+    const text = document.createElement("span");
+    text.textContent = field.label;
+    const box = document.createElement("input");
+    box.type = field.type || "text";
+    box.placeholder = field.placeholder || "";
+    box.autocomplete = "off";
+    box.spellcheck = false;
+    box.value = cfg[field.key] || "";
+    box.addEventListener("change", () => {
+      cfg[field.key] = box.value.trim();
+      save();
+      settle();
+    });
+    const help = document.createElement("small");
+    help.textContent = field.help || "";
+    label.append(text, box, help);
+    item.append(label);
+  }
+
+  if (def.setup) {
+    const details = document.createElement("details");
+    details.className = "adv";
+    const sum = document.createElement("summary");
+    sum.textContent = `Set ${def.name} up`;
+    const body = document.createElement("div");
+    body.className = "adv-body";
+    const list = document.createElement("ol");
+    list.className = "pl-setup";
+    for (const stepText of def.setup) {
+      const li = document.createElement("li");
+      li.textContent = stepText;
+      list.append(li);
+    }
+    body.append(list);
+    details.append(sum, body);
+    item.append(details);
+  }
+
+  settle();
+  return item;
+}
+
+const pluginTested = {};
+
+function renderPlugins() {
+  els.pluginRows.replaceChildren(...PLUGINS.map(pluginRow));
 }
 
 /* ---------- local AI, the developer's switch ----------

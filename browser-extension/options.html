@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notal browser companion — which pages may ask</title>
+<link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>Which pages may ask</h1>
+    <p class="lead">
+      This companion answers a page that says it is Notal, and no other. Any page
+      on <code>localhost</code> or <code>127.0.0.1</code> counts as one without
+      being listed — that is how the app is usually run, and a local server is one
+      this machine started. Add an address below for anything else, such as a Notal
+      you host on <code>.github.io</code>.
+    </p>
+    <p class="lead">
+      A page opened straight off disk is not trusted, and cannot be: any downloaded
+      file would otherwise be able to drive your other tabs. Serve the app over
+      <code>http://localhost…</code> instead.
+    </p>
+
+    <form id="addForm" autocomplete="off">
+      <label>
+        <span>Add a Notal address</span>
+        <input id="originInput" type="text" placeholder="https://notal.example.com" spellcheck="false">
+      </label>
+      <button type="submit">Add</button>
+    </form>
+    <p id="addError" class="error" hidden></p>
+
+    <ul id="originList" class="origins"></ul>
+    <p id="emptyNote" class="quiet" hidden>Nothing listed. Only pages on this machine can ask.</p>
+
+    <div class="row">
+      <button type="button" id="rebind">Connect the Notal tabs already open</button>
+    </div>
+    <p id="status" class="quiet">Press that after adding an address: a page only gets the bridge when it loads, so a Notal tab that is already open would otherwise stay unanswered.</p>
+
+    <details>
+      <summary>What this companion can do to your other tabs</summary>
+      <div class="body">
+        <p>
+          Listing tabs, reading the text of a page, and mapping its links, buttons
+          and fields happen on their own, because they only look. Everything that
+          changes something — opening a tab, moving one, clicking, typing, closing —
+          arrives in Notal as a card that says what it intends, and nothing happens
+          until that card is approved.
+        </p>
+        <p>
+          Typing refuses a password field, and refuses a field whose label has
+          changed since the page was mapped. When this companion is working in a tab
+          you are not looking at, that tab shows a mark in its title area while the
+          work lasts.
+        </p>
+        <p>
+          Nothing is sent anywhere: this companion talks to the tabs in this Chrome
+          and to the Notal page that asked, and it has no server of its own.
+        </p>
+      </div>
+    </details>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

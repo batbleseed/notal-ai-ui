@@ -1,0 +1,75 @@
+/* The companion's own page, in the app's colours so it reads as the same tool:
+   warm paper, one accent, and nothing that moves on its own. */
+:root {
+  --bg: #f5f1ea;
+  --surface: #faf9f7;
+  --text: #1f1e1d;
+  --text-soft: #5e5d59;
+  --text-faint: #8d8b84;
+  --accent: #d97757;
+  --accent-soft: #f6e5dd;
+  --border: #e3dfd6;
+  --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  --radius: 14px;
+  --radius-sm: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #211f1d;
+    --surface: #2a2724;
+    --text: #ece8e1;
+    --text-soft: #bdb7ad;
+    --text-faint: #8d8b84;
+    --accent: #e08b6a;
+    --accent-soft: #3a2c25;
+    --border: #3b3733;
+  }
+}
+
+body {
+  margin: 0; padding: 28px 20px 60px; background: var(--bg); color: var(--text);
+  font: 400 15px/1.6 var(--sans);
+}
+main { max-width: 640px; margin: 0 auto; }
+h1 { font-size: 21px; margin: 0 0 14px; }
+.lead, .body p { color: var(--text-soft); margin: 0 0 12px; }
+code {
+  font: 400 13.5px/1.5 var(--mono); padding: 1px 5px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+}
+
+form { display: grid; gap: 10px; margin: 22px 0 8px; }
+form label { display: grid; gap: 6px; }
+form span { font-size: 13px; font-weight: 600; color: var(--text-soft); }
+input {
+  font: inherit; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px;
+}
+input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+button {
+  font: 600 14px/1 var(--sans); color: var(--text); cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 11px 16px; min-height: 42px;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .6; cursor: default; }
+form button { background: var(--accent); border-color: var(--accent); color: #fff; justify-self: start; }
+
+.origins { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 8px; }
+.origins li {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding: 10px 12px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.origins span { font: 400 14px/1.4 var(--mono); overflow-wrap: anywhere; }
+.origins .remove { min-height: 34px; padding: 7px 12px; font-size: 13px; color: var(--text-soft); }
+
+.error { color: #c0392b; font-size: 13.5px; margin: 0; }
+.quiet { color: var(--text-faint); font-size: 13.5px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 6px; }
+
+details { margin-top: 26px; border-top: 1px solid var(--border); padding-top: 16px; }
+summary { font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text); }
+.body { padding-top: 12px; }

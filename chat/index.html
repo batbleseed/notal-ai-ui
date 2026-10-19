@@ -523,6 +523,7 @@
           <button class="settings-tab" data-tab="security">Security</button>
           <button class="settings-tab" data-tab="shortcuts">Shortcuts</button>
           <button class="settings-tab" data-tab="extensions">Extensions</button>
+          <button class="settings-tab" data-tab="plugins">Plugins</button>
           <button class="settings-tab" data-tab="desktop" id="desktopTab" hidden>Desktop</button>
         </nav>
         <div class="settings-panels">
@@ -806,6 +807,13 @@ grant execute on function withdraw_extension(uuid, text) to anon;</pre>
             </details>
           </section>
 
+          <section class="settings-panel" id="panel-plugins" hidden>
+            <p class="panel-note">A plugin lets Notal do something outside this page and report what actually
+              happened. Reading is free; anything that changes something — a commit, a click, a typed field —
+              stops and shows you a card first, and nothing runs until you press Approve.</p>
+            <div id="pluginRows"></div>
+          </section>
+
           <!-- only Notal AI Studio shows this tab; in a browser tab it stays
                hidden, because there is no tray, no shortcut table and no file on
                disk to speak of there -->
@@ -866,6 +874,7 @@ grant execute on function withdraw_extension(uuid, text) to anon;</pre>
 
   <script src="../gsap.min.js"></script>
   <script src="../prompts.js"></script>
+  <script src="../plugins.js"></script>
   <script src="../syntax.js"></script>
   <script src="../webmodel.js"></script>
   <script src="../app.js"></script>
