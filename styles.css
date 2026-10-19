@@ -1286,6 +1286,61 @@ button:disabled { opacity: .5; cursor: default; }
 @media (max-width: 620px) {
   .ext-view-head { grid-template-columns: 1fr; align-items: start; }
 }
+
+/* ============ Plugins, the view the sidebar button opens ============
+   The plugin controls left Settings and came into the open, because they answer
+   a question you ask before you type — "can Notal actually reach my GitHub /
+   browser / mail?" — and a buried tab is where a broken connection goes to hide.
+   Little cubes along the top, one per plugin: mark, name, and a dot that states
+   what it can really do. Picking one opens its controls below the row. */
+.plg-view {
+  display: none; flex: 1; min-height: 0; overflow-y: auto;
+  padding: 0 24px 40px;
+}
+.main.plg-open .chat, .main.plg-open .composer-wrap,
+.main.plg-open .mode-seg, .main.plg-open #shareBtn { display: none; }
+.main.plg-open .plg-view { display: block; }
+.plg-view-head {
+  max-width: 880px; margin: 0 auto;
+  padding: clamp(18px, 5vh, 44px) 0 18px;
+}
+.plg-view-head h2 { font-family: var(--serif); font-size: 26px; font-weight: 600; letter-spacing: -.3px; }
+.plg-view-body {
+  display: grid; align-content: start; gap: 18px;
+  max-width: 880px; margin: 0 auto;
+}
+/* auto-fit rather than four fixed columns: the cubes keep their square on a
+   phone and fold to two-over-two, instead of shrinking to unreadable chips */
+.plg-cubes {
+  list-style: none; display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+}
+.plg-cube {
+  display: grid; justify-items: center; align-content: center; gap: 9px;
+  width: 100%; min-height: 96px; padding: 12px 10px;
+  font: inherit; text-align: center; color: var(--text-soft); cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.plg-cube:hover { border-color: var(--accent); }
+.plg-cube:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.plg-cube.on { border-color: var(--accent); box-shadow: var(--ring); color: var(--text); }
+.plg-mark {
+  display: grid; place-items: center; width: 36px; height: 36px;
+  border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-soft);
+}
+.plg-cube.on .plg-mark { background: var(--accent-soft); color: var(--accent); }
+.plg-name { font-size: 12.5px; font-weight: 600; }
+/* the dot is the whole status report at this size, so it carries the full
+   sentence on its tooltip and the cube never has to say something untrue */
+.plg-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+.plg-dot.off { background: transparent; border: 1px solid var(--text-faint); }
+.plg-dot.ready { background: var(--accent); opacity: .5; }
+.plg-dot.ok { background: var(--accent); }
+.plg-dot.bad { background: #c0392b; }
+[data-theme="dark"] .plg-dot.bad { background: #e2938a; }
+.plg-pick {
+  margin: 0; padding: 16px 2px; font-size: 13px; line-height: 1.6; color: var(--text-faint);
+}
 .ext-sql {
   font: 11.5px/1.55 var(--mono); white-space: pre; overflow-x: auto;
   background: var(--code-bg); border: 1px solid var(--code-edge);

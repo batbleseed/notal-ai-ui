@@ -42,7 +42,8 @@ const els = {
   fileInput: $("#fileInput"),
   attachTray: $("#attachTray"),
   micBtn: $("#micBtn"),
-  pluginRows: $("#pluginRows"),
+  pluginCubes: $("#pluginCubes"),
+  pluginDetail: $("#pluginDetail"),
   toast: $("#toast"),
   lightbox: $("#lightbox"),
   lightboxImg: $("#lightboxImg"),
@@ -319,8 +320,12 @@ if (!state.plugins || typeof state.plugins !== "object") state.plugins = {};
 for (const def of PLUGINS) {
   const saved = state.plugins[def.id];
   const cfg = { enabled: Boolean(saved?.enabled) };
-  for (const field of def.fields || [])
-    cfg[field.key] = typeof saved?.[field.key] === "string" ? saved[field.key] : "";
+  for (const field of def.fields || []) {
+    /* a blank saved value counts as never filled in, so a default this version
+       ships reaches a browser that already has this plugin stored as an empty box */
+    const stored = typeof saved?.[field.key] === "string" ? saved[field.key].trim() : "";
+    cfg[field.key] = stored || field.default || "";
+  }
   /* a token this app signed in for, rather than one that was pasted: it comes
      with an expiry and a refresh, so it is kept as one object, not a field */
   if (def.signIn)
@@ -334,6 +339,9 @@ for (const def of PLUGINS) {
 if (typeof pluginHooks === "object") {
   pluginHooks.relay = relayBase;
   pluginHooks.persist = save;
+  /* Gmail and Drive are one Google client, so either box may hold the ID and the
+   other reads it through this */
+  pluginHooks.config = id => state.plugins[id];
 }
 
 function pluginConfig(def) {
@@ -2768,7 +2776,6 @@ function openSettings(tab = "general") {
   /* these readouts are snapshots of what just happened — a chat turn can change
      a provider's status, so they are refreshed on every open, not at load */
   renderProviders();
-  renderPlugins();
   renderRelayUI();
   renderDiagnostics();
   renderBrowserModel();
@@ -3178,6 +3185,8 @@ function pluginRow(def) {
     const st = pluginNote(def, pluginTested[def.id]);
     note.textContent = st.text;
     note.className = `pl-note ${st.tone}`;
+    const sh = pluginShort(def);
+    markCube(def.id, sh.tone, sh.text);
   };
 
   /* A plugin that signs in brings its own button, its own line of code while the
@@ -3265,13 +3274,10 @@ function pluginRow(def) {
     try {
       const out = await def.test(cfg);
       pluginTested[def.id] = { text: out.message, tone: out.ok ? "ok" : "bad" };
-      note.textContent = out.message;
-      note.className = `pl-note ${out.ok ? "ok" : "bad"}`;
+      settle();
     } catch (err) {
-      const text = String(err?.message || err);
-      pluginTested[def.id] = { text, tone: "bad" };
-      note.textContent = text;
-      note.className = "pl-note bad";
+      pluginTested[def.id] = { text: String(err?.message || err), tone: "bad" };
+      settle();
     } finally {
       testBtn.disabled = false;
       testBtn.textContent = "Test";
@@ -3328,8 +3334,100 @@ function pluginRow(def) {
 
 const pluginTested = {};
 
+/* ---------- the cube row ----------
+   A cube is a plugin seen from across the room: its mark, its name, and a dot
+   that says what it can honestly do right now. The controls only appear for the
+   one you press, which keeps four of them legible in a row. */
+const cubeDots = new Map();
+const cubeButtons = new Map();
+let pluginPicked = null;
+
+function markCube(id, tone, text) {
+  const dot = cubeDots.get(id);
+  if (dot) { dot.className = `plg-dot ${tone}`; dot.title = text; }
+}
+
+/* pluginNote answers in full sentences, which is too much for a dot: this is the
+   same reading, shortened, and it keeps switched-off apart from armed — both of
+   those are "idle" in the long note, and from a distance they are not the same
+   thing at all. */
+function pluginShort(def) {
+  const cfg = pluginConfig(def);
+  if (!cfg.enabled) return { tone: "off", text: "Switched off — the model is never told it exists." };
+  const st = pluginNote(def, pluginTested[def.id]);
+  const label = st.tone === "ok" ? "Connected"
+    : st.tone === "bad" ? "Not ready" : "On, not checked yet";
+  return { tone: st.tone === "idle" ? "ready" : st.tone, text: `${label}. ${st.text}` };
+}
+
+function pluginCube(def) {
+  const li = document.createElement("li");
+  const picked = def.id === pluginPicked;
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "plg-cube" + (picked ? " on" : "");
+  btn.setAttribute("aria-pressed", String(picked));
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "22");
+  svg.setAttribute("height", "22");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.7");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  /* the drawing is authored in plugins.js next to the plugin it names — it is
+     never text that came back from a service */
+  svg.innerHTML = def.icon || "";
+  const mark = document.createElement("span");
+  mark.className = "plg-mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.append(svg);
+
+  const name = document.createElement("span");
+  name.className = "plg-name";
+  name.textContent = def.name;
+
+  const dot = document.createElement("span");
+  const st = pluginShort(def);
+  dot.className = `plg-dot ${st.tone}`;
+  dot.title = st.text;
+  cubeDots.set(def.id, dot);
+  cubeButtons.set(def.id, btn);
+
+  btn.append(mark, name, dot);
+  btn.addEventListener("click", () => {
+    /* pressing the open one again closes it; the dots and the row of cubes stay
+       exactly where they are, so the finger does not lose its place */
+    pluginPicked = picked ? null : def.id;
+    for (const [id, b] of cubeButtons) {
+      const on = id === pluginPicked;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));
+    }
+    renderPluginDetail();
+  });
+  li.append(btn);
+  return li;
+}
+
+function renderPluginDetail() {
+  const def = PLUGINS.find(p => p.id === pluginPicked);
+  if (!def) {
+    const p = document.createElement("p");
+    p.className = "plg-pick";
+    p.textContent = "Pick one to see what it does, whether anything is connected to it, and what it can be asked to do.";
+    els.pluginDetail.replaceChildren(p);
+    return;
+  }
+  els.pluginDetail.replaceChildren(pluginRow(def));
+}
+
 function renderPlugins() {
-  els.pluginRows.replaceChildren(...PLUGINS.map(pluginRow));
+  els.pluginCubes.replaceChildren(...PLUGINS.map(pluginCube));
+  renderPluginDetail();
 }
 
 /* ---------- local AI, the developer's switch ----------
@@ -3988,6 +4086,7 @@ document.addEventListener("keydown", (e) => {
 els.chatTitle = $(".chat-title");
 els.main = $(".main");
 els.extView = $("#extView");
+els.plgView = $("#pluginsView");
 const PANELS = ["projects", "memory", "skills"];
 let panelOpen = null;
 
@@ -4013,6 +4112,7 @@ function openPanel(name) {
 function setView(name) {
   const panel = PANELS.includes(name) ? name : null;
   const ext = name === "extensions";
+  const plg = name === "plugins";
   if (panel !== panelOpen) {
     if (panelOpen) closePanel(panelOpen);
     panelOpen = panel;
@@ -4021,16 +4121,24 @@ function setView(name) {
     renderPanel(panel);
   }
   const wasExt = els.main.classList.contains("ext-open");
+  const wasPlg = els.main.classList.contains("plg-open");
   els.main.classList.toggle("ext-open", ext);
+  els.main.classList.toggle("plg-open", plg);
   /* the view stays in the DOM, so it only needs filling and animating on the
      way in — Chats and Esc just hide it again */
   if (ext && !wasExt) {
     renderExtensions();
     motion.reveal(els.extView);
   }
+  if (plg && !wasPlg) {
+    renderPlugins();
+    motion.reveal(els.plgView);
+  }
+  const active = panel ?? (ext ? "extensions" : plg ? "plugins" : "chats");
   document.querySelectorAll(".nav-item").forEach(b =>
-    b.classList.toggle("active", b.dataset.view === (panel ?? (ext ? "extensions" : "chats"))));
+    b.classList.toggle("active", b.dataset.view === active));
   els.chatTitle.textContent = ext ? "Extensions"
+    : plg ? "Plugins"
     : activeConv()?.title
     || (state.activeProject ? projectName(state.activeProject) : "Notal AI");
 }

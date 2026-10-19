@@ -120,13 +120,19 @@ function ghScopes(cfg) {
   return String(cfg.scopes || "").trim() || "public_repo";
 }
 
+/* Both services end their own sentence with a period and this line adds one of
+   its own, so without the trim the reader sees "not found.." */
+function oauthReason(r) {
+  return String(r?.error_description || r?.error || "").replace(/\.$/, "");
+}
+
 async function githubSignIn(cfg, onStatus, signal) {
   const clientId = String(cfg.clientId || "").trim();
   if (!clientId) throw new Error("Notal signs in with an OAuth app of your own, so its client ID goes in the field above.");
 
   const start = await githubRelayStep("device", { client_id: clientId, scope: ghScopes(cfg) });
   if (start.error)
-    throw new Error(`GitHub would not hand out a code: ${start.error_description || start.error}. ` +
+    throw new Error(`GitHub would not hand out a code: ${oauthReason(start)}. ` +
       "Check the client ID, and that Device Flow is switched on for that OAuth app.");
   if (!start.device_code || !start.user_code)
     throw new Error("GitHub answered the code request with something that had no code in it.");
@@ -203,6 +209,231 @@ async function githubAccessToken(cfg, signal) {
   });
   pluginHooks.persist();
   return o.token;
+}
+
+/* ---------- Google, where one step cannot happen in a browser at all ----------
+   GitHub's device flow asks a tab for nothing but a public client ID. Google's own
+   documentation marks client_secret Required on the polling call, so the exchange
+   needs somewhere that is allowed to hold a secret — and a secret a browser holds
+   is not one. That is the relay's whole job here: it adds its own secret to the
+   form on the way out and never sends it back.
+
+   Measured from this machine rather than assumed: oauth2.googleapis.com,
+   gmail.googleapis.com and www.googleapis.com each answer a cross-origin preflight
+   with access-control-allow-origin. So once a token exists, Gmail and Drive calls
+   go straight from this tab and the relay drops out of the picture entirely —
+   which is also why pasting an access token here needs no relay at all. */
+const GOOGLE_DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
+/* a Google access token lives an hour, so it is traded early rather than caught
+   out halfway through a call */
+const GOOGLE_REFRESH_MARGIN_MS = 5 * 60 * 1000;
+
+async function googleRelayStep(step, fields) {
+  const base = pluginHooks.relay();
+  if (!base) throw new Error(
+    "Google's sign-in needs a client secret on the polling call, which no browser tab should hold, " +
+    "so it goes through the app's relay. Put a relay address in Settings → Providers — and note the " +
+    "relay itself has to be given GOOGLE_CLIENT_SECRET — or paste an access token below instead.");
+  const res = await fetch(`${base}/google`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ step, fields }),
+  });
+  const text = await res.text();
+  let payload;
+  try { payload = JSON.parse(text); }
+  catch { throw new Error(`${base}/google answered ${res.status} with something that is not JSON`); }
+  /* Google's answers, refusals included, are the caller's to read; only a refusal
+     the relay made itself ends the call here. */
+  if (payload?.refused_by) throw new Error(payload.error || `the relay refused the request (${res.status})`);
+  if (!res.ok && payload?.error === undefined)
+    throw new Error(`the relay answered ${res.status}${payload?.message ? `: ${payload.message}` : ""}`);
+  return payload;
+}
+
+/* One OAuth client serves Gmail and Drive, so the ID is only typed once: whichever
+   of the two boxes holds it answers for both. */
+function googleClientId(cfg) {
+  const own = String(cfg?.clientId || "").trim();
+  if (own) return own;
+  for (const id of ["gmail", "drive"]) {
+    const other = String(pluginHooks.config?.(id)?.clientId || "").trim();
+    if (other) return other;
+  }
+  return "";
+}
+
+/* Asked for at sign-in, never stored on Google's side: an OAuth client of this
+   type has no scope picker. The default per plugin is the least that does its
+   job, and the field lets you widen it on purpose. */
+function googleScopes(cfg, fallback) {
+  return String(cfg.scopes || "").trim() || fallback;
+}
+
+function rememberGoogleToken(cfg, r) {
+  cfg.oauth = {
+    token: r.access_token,
+    refresh: r.refresh_token || "",
+    expiresAt: r.expires_in ? Date.now() + Number(r.expires_in) * 1000 : 0,
+    /* Google separates its scopes with spaces, GitHub with commas */
+    scopes: String(r.scope || "").split(/\s+/).filter(Boolean),
+    login: "",
+  };
+  pluginHooks.persist();
+  return cfg.oauth;
+}
+
+function googleWait(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener?.("abort", giveUp);
+      resolve();
+    }, ms);
+    const giveUp = () => {
+      clearTimeout(timer);
+      reject(new DOMException("stopped before Google was signed into", "AbortError"));
+    };
+    signal?.addEventListener?.("abort", giveUp, { once: true });
+  });
+}
+
+/* opts.scopes is what this plugin asks for, opts.identify is how it finds out
+   whose account the token turned out to be — the profile call differs per API, so
+   the plugin brings it rather than this flow guessing. */
+async function googleSignIn(cfg, opts, onStatus, signal) {
+  const clientId = googleClientId(cfg);
+  if (!clientId)
+    throw new Error("Google signs this in with an OAuth client of your own, so its client ID goes in the field above.");
+
+  const start = await googleRelayStep("device", { client_id: clientId, scope: googleScopes(cfg, opts.scopes) });
+  if (start.error)
+    throw new Error(`Google would not hand out a code: ${oauthReason(start)}. ` +
+      "Check the client ID, and that this relay has been given the client secret.");
+  if (!start.device_code || !start.user_code)
+    throw new Error("Google answered the code request with something that had no code in it.");
+
+  /* Google's own page calls this field verification_url where the RFC it follows
+     calls it verification_uri, and no verification_uri_complete exists for the
+     device flow here — so read whichever arrived and fall back to the known page */
+  const link = start.verification_url || start.verification_uri || "https://www.google.com/device";
+  onStatus?.({ stage: "code", code: start.user_code, link });
+
+  let waitMs = Math.max(Number(start.interval) || 5, 2) * 1000;
+  const deadline = Date.now() + (Number(start.expires_in) || 1800) * 1000;
+  for (;;) {
+    await googleWait(waitMs, signal);
+    const r = await googleRelayStep("token", {
+      client_id: clientId,
+      device_code: start.device_code,
+      grant_type: GOOGLE_DEVICE_GRANT,
+    });
+    if (r.access_token) {
+      const saved = rememberGoogleToken(cfg, r);
+      try { saved.login = (await opts.identify?.(cfg, signal)) || ""; }
+      catch { /* a token that works later is still a token */ }
+      pluginHooks.persist();
+      onStatus?.({ stage: "done", login: saved.login });
+      return saved;
+    }
+    switch (r.error) {
+      case "authorization_pending": break;
+      case "slow_down": waitMs += 5000; break;
+      case "expired_token":
+        throw new Error("That code ran out before it was used. Press Sign in again for a fresh one.");
+      case "access_denied":
+        throw new Error("The sign-in was declined at Google.");
+      default:
+        throw new Error(`Google refused the token (${r.error || "no reason given"})` +
+          (r.error_description ? `: ${r.error_description}` : ""));
+    }
+    if (Date.now() > deadline)
+      throw new Error("Google's code expired before anyone entered it. Press Sign in again.");
+  }
+}
+
+function googleSignOut(cfg) {
+  cfg.oauth = null;
+  pluginHooks.persist();
+}
+
+/* The token to send, asked for rather than assumed: a sign-in wins over a pasted
+   token, and a sign-in that has run out is traded for a new one before use.
+   Google does not rotate the refresh token on this grant, so the old one stays. */
+async function googleAccessToken(cfg, signal) {
+  const o = cfg.oauth;
+  if (!o?.token) return String(cfg.token || "").trim();
+  if (!o.expiresAt || Date.now() < o.expiresAt - GOOGLE_REFRESH_MARGIN_MS) return o.token;
+  if (!o.refresh)
+    throw new Error("The Google sign-in has run out and there is nothing to renew it with — sign in again.");
+  const clientId = googleClientId(cfg);
+  if (!clientId)
+    throw new Error("The Google sign-in needs its OAuth client ID to renew — put it back in the field above.");
+  const r = await googleRelayStep("refresh", {
+    client_id: clientId,
+    refresh_token: o.refresh,
+    grant_type: "refresh_token",
+  });
+  if (!r.access_token)
+    throw new Error(`Google would not renew the sign-in (${r.error || "no reason given"}) — sign in again.`);
+  Object.assign(o, {
+    token: r.access_token,
+    refresh: r.refresh_token || o.refresh,
+    expiresAt: r.expires_in ? Date.now() + Number(r.expires_in) * 1000 : 0,
+  });
+  pluginHooks.persist();
+  return o.token;
+}
+
+/* Gmail and Drive are two different hosts, and one of them is a upload endpoint,
+   so this takes the whole address rather than a path. init.raw asks for the body
+   as text, which is what a file's contents and an export both come back as. */
+async function googleApi(url, cfg, init, signal) {
+  const token = await googleAccessToken(cfg, signal);
+  if (!token) throw new Error("Nothing is connected to Google yet — sign in, or paste an access token.");
+  const res = await fetch(url, {
+    ...init,
+    signal,
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(init?.body && !init?.rawBody ? { "content-type": "application/json" } : {}),
+      ...(init?.headers || {}),
+    },
+  });
+  const text = await res.text();
+  if (init?.raw) {
+    if (!res.ok) throw new Error(`Google said ${res.status} reading that file: ${text.slice(0, 200)}`);
+    return text;
+  }
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; }
+  catch { /* a proxy or a login page can answer instead of the API */ }
+  if (!res.ok) {
+    const e = body?.error;
+    const reason = e?.errors?.[0]?.reason || "";
+    const detail = e?.message || text.slice(0, 200) || res.statusText;
+    /* the two 403s a person can actually fix, said as the thing to fix */
+    if (res.status === 403 && /accessNotConfigured|APIS_DISABLED|not been used|enable it/i.test(`${detail} ${reason}`))
+      throw new Error(`That Google API is not switched on for this OAuth client. Google Cloud Console → APIs & Services → Library, enable it, then try again. (it said: ${detail})`);
+    if (res.status === 403 && /auth|permission|insufficient/i.test(`${detail} ${reason}`))
+      throw new Error(`Google refused this call for the scopes this sign-in was given (403): ${detail}`);
+    if (res.status === 401) throw new Error(`Google rejected this token (401): ${detail}`);
+    if (res.status === 404) throw new Error(`Google said 404 — no such message or file, or this token cannot see it (${detail})`);
+    throw new Error(`Google said ${res.status}: ${detail}`);
+  }
+  return body;
+}
+
+function base64UrlFromText(text) {
+  const bytes = new TextEncoder().encode(String(text));
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function textFromBase64Url(b64) {
+  const s = String(b64 || "").replace(/-/g, "+").replace(/_/g, "/");
+  const bytes = Uint8Array.from(atob(s + "=".repeat((4 - (s.length % 4)) % 4)), c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
 }
 
 /* ---------- GitHub ----------
@@ -333,10 +564,15 @@ async function ghPush(args, cfg, signal) {
 const GITHUB_PLUGIN = {
   id: "github",
   name: "GitHub",
+  /* the cube's drawing. This is markup written here, next to the plugin it
+     names, and it is the only place a plugin's icon comes from — nothing a
+     service ever sends can change what these tiles look like. */
+  icon: '<circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="8.5" r="2.4"/><path d="M6 8.4v7.2"/><path d="M18 10.9c0 3.2-2.7 4.7-6.2 4.7H9.4"/>',
   desc: "Read a repository, its issues and its files, and commit files back through GitHub's own API. Nothing is cloned: the change is made from this tab, one commit at a time.",
   setup: [
+    "Nothing to do to try it: the client ID below is Notal's own OAuth app, already filled in, and GitHub's device flow needs no secret from you. Make your own app if you would rather hold the tokens — steps 1 to 3 are for that.",
     "On GitHub: Settings → Developer settings → OAuth Apps → New OAuth App. Homepage and callback URL both want a real address, and GitHub will not let the callback be blank — put the address Notal is served from in both. Neither one is used: the device flow never redirects a browser back here.",
-    "Open the app you just made and turn on Device Flow. GitHub leaves it off, and without it GitHub refuses to hand out a code.",
+    "Open the app you just made and turn on Device Flow. GitHub leaves it off, and without it GitHub refuses to hand out a code. Expire user access tokens can stay on: that is what gives a token that renews itself instead of one that dies in eight hours.",
     "Copy that app's Client ID into the field below. The client secret is not needed and never leaves GitHub: the device flow exists for an application that cannot keep one.",
     "That page has no scope picker — GitHub grants scopes per request, not per app — so the scopes are asked for at sign-in instead: public_repo unless you type others below, and Test reads back whatever GitHub actually granted.",
     "Put a relay address in Settings → Providers, or use Notal AI Studio, which ships one. GitHub's code and token endpoints answer no browser tab, so the exchange itself is the one thing this app cannot do alone.",
@@ -348,8 +584,12 @@ const GITHUB_PLUGIN = {
     key: "clientId",
     label: "OAuth app client ID",
     optional: true,
+    /* a client ID is the half of an OAuth pair that is meant to be public — it is
+       what GitHub prints on the code screen — so it ships here and grants nothing
+       by itself. Whoever runs this app signs in through their own OAuth app. */
+    default: "Ov23liq9tswM30kZ6Q7n",
     placeholder: "the public id of your own OAuth app",
-    help: "From an OAuth App you make on GitHub, with Device Flow turned on. This one is public by design and is what GitHub shows you at the code screen — it is not a secret and grants nothing by itself.",
+    help: "Already filled with the id of Notal's own OAuth app: it is public by design, it grants nothing on its own, and sign-in works the moment Device Flow is switched on for it. Put your own app's id here to make the tokens yours instead.",
   }, {
     key: "scopes",
     label: "Scopes to ask GitHub for",
@@ -527,6 +767,7 @@ const BROWSER_PLUGIN = {
   id: "browser",
   name: "Browser",
   desc: "Read the pages already open in Chrome, and act on them — follow a link, fill a field, press a button — through a companion extension you install once. It only ever answers Notal's own tab, and every action that moves a page waits for you.",
+  icon: '<rect x="3" y="4.5" width="18" height="15" rx="2.2"/><path d="M3 9.4h18"/><path d="M6.4 7h.01M9.2 7h.01M12 7h.01"/>',
   setup: [
     "From the Chrome Web Store: search for Notal AI — browser companion and press Add to Chrome. From this folder instead: open chrome://extensions, switch on Developer mode, press Load unpacked and choose browser-extension.",
     "Either way, open its options (chrome://extensions → Details → Extension options) and list the address Notal is served from. A page on localhost or 127.0.0.1 is trusted without being listed; nothing else is.",
@@ -643,5 +884,352 @@ what you need, and wait for them to tell you it is done.`,
   },
 };
 
-const PLUGIN_DEFS = [GITHUB_PLUGIN, BROWSER_PLUGIN];
+/* ---------- Gmail ----------
+   Four calls. Three read a mailbox that is already yours; the fourth writes a
+   message and stops for approval before a byte of it leaves, because a mail sent
+   is a mail sent. The read scope is what Google classes Restricted, so the
+   account is the only thing that can grant it — nothing here asks for the right to
+   read somebody else's mail. */
+const GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
+const GMAIL_SCOPES = "https://www.googleapis.com/auth/gmail.readonly " +
+  "https://www.googleapis.com/auth/gmail.send";
+
+async function gmailIdentify(cfg, signal) {
+  const p = await googleApi(`${GMAIL_BASE}/profile`, cfg, { signal }, signal);
+  if (!p?.emailAddress) return "";
+  return p.messagesTotal ? `${p.emailAddress}, ${p.messagesTotal} messages` : p.emailAddress;
+}
+
+function gmailHeader(msg, want) {
+  const h = (msg?.payload?.headers || []).find(x => x.name?.toLowerCase() === want.toLowerCase());
+  return h?.value || "";
+}
+
+/* a mail is a tree of parts, and the plain-text one is the reading copy; an html
+   body is stripped to words rather than shown as markup */
+function gmailBody(msg) {
+  let plain = "", html = "";
+  const walk = part => {
+    if (!part) return;
+    if (part.body?.data) {
+      const text = textFromBase64Url(part.body.data);
+      if (part.mimeType === "text/plain" && !plain) plain = text;
+      else if (part.mimeType === "text/html" && !html) html = text;
+    }
+    for (const sub of part.parts || []) walk(sub);
+  };
+  walk(msg?.payload);
+  const body = plain || html.replace(/<[^>]*>/g, " ").replace(/[ \t]+/g, " ").trim();
+  return body || msg?.snippet || "";
+}
+
+function gmailRaw(a) {
+  const to = String(a.to || "").trim();
+  if (!to) throw new Error("a message needs someone to go to");
+  const lines = [`To: ${to}`];
+  if (String(a.cc || "").trim()) lines.push(`Cc: ${String(a.cc).trim()}`);
+  lines.push(`Subject: ${String(a.subject || "(no subject)")}`, "", String(a.body ?? ""));
+  return base64UrlFromText(lines.join("\r\n"));
+}
+
+const GMAIL_PLUGIN = {
+  id: "gmail",
+  name: "Gmail",
+  icon: '<rect x="3" y="5.5" width="18" height="13" rx="2.2"/><path d="M3.8 7 12 12.8 20.2 7"/>',
+  desc: "Read and search the mailbox that signs in, and write a message — which is shown to you before it is sent. Everything goes to Google's own API from this tab; nothing is copied anywhere else.",
+  setup: [
+    "Google Cloud Console → APIs & Services → Library, and switch on Gmail API. An OAuth client that has not been given the API gets a 403 that this plugin repeats back to you.",
+    "OAuth consent screen: External, and add the Gmail address you will sign in with under Test users. While the app is unverified Google shows a Google-hasn't-verified-this-app warning at the code screen — that warning is expected here, not a failure, and Gmail's read scope is one of the Restricted ones a public app has to be assessed for.",
+    "Credentials → Create credentials → OAuth client ID, application type TV and Limited-input devices. That is the type that speaks the device flow.",
+    "Copy its Client ID into the field below. Its Client Secret does not go here: it goes to the relay (GOOGLE_CLIENT_SECRET on the worker, or notal-ai-studio/google_secret for the desktop app), because Google requires it on the polling call and a browser must not hold one.",
+    "Press Sign in with Google, type the code it shows at www.google.com/device, and wait for this to finish on its own.",
+    "No relay at all? Authorize in Google's own OAuth Playground and paste the access token below. It lasts about an hour and needs no secret, because Gmail answers this tab directly.",
+  ],
+  signInLabel: "Sign in with Google",
+  signOutLabel: "Sign out",
+  fields: [{
+    key: "clientId",
+    label: "OAuth client ID",
+    optional: true,
+    placeholder: "…apps.googleusercontent.com",
+    help: "From a TV and Limited-input devices client you make in Google Cloud Console. Public by design. The same client ID serves Gmail and Drive, so it only has to be typed into one of the two.",
+  }, {
+    key: "scopes",
+    label: "Scopes to ask Google for",
+    optional: true,
+    placeholder: GMAIL_SCOPES,
+    help: "Asked for at sign-in, space-separated. Left empty it asks for gmail.readonly and gmail.send: your own mail, and the right to write a message you approve. Drop gmail.send if Notal should never be able to send.",
+  }, {
+    key: "token",
+    label: "or an access token from elsewhere",
+    type: "password",
+    optional: true,
+    placeholder: "ya29.…",
+    help: "Google's OAuth Playground will give you one. It needs no relay and no client secret, and it runs out in about an hour.",
+  }],
+  ready(cfg) { return Boolean(cfg.oauth?.token || String(cfg.token || "").trim()); },
+  notReady: "Nothing is connected: sign in with Google above, or paste an access token below.",
+  signIn: (cfg, onStatus, signal) => googleSignIn(cfg, { scopes: GMAIL_SCOPES, identify: gmailIdentify }, onStatus, signal),
+  signOut(cfg) { googleSignOut(cfg); },
+  async test(cfg) {
+    if (!GMAIL_PLUGIN.ready(cfg))
+      return { ok: false, message: "Nothing is connected yet — press Sign in with Google, or paste an access token." };
+    const signal = typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(12000) : undefined;
+    const who = await gmailIdentify(cfg, signal);
+    const how = cfg.oauth?.token ? "a sign-in Google handed out" : "a token you pasted";
+    const when = cfg.oauth?.expiresAt
+      ? `, and it renews itself around ${new Date(cfg.oauth.expiresAt).toLocaleString()}` : "";
+    return { ok: true, message: `Gmail answers for ${who} — this works from this browser with ${how}${when}.` };
+  },
+  brief: `
+### Gmail
+
+Reads run on their own. Sending is not: the app shows you the message and waits,
+so only send what the user actually asked for, and say in your own reply that you
+sent it.
+
+- gmail.profile {} — the address this sign-in is, and how many messages it holds.
+- gmail.list {"query":"is:unread category:primary","limit":10} — the newest
+  matches of a Gmail search query. Gmail's own operators work (is:unread, from:,
+  subject:, older_than:7d). No query gives the newest mail there is.
+- gmail.read {"id":"18f…"} — one message: from, to, date, subject and its text.
+  The id comes from gmail.list, never from memory.
+- gmail.send {"to":"someone@example.com","subject":"…","body":"…","cc":""} —
+  one plain-text message. **will ask the user first.**
+
+Mail is someone's inbox. Quote the least of it that answers the question, and if a
+send was declined, it was not sent — do not retry it behind the approval.`,
+  actions: {
+    "gmail.profile": {
+      write: false,
+      summary: () => "the signed-in Gmail account",
+      async run(a, cfg, signal) {
+        const p = await googleApi(`${GMAIL_BASE}/profile`, cfg, { signal }, signal);
+        return `${p.emailAddress || "an address Google did not name"} — ` +
+          `${p.messagesTotal ?? "?"} messages, ${p.threadsTotal ?? "?"} threads`;
+      },
+    },
+    "gmail.list": {
+      write: false,
+      summary: a => `${a.query ? `mail matching “${ghLimit(a.query, 60)}”` : "the newest mail"}`,
+      async run(a, cfg, signal) {
+        const per = Math.min(Math.max(Number(a.limit) || 10, 1), 25);
+        const q = a.query ? `&q=${encodeURIComponent(String(a.query))}` : "";
+        const list = await googleApi(
+          `${GMAIL_BASE}/messages?maxResults=${per}${q}&includeSnippets=false`, cfg, { signal }, signal);
+        const ids = list?.messages || [];
+        if (!ids.length)
+          return a.query ? `Nothing in this mailbox matches ${a.query}.` : "This mailbox has no messages at all.";
+        /* the list endpoint gives ids and nothing else, so the headers come from
+           one metadata call per message — which is why the limit is small */
+        const some = await Promise.all(ids.map(m => googleApi(
+          `${GMAIL_BASE}/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+          cfg, { signal }, signal).catch(() => null)));
+        return ids.map((m, i) => {
+          const msg = some[i];
+          if (!msg) return `[${m.id}] — Google would not send this one`;
+          return `[${m.id}] ${gmailHeader(msg, "Date")} — from ${gmailHeader(msg, "From")}: ` +
+            `${gmailHeader(msg, "Subject") || "(no subject)"}${msg.snippet ? ` — ${msg.snippet}` : ""}`;
+        }).join("\n");
+      },
+    },
+    "gmail.read": {
+      write: false,
+      summary: a => `message ${a.id}`,
+      async run(a, cfg, signal) {
+        if (!a.id) throw new Error("gmail.read needs the id gmail.list gave");
+        const m = await googleApi(`${GMAIL_BASE}/messages/${encodeURIComponent(String(a.id))}?format=full`,
+          cfg, { signal }, signal);
+        return `From ${gmailHeader(m, "From")}\nTo ${gmailHeader(m, "To")}\n` +
+          `Date ${gmailHeader(m, "Date")}\nSubject: ${gmailHeader(m, "Subject") || "(no subject)"}\n\n` +
+          ghLimit(gmailBody(m), 6000);
+      },
+    },
+    "gmail.send": {
+      write: true,
+      summary: a => `send a message to ${a.to}: “${a.subject || "(no subject)"}”, ` +
+        `${new Blob([String(a.body ?? "")]).size} B of text`,
+      async run(a, cfg, signal) {
+        const made = await googleApi(`${GMAIL_BASE}/messages`, cfg, {
+          method: "POST", body: JSON.stringify({ raw: gmailRaw(a) }),
+        }, signal);
+        if (!made?.id) throw new Error("Gmail accepted the send but did not name the message it made");
+        return `Sent to ${a.to}${a.cc ? ` (cc ${a.cc})` : ""}, message id ${made.id}, ` +
+          `thread ${made.threadId || "new"}.`;
+      },
+    },
+  },
+};
+
+/* ---------- Drive ----------
+   The read half is drive.readonly, which is Google's own list of everything the
+   account can open. The write half is deliberately the narrower drive.file: a
+   token sitting in a browser can create and update files this app made, and gets
+   no purchase on the rest of the drive. */
+const DRIVE_BASE = "https://www.googleapis.com/drive/v3";
+const DRIVE_FILE_BASE = "https://www.googleapis.com/upload/drive/v3/files";
+const DRIVE_SCOPES = "https://www.googleapis.com/auth/drive.readonly " +
+  "https://www.googleapis.com/auth/drive.file";
+
+async function driveIdentify(cfg, signal) {
+  const about = await googleApi(`${DRIVE_BASE}/about?fields=user(emailAddress,displayName)`,
+    cfg, { signal }, signal);
+  const u = about?.user;
+  if (!u?.emailAddress) return "";
+  return u.displayName ? `${u.displayName} <${u.emailAddress}>` : u.emailAddress;
+}
+
+/* Drive's query language takes single quotes, so one in a name ends the string
+   and starts something else */
+function driveQuote(value) { `'${String(value).replace(/'/g, "\\'")}'`; }
+
+const DRIVE_FIELDS = "id,name,mimeType,size,modifiedTime,trashed";
+
+const DRIVE_PLUGIN = {
+  id: "drive",
+  name: "Drive",
+  icon: '<path d="M8.3 4.4h7.4l4.6 8-3.3 6.2H6.4"/><path d="M3.4 12.4 8.3 4.4"/><path d="M1.6 20.6 3.4 12.4"/><path d="M6.4 18.6H17"/>',
+  desc: "Find and read files in the Google account that signs in, and write a plain-text file back. Google Docs are read through Google's own text export, so they come back as words rather than an unreadable id.",
+  setup: [
+    "Google Cloud Console → APIs & Services → Library, and switch on Google Drive API. The Gmail and Drive APIs are separate switches on that page.",
+    "Use the OAuth client you made for Gmail — the same Client ID below serves both, and one consent screen covers both, provided the Drive API is enabled for it too.",
+    "Press Sign in with Google and type the code at www.google.com/device, or paste an access token from Google's OAuth Playground if there is no relay to hand.",
+    "The write half asks for drive.file, not drive.readonly's bigger cousin: Notal can create and change files it made, and sees the rest of the drive read-only.",
+  ],
+  signInLabel: "Sign in with Google",
+  signOutLabel: "Sign out",
+  fields: [{
+    key: "clientId",
+    label: "OAuth client ID",
+    optional: true,
+    placeholder: "…apps.googleusercontent.com",
+    help: "The same TV and Limited-input devices client Gmail uses. Left empty, Drive reads it from the Gmail plugin's box.",
+  }, {
+    key: "scopes",
+    label: "Scopes to ask Google for",
+    optional: true,
+    placeholder: DRIVE_SCOPES,
+    help: "Space-separated, asked for at sign-in. Empty means drive.readonly plus drive.file. Drop drive.file and Notal can read but never write.",
+  }, {
+    key: "token",
+    label: "or an access token from elsewhere",
+    type: "password",
+    optional: true,
+    placeholder: "ya29.…",
+    help: "From Google's OAuth Playground, with the Drive scopes ticked. Lasts about an hour and needs no relay.",
+  }],
+  ready(cfg) { return Boolean(cfg.oauth?.token || String(cfg.token || "").trim()); },
+  notReady: "Nothing is connected: sign in with Google above, or paste an access token below.",
+  signIn: (cfg, onStatus, signal) => googleSignIn(cfg, { scopes: DRIVE_SCOPES, identify: driveIdentify }, onStatus, signal),
+  signOut(cfg) { googleSignOut(cfg); },
+  async test(cfg) {
+    if (!DRIVE_PLUGIN.ready(cfg))
+      return { ok: false, message: "Nothing is connected yet — press Sign in with Google, or paste an access token." };
+    const signal = typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(12000) : undefined;
+    const who = await driveIdentify(cfg, signal);
+    const how = cfg.oauth?.token ? "a sign-in Google handed out" : "a token you pasted";
+    return { ok: true, message: `Drive answers for ${who} — this works from this browser with ${how}.` };
+  },
+  brief: `
+### Drive
+
+Reads run on their own. Writing a file does not: it is shown to the user first.
+
+- drive.about {} — whose drive this is.
+- drive.list {"limit":15} — the most recently changed files, biggest first.
+- drive.search {"query":"budget","limit":15} — files whose name or content matches.
+- drive.read {"id":"1Ab…"} — the words in one file. A Google Doc comes back as
+  text; a PDF or an image does not come back at all, and says so.
+- drive.write {"name":"notes.txt","text":"…"} — a new plain-text file, or the new
+  contents of one this plugin already made. **will ask the user first.**
+
+A drive is somebody's work. Search before reading, read the one file you need, and
+never overwrite a file you have not read in this conversation.`,
+  actions: {
+    "drive.about": {
+      write: false,
+      summary: () => "whose Drive this is",
+      async run(a, cfg, signal) {
+        return `Drive of ${await driveIdentify(cfg, signal) || "an account Google did not name"}.`;
+      },
+    },
+    "drive.list": {
+      write: false,
+      summary: () => "the recently changed files in Drive",
+      async run(a, cfg, signal) {
+        const per = Math.min(Math.max(Number(a.limit) || 15, 1), 50);
+        const r = await googleApi(
+          `${DRIVE_BASE}/files?pageSize=${per}&fields=files(${DRIVE_FIELDS})&orderBy=modifiedTime%20desc` +
+          `&q=${encodeURIComponent("trashed = false")}`, cfg, { signal }, signal);
+        const files = r?.files || [];
+        if (!files.length) return "No files in this Drive that this token can see.";
+        return files.map(f => `[${f.id}] ${f.name} — ${f.mimeType}, ${f.size ?? "?"} B, changed ${f.modifiedTime}`).join("\n");
+      },
+    },
+    "drive.search": {
+      write: false,
+      summary: a => `Drive files matching “${ghLimit(a.query, 60)}”`,
+      async run(a, cfg, signal) {
+        const per = Math.min(Math.max(Number(a.limit) || 15, 1), 50);
+        const bits = [`trashed = false`];
+        const text = String(a.query || "").trim();
+        if (text) bits.push(`(name contains ${driveQuote(text)} or fullText contains ${driveQuote(text)})`);
+        const r = await googleApi(
+          `${DRIVE_BASE}/files?pageSize=${per}&fields=files(${DRIVE_FIELDS})&q=` +
+          encodeURIComponent(bits.join(" and ")), cfg, { signal }, signal);
+        const files = r?.files || [];
+        if (!files.length) return `Nothing in this Drive matches ${text || "that"}.`;
+        return `${files.length} file${files.length === 1 ? "" : "s"}:\n` +
+          files.map(f => `[${f.id}] ${f.name} — ${f.mimeType}, changed ${f.modifiedTime}`).join("\n");
+      },
+    },
+    "drive.read": {
+      write: false,
+      summary: a => `the file ${a.id}`,
+      async run(a, cfg, signal) {
+        if (!a.id) throw new Error("drive.read needs the id drive.list or drive.search gave");
+        const meta = await googleApi(`${DRIVE_BASE}/files/${encodeURIComponent(String(a.id))}` +
+          `?fields=id,name,mimeType,size`, cfg, { signal }, signal);
+        const type = meta?.mimeType || "";
+        /* Google's own formats have no bytes to fetch — the export endpoint turns
+           them into text, and a presentation has no text export worth asking for */
+        const exportAs = type === "application/vnd.google-apps.document" ? "text/plain"
+          : type === "application/vnd.google-apps.spreadsheet" ? "text/csv"
+          : type === "application/vnd.google-apps.drawing" ? "text/plain" : "";
+        if (exportAs) {
+          const text = await googleApi(
+            `${DRIVE_BASE}/files/${encodeURIComponent(meta.id)}/export?mimeType=${encodeURIComponent(exportAs)}`,
+            cfg, { signal, raw: true }, signal);
+          return `${meta.name} (${type}, ${text.length} characters):\n\n${ghLimit(text, 6000)}`;
+        }
+        if (meta.size && Number(meta.size) > 400 * 1024)
+          throw new Error(`${meta.name} is ${meta.size} B — this plugin reads text files, not large ones`);
+        const text = await googleApi(`${DRIVE_BASE}/files/${encodeURIComponent(meta.id)}?alt=media`,
+          cfg, { signal, raw: true }, signal);
+        return `${meta.name} (${type || "unknown type"}, ${text.length} characters):\n\n${ghLimit(text, 6000)}`;
+      },
+    },
+    "drive.write": {
+      write: true,
+      summary: a => `write ${a.name || "a file"} to Drive, ${new Blob([String(a.text ?? "")]).size} B of text`,
+      async run(a, cfg, signal) {
+        const name = String(a.name || "").trim();
+        const text = String(a.text ?? "");
+        if (!name) throw new Error("drive.write needs a file name");
+        if (!text.trim()) throw new Error("drive.write needs some text — an empty file is not a change");
+        if (text.length > 200_000) throw new Error("drive.write sends text files, and this is over 200 kB");
+        const made = await googleApi(`${DRIVE_FILE_BASE}?uploadType=media&fields=${DRIVE_FIELDS}`, cfg, {
+          method: "POST",
+          headers: { "content-type": a.mime || "text/plain" },
+          body: text,
+          rawBody: true,
+        }, signal);
+        return `Wrote ${made.name || name} to Drive as ${made.id}. ` +
+          `Google's own page for it: https://drive.google.com/file/d/${made.id}/view`;
+      },
+    },
+  },
+};
+
+const PLUGIN_DEFS = [GITHUB_PLUGIN, BROWSER_PLUGIN, GMAIL_PLUGIN, DRIVE_PLUGIN];
 
