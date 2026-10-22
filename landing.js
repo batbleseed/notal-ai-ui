@@ -52,6 +52,10 @@
     for (const cap of caps) cap.setAttribute("aria-hidden", o["--o-" + cap.dataset.cap] < 0.5);
   }
 
+  /* Motion's scroll() only fires on scroll events, so its raw output steps.
+     The smoothing lives in CSS instead: the beat variables are @property-registered
+     numbers and .demo transitions them, so every scroll event eases toward the
+     reader and no rAF loop has to keep up (a throttled tab included). */
   /* Under 700px the mock goes back to being a card in the page: scrubbing a
      full-screen app through a phone's address bar is not a demo, it's a fight. */
   function setMode(wide) {
@@ -62,7 +66,7 @@
          sit on the CSS defaults until the reader moves */
       const r = rail.getBoundingClientRect();
       scrub(clamp(-r.top / Math.max(1, r.height - innerHeight)));
-      if (!armed) armed = M.scroll(p => { if (demo.classList.contains("demo-scrub")) scrub(p); },
+      if (!armed) armed = M.scroll(p => { if (demo.classList.contains("demo-scrub")) scrub(clamp(p)); },
         { target: rail, offset: ["start start", "end end"] });
     } else {
       for (const key of PROPS) demo.style.removeProperty(key);
