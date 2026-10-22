@@ -29,8 +29,8 @@
     }
   }
 
-  const PROPS = ["--menu", "--set", "--dim", "--o-open", "--o-models", "--o-lock", "--o-start"];
-  const roomy = matchMedia("(min-width: 901px)");
+  const PROPS = ["--menu", "--set", "--o-open", "--o-models", "--o-lock", "--o-start"];
+  const roomy = matchMedia("(min-width: 700px)");
   const caps = [...demo.querySelectorAll(".cap")];
   const clamp = v => (v < 0 ? 0 : v > 1 ? 1 : v);
   const seg = (p, a, b) => clamp((p - a) / (b - a));
@@ -38,23 +38,23 @@
   const band = (p, a, b, c, d) => Math.min(seg(p, a, b), 1 - seg(p, c, d));
 
   function scrub(p) {
-    /* the four beats: the menu opens and closes, then Settings opens on Security,
-       then the window gives the page over to the two ways in */
+    /* three beats after the opening frame: the model picker opens, then Settings
+       opens on Security, then both close and the mock is left at rest showing an
+       ordinary chat — it never fades out, because the last caption is the way in */
     const o = {
-      "--menu": band(p, 0.08, 0.16, 0.30, 0.37),
+      "--menu": band(p, 0.06, 0.14, 0.30, 0.37),
       "--set": band(p, 0.40, 0.48, 0.66, 0.73),
-      "--dim": seg(p, 0.76, 0.86),
-      "--o-open": 1 - seg(p, 0.06, 0.12),
-      "--o-models": band(p, 0.13, 0.20, 0.29, 0.35),
-      "--o-lock": band(p, 0.36, 0.44, 0.64, 0.70),
-      "--o-start": seg(p, 0.72, 0.80),
+      "--o-open": 1 - seg(p, 0.06, 0.11),
+      "--o-models": band(p, 0.11, 0.17, 0.30, 0.35),
+      "--o-lock": band(p, 0.35, 0.42, 0.65, 0.70),
+      "--o-start": seg(p, 0.70, 0.78),
     };
     for (const key in o) demo.style.setProperty(key, o[key].toFixed(3));
     for (const cap of caps) cap.setAttribute("aria-hidden", o["--o-" + cap.dataset.cap] < 0.5);
   }
 
-  /* A narrow screen gets the stacked version instead of a 340vh pinned stage:
-     scrubbing a mock app through a phone's address bar is not a demo, it's a fight. */
+  /* Under 700px the stacked version wins instead of a pinned 360vh stage: scrubbing
+     a mock app through a phone's address bar is not a demo, it's a fight. */
   function setMode(wide) {
     demo.classList.toggle("demo-scrub", wide && !reduced);
     if (wide && !reduced) {
