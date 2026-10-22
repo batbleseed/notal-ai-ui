@@ -1,0 +1,8 @@
+{
+  "name": "notal-ai-landing-deps",
+  "private": true,
+  "description": "Only purpose: hold the source of the vendored motion.min.js. Nothing here is built or bundled.",
+  "dependencies": {
+    "motion": "^12.0.0"
+  }
+}

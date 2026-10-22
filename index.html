@@ -93,21 +93,130 @@
     }
     .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
     .hero-note { margin-top: 16px; font-size: 13.5px; color: var(--text-faint); }
+    /* the hero is above the fold, so it rises on a CSS keyframe: no script has to
+       be loaded for its contents to be visible */
+    @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+    .hero > * { animation: rise .6s cubic-bezier(.22, 1, .36, 1) both; }
+    .hero > :nth-child(2) { animation-delay: .07s; }
+    .hero > :nth-child(3) { animation-delay: .14s; }
+    .hero > :nth-child(4) { animation-delay: .21s; }
+    .hero > :nth-child(5) { animation-delay: .28s; }
 
-    /* ---------- preview strip ---------- */
-    .preview {
-      margin: 12px 0 78px;
-      border: 1px solid var(--border); border-radius: 20px; background: var(--surface);
+    /* ---------- scroll demo: a mock of the real workspace ----------
+       Without script it reads as a stacked page of copy over an open model menu.
+       landing.js only adds .demo-scrub once Motion has loaded, motion is allowed,
+       and there is room to scrub — so nothing here can hide content on failure. */
+    .demo { --menu: 1; --set: 0; --dim: 0; padding: 12px 0 78px; }
+    .demo-rail { position: relative; }
+    .demo-sticky { display: grid; grid-template-columns: minmax(0, 1fr); gap: 34px; align-items: center; }
+    .demo-copy { display: grid; gap: 14px; }
+    .cap { display: grid; gap: 9px; }
+    .cap-k {
+      font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
+      color: var(--accent);
+    }
+    .cap strong { font-family: var(--serif); font-weight: 600; font-size: clamp(21px, 2.6vw, 28px); line-height: 1.2; max-width: 22ch; }
+    .cap-p { font-size: 14.5px; color: var(--text-soft); max-width: 42ch; }
+    .cap-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+
+    .demo-scrub { --menu: 0; --set: 0; --dim: 0; }
+    .demo-scrub .demo-rail { height: 340vh; }
+    .demo-scrub .demo-sticky {
+      position: sticky; top: 0; min-height: 100vh; align-content: center;
+      grid-template-columns: minmax(0, 34ch) minmax(0, 1fr); gap: 46px;
+    }
+    .demo-scrub .demo-copy { position: relative; min-height: 250px; }
+    .demo-scrub .cap {
+      position: absolute; left: 0; right: 0; top: 50%; margin: 0;
+      opacity: var(--o, 0); transform: translateY(calc(-50% + (1 - var(--o, 0)) * 14px));
+    }
+    .demo-scrub .cap[data-cap="open"]   { --o: var(--o-open, 1); }
+    .demo-scrub .cap[data-cap="models"] { --o: var(--o-models, 0); }
+    .demo-scrub .cap[data-cap="lock"]   { --o: var(--o-lock, 0); }
+    .demo-scrub .cap[data-cap="start"]  { --o: var(--o-start, 0); }
+    .demo-scrub .win {
+      opacity: calc(1 - var(--dim) * .55);
+      transform: translateY(calc(var(--dim) * 20px)) scale(calc(1 - var(--dim) * .03));
+    }
+
+    .win {
+      border: 1px solid var(--border); border-radius: 18px; background: var(--surface);
       box-shadow: 0 26px 60px -32px rgba(31, 30, 29, .35);
       overflow: hidden;
     }
-    .preview-bar {
-      display: flex; align-items: center; gap: 8px;
-      padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2);
+    .win-bar {
+      display: flex; align-items: center; gap: 7px;
+      padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2);
     }
-    .preview-bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--border); display: block; }
-    .preview-bar span { margin-left: 6px; font-size: 12.5px; color: var(--text-faint); }
-    .preview-body { display: flex; flex-direction: column; gap: 16px; padding: 26px 26px 30px; }
+    .win-bar i { width: 8px; height: 8px; border-radius: 50%; background: var(--border); display: block; }
+    .win-bar span { margin-left: 6px; font-size: 12px; color: var(--text-faint); }
+    .win-body { display: flex; min-height: 292px; }
+    .win-side {
+      flex: 0 0 44px; display: flex; flex-direction: column; gap: 5px;
+      padding: 10px 7px; border-right: 1px solid var(--border); background: var(--surface-2);
+    }
+    .win-side b { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; color: var(--text-faint); }
+    .win-side b.on { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+    .win-side .push { margin-top: auto; }
+    /* the gear picks up a selected row exactly as far as the Security beat has played */
+    .win-side .gear { background: color-mix(in srgb, var(--surface) calc(var(--set) * 100%), transparent); }
+    .win-main { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 14px; }
+    .win-top { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--text-faint); }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; background: var(--surface-2); }
+    .seg b { padding: 3px 11px; font-weight: 500; font-size: 11.5px; color: var(--text-soft); }
+    .seg b.on { background: var(--text); color: var(--bg); }
+    .win-thread { display: flex; flex-direction: column; gap: 12px; padding: 4px 0; }
+    .win .bubble { max-width: 40ch; font-size: 13px; padding: 9px 13px; }
+
+    .win-composer {
+      position: relative; margin-top: auto; display: flex; flex-direction: column; gap: 8px;
+      padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2);
+    }
+    .mpick {
+      display: inline-flex; align-items: center; gap: 6px; width: max-content;
+      padding: 4px 9px; border: 1px solid var(--border); border-radius: 9px;
+      background: var(--surface); font-size: 12.5px; color: var(--text-soft);
+    }
+    .mpick .tile { width: 14px; height: 14px; }
+    .mpick svg { color: var(--text-faint); }
+    .mopts {
+      position: absolute; left: 12px; bottom: calc(100% - 8px); z-index: 2; width: 218px;
+      display: grid; gap: 1px; padding: 5px; overflow: hidden;
+      border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+      box-shadow: 0 18px 34px -20px rgba(31, 30, 29, .45);
+      opacity: var(--menu); height: calc(var(--menu) * 92px);
+      transform: translateY(calc((1 - var(--menu)) * 8px));
+    }
+    .mopt { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-radius: 8px; font-size: 12.5px; }
+    .mopt small { font-size: 11px; color: var(--text-faint); }
+    .mopt.sel { background: var(--surface-2); }
+    .mopt.add { color: var(--accent); }
+    .mdiv { height: 1px; margin: 3px 4px; background: var(--border); }
+    .cbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .cbar span { font-size: 13px; color: var(--text-faint); }
+    .csend { width: 24px; height: 24px; border-radius: 50%; background: var(--text); color: var(--bg); display: grid; place-items: center; font-size: 12px; }
+
+    .win-set {
+      position: absolute; inset: 0; z-index: 3; display: flex; background: var(--surface);
+      opacity: var(--set); transform: translateY(calc((1 - var(--set)) * 10px));
+    }
+    .set-rail {
+      flex: 0 0 116px; display: grid; gap: 2px; align-content: start;
+      padding: 14px 9px; border-right: 1px solid var(--border); background: var(--surface-2);
+    }
+    .set-rail b { padding: 5px 8px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--text-soft); }
+    .set-rail b.on { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+    .set-body { display: grid; gap: 8px; align-content: start; padding: 15px 17px; }
+    .set-body h4 { font-family: var(--serif); font-size: 15px; font-weight: 600; }
+    .set-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 11px;
+      padding: 8px 11px; border: 1px solid var(--border); border-radius: 11px; font-size: 12.5px;
+    }
+    .set-row small { font-size: 11px; color: var(--text-faint); }
+    .set-row em { font-style: normal; padding: 4px 10px; border-radius: 999px; background: var(--text); color: var(--bg); font-size: 11px; font-weight: 600; }
+    .set-note { font-size: 11.5px; color: var(--text-faint); max-width: 46ch; }
+
+    @media (max-width: 900px) { .demo-scrub .demo-sticky { grid-template-columns: minmax(0, 1fr); } }
     .row { display: flex; gap: 12px; align-items: flex-start; }
     .row.me { justify-content: flex-end; }
     .mark {
@@ -196,22 +305,88 @@
       <p class="hero-note">Opens straight into the chat. Nothing to install, nothing to sign up for.</p>
     </header>
 
-    <div class="preview" aria-hidden="true">
-      <div class="preview-bar">
-        <i></i><i></i><i></i>
-        <span>notal.ai / chat — project: Notal AI v2</span>
-      </div>
-      <div class="preview-body">
-        <div class="row me">
-          <div class="bubble">Review this idea: an app that turns meeting notes into tasks</div>
-        </div>
-        <div class="row">
-          <span class="mark notal-mark"></span>
-          <div class="bubble">
-            Good seed. Strengths — it solves a pain people already feel, and the value is visible
-            immediately. Risks — the magic moment depends entirely on extraction quality.<br><br>
-            You wanted me to remember that you prefer short answers with a first test you can run
-            this week. So: try it on ten real meetings before writing any code.
+    <div class="demo" id="demo">
+      <div class="demo-rail" id="demoRail">
+        <div class="demo-sticky">
+          <div class="demo-copy">
+            <p class="cap" data-cap="open">
+              <span class="cap-k">Your workspace</span>
+              <strong>Chats, projects, memory, skills, extensions and plugins — one sidebar.</strong>
+              <span class="cap-p">This is the layout you land in, drawn from the real thing. Keep scrolling and it opens.</span>
+            </p>
+            <p class="cap" data-cap="models">
+              <span class="cap-k">Everything is on your control</span>
+              <strong>Add models to chat or code.</strong>
+              <span class="cap-p">The picker lists only what you have added. A key goes in once, under Settings → Providers, stays in this browser, and the Chat / Coding switch decides how it answers.</span>
+            </p>
+            <p class="cap" data-cap="lock">
+              <span class="cap-k">Security for your chat privacy</span>
+              <strong>A PIN puts the whole app behind a lock screen.</strong>
+              <span class="cap-p">Settings → Security: set a PIN, lock instantly with Ctrl Shift L, or let it lock itself after idle. It screens the app on this device — it does not encrypt, and your chats stay in this browser's storage.</span>
+            </p>
+            <p class="cap" data-cap="start">
+              <span class="cap-k">Try Notal AI</span>
+              <strong>Open it in a tab. Nothing to install.</strong>
+              <span class="cap-actions">
+                <a class="btn btn-primary" href="chat/">Try Notal AI →</a>
+                <a class="btn btn-ghost" href="https://github.com/batbleseed/notal-ai-ui">Desktop app, from source</a>
+              </span>
+              <span class="cap-p">The Windows build lives in <code>studio-app/</code> and is made with <code>npm run dist</code>. No installer is published yet, so the README carries the two commands.</span>
+            </p>
+          </div>
+
+          <!-- a mock, not a screenshot: the sidebar, modes, picker rows and Security
+               panel all mirror what chat/ actually renders -->
+          <div class="win" aria-hidden="true">
+            <div class="win-bar"><i></i><i></i><i></i><span>Notal AI — chat</span></div>
+            <div class="win-body">
+              <nav class="win-side">
+                <b class="on"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4V5z"/></svg></b>
+                <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg></b>
+                <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 4a4 4 0 00-4 4v1a4 4 0 00-2 7 4 4 0 006 4h0a4 4 0 006-4 4 4 0 00-2-7V8a4 4 0 00-4-4z"/><path d="M12 4v16"/></svg></b>
+                <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg></b>
+                <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L15 4.5a3.3 3.3 0 014.7 4.7L10.4 18.5a1.7 1.7 0 01-2.4-2.4l7.8-7.8"/></svg></b>
+                <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="6.6" height="6.6" rx="1.6"/><rect x="13.4" y="4" width="6.6" height="6.6" rx="1.6"/><rect x="4" y="13.4" width="6.6" height="6.6" rx="1.6"/><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="1.6"/></svg></b>
+                <b class="push gear"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1.03 1.56V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.03-1.56 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.7 1.7 0 004.6 15a1.7 1.7 0 00-1.56-1.03H3a2 2 0 110-4h.09A1.7 1.7 0 004.68 8.6a1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001.03-1.56V3a2 2 0 114 0v.09A1.7 1.7 0 0015.06 4.65a1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.56 1.03H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1z"/></svg></b>
+              </nav>
+              <div class="win-main">
+                <div class="win-top">
+                  <span class="seg"><b class="on">Chat</b><b>Coding</b></span>
+                  <span>Notal AI v2</span>
+                </div>
+                <div class="win-thread">
+                  <div class="row me"><div class="bubble">Review this idea: an app that turns meeting notes into tasks</div></div>
+                  <div class="row">
+                    <span class="mark notal-mark"></span>
+                    <div class="bubble">Good seed. Strengths — it solves a pain people already feel. Risks — the magic moment depends entirely on extraction quality.</div>
+                  </div>
+                </div>
+                <div class="win-composer">
+                  <div class="mopts">
+                    <div class="mopt sel"><span>notal generic</span><small>Notal built-in</small></div>
+                    <div class="mdiv"></div>
+                    <div class="mopt add"><span>＋&nbsp;&nbsp;Add models in Settings</span></div>
+                  </div>
+                  <div class="mpick">
+                    <span class="tile notal-mark"></span><span>notal generic</span>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+                  </div>
+                  <div class="cbar"><span>Ask something…</span><span class="csend">↑</span></div>
+                </div>
+                <div class="win-set">
+                  <div class="set-rail">
+                    <b>General</b><b>Account</b><b>Providers</b><b>Notifications</b><b class="on">Security</b><b>Shortcuts</b><b>Extensions</b>
+                  </div>
+                  <div class="set-body">
+                    <h4>Security</h4>
+                    <div class="set-row"><span>App lock PIN</span><small>Not set</small><em>Set PIN</em></div>
+                    <div class="set-row"><span>Auto-lock on idle</span><small>Off</small></div>
+                    <div class="set-row"><span>Lock now</span><small>Ctrl Shift L</small></div>
+                    <p class="set-note">A PIN hides the app from someone glancing at your device. It does not encrypt your chats.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -222,7 +397,7 @@
     <div class="wrap">
       <h2>Built around the way you already work</h2>
       <p class="section-sub">Every part of the workspace is real and usable on day one — no locked features, no upgrade wall.</p>
-      <div class="grid">
+      <div class="grid" data-reveal>
         <article class="feature">
           <span class="tile"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="16" r="3.5"/><path d="M10.4 13.6L19 5M16.5 7.5l2 2"/></svg></span>
           <h3>Bring your own model</h3>
@@ -260,7 +435,7 @@
   <section id="how">
     <div class="wrap">
       <h2>Three minutes to your first real answer</h2>
-      <div class="steps">
+      <div class="steps" data-reveal>
         <div class="step">
           <span class="n">1</span>
           <h3>Open the workspace</h3>
@@ -277,7 +452,7 @@
           <p>Create a project, save what it should remember, keep your best prompts as skills.</p>
         </div>
       </div>
-      <div class="note" id="private">
+      <div class="note" id="private" data-reveal>
         <h3>Where your data lives</h3>
         <p>Chats, projects, memories, skills, preferences and provider keys are stored in this browser only — there is no Notal server holding your history. Clearing your browser data clears the app.</p>
         <p>The built-in <strong>notal generic</strong> model gives written-out example replies so you can see the interface work. Real answers start once you add a provider key, and then your messages go directly to that provider.</p>
@@ -286,7 +461,7 @@
   </section>
 
   <section class="closing">
-    <div class="wrap">
+    <div class="wrap" data-reveal>
       <h2>Ready when you are.</h2>
       <p>No signup, no setup wizard. Open the workspace and ask it something.</p>
       <a class="btn btn-primary btn-lg" href="chat/">Try Notal AI now →</a>
@@ -299,6 +474,8 @@
       <span><a href="https://github.com/batbleseed/notal-ai-ui" target="_blank" rel="noreferrer">Source on GitHub</a> · <a href="chat/">Open chat</a></span>
     </div>
   </footer>
+  <script src="motion.min.js"></script>
+  <script src="landing.js"></script>
   <script>
     if ("serviceWorker" in navigator)
       navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => {});
