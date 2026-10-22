@@ -29,7 +29,7 @@
     }
   }
 
-  const PROPS = ["--menu", "--set", "--o-open", "--o-models", "--o-lock", "--o-start"];
+  const PROPS = ["--menu", "--set", "--o-open", "--o-models", "--o-lock"];
   const roomy = matchMedia("(min-width: 700px)");
   const caps = [...demo.querySelectorAll(".cap")];
   const clamp = v => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -38,23 +38,22 @@
   const band = (p, a, b, c, d) => Math.min(seg(p, a, b), 1 - seg(p, c, d));
 
   function scrub(p) {
-    /* three beats after the opening frame: the model picker opens, then Settings
-       opens on Security, then both close and the mock is left at rest showing an
-       ordinary chat — it never fades out, because the last caption is the way in */
+    /* two beats after the opening frame: the model picker opens, then Settings opens
+       on Security, then both close and the popup is gone — the last of the scroll is
+       the app at rest, and the way out of the demo is the copy that follows it */
     const o = {
-      "--menu": band(p, 0.06, 0.14, 0.30, 0.37),
-      "--set": band(p, 0.40, 0.48, 0.66, 0.73),
-      "--o-open": 1 - seg(p, 0.06, 0.11),
-      "--o-models": band(p, 0.11, 0.17, 0.30, 0.35),
-      "--o-lock": band(p, 0.35, 0.42, 0.65, 0.70),
-      "--o-start": seg(p, 0.70, 0.78),
+      "--menu": band(p, 0.07, 0.15, 0.33, 0.40),
+      "--set": band(p, 0.44, 0.52, 0.72, 0.79),
+      "--o-open": 1 - seg(p, 0.05, 0.11),
+      "--o-models": band(p, 0.11, 0.18, 0.33, 0.38),
+      "--o-lock": band(p, 0.38, 0.45, 0.70, 0.75),
     };
     for (const key in o) demo.style.setProperty(key, o[key].toFixed(3));
     for (const cap of caps) cap.setAttribute("aria-hidden", o["--o-" + cap.dataset.cap] < 0.5);
   }
 
-  /* Under 700px the stacked version wins instead of a pinned 360vh stage: scrubbing
-     a mock app through a phone's address bar is not a demo, it's a fight. */
+  /* Under 700px the mock goes back to being a card in the page: scrubbing a
+     full-screen app through a phone's address bar is not a demo, it's a fight. */
   function setMode(wide) {
     demo.classList.toggle("demo-scrub", wide && !reduced);
     if (wide && !reduced) {

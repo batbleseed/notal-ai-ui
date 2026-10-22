@@ -102,13 +102,17 @@
     .hero > :nth-child(4) { animation-delay: .21s; }
     .hero > :nth-child(5) { animation-delay: .28s; }
 
-    /* ---------- scroll demo: a mock of the real workspace ----------
-       Without script it reads as an open model menu above a stacked page of copy.
-       landing.js only adds .demo-scrub once Motion has loaded, motion is allowed,
-       and there is room to scrub — so nothing here can hide content on failure. */
+    /* ---------- scroll demo: the workspace itself, at full size ----------
+       Without script it reads as a card of the real layout with an open model menu,
+       above a stacked page of copy. landing.js only adds .demo-scrub once Motion has
+       loaded, motion is allowed and there is room to scrub — so nothing here can
+       hide content on failure. */
     .demo { --menu: 1; --set: 0; padding: 12px 0 78px; }
     .demo-rail { position: relative; }
-    .demo-sticky { display: grid; grid-template-columns: minmax(0, 1fr); gap: 30px; align-items: center; }
+    .demo-sticky {
+      position: relative; width: min(1040px, calc(100% - 48px)); margin-inline: auto;
+      display: grid; gap: 30px;
+    }
     .demo-copy { display: grid; gap: 16px; }
     .cap { display: grid; gap: 15px; }
     .cap-k {
@@ -120,39 +124,45 @@
       font-size: clamp(30px, 4.4vw, 52px); line-height: 1.06; letter-spacing: -.8px; max-width: 16ch;
     }
     .cap-p { font-size: 15.5px; color: var(--text-soft); max-width: 38ch; }
-    .cap-actions { display: flex; flex-wrap: wrap; gap: 10px; }
     .cap-fine { font-size: 12.5px; color: var(--text-faint); max-width: 44ch; }
 
     .demo-scrub { --menu: 0; --set: 0; }
-    .demo-scrub .demo-rail { height: 360vh; }
-    .demo-scrub .demo-sticky {
-      position: sticky; top: 0; min-height: 100vh; align-content: center;
-      grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 60px;
-      /* the mock is the subject, so it takes the wider column and leans out of the
-         reading measure for it — never further than the viewport allows */
-      margin-inline: calc(-1 * clamp(0px, (100vw - 1088px) / 2, 44px));
+    .demo-scrub .demo-rail { height: 300vh; }
+    /* no title bar, no frame, no rounded corners: pinned at 100vh this is the app,
+       not a picture of an app window */
+    .demo-scrub .demo-sticky { position: sticky; top: 0; display: block; width: 100%; height: 100vh; }
+    .demo-scrub .win { position: absolute; inset: 0; border: 0; border-radius: 0; box-shadow: none; }
+    .demo-scrub .win-body { height: 100%; min-height: 0; }
+    /* the copy arrives as a popup over the app. Every caption shares one cell, so
+       the card is as tall as its longest line-up rather than jumping per beat. */
+    .demo-scrub .demo-copy {
+      position: absolute; z-index: 4; top: 50%; right: clamp(18px, 3.4vw, 64px);
+      transform: translateY(-50%); width: min(430px, 34vw); gap: 0;
     }
-    .demo-scrub .demo-copy { position: relative; min-height: 320px; }
     .demo-scrub .cap {
-      position: absolute; left: 0; right: 0; top: 50%; margin: 0;
-      opacity: var(--o, 0); transform: translateY(calc(-50% + (1 - var(--o, 0)) * 24px));
+      grid-area: 1 / 1; margin: 0; opacity: var(--o, 0);
+      transform: translateY(calc((1 - var(--o, 0)) * 18px));
+      padding: 24px 26px; border: 1px solid var(--border); border-radius: 20px;
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 30px 70px -30px rgba(31, 30, 29, .45);
     }
+    .demo-scrub .cap strong { font-size: clamp(27px, 3vw, 40px); max-width: 18ch; }
+    .demo-scrub .cap-p { font-size: 14.5px; max-width: none; }
     .demo-scrub .cap[data-cap="open"]   { --o: var(--o-open, 1); }
     .demo-scrub .cap[data-cap="models"] { --o: var(--o-models, 0); }
     .demo-scrub .cap[data-cap="lock"]   { --o: var(--o-lock, 0); }
-    .demo-scrub .cap[data-cap="start"]  { --o: var(--o-start, 0); }
+
+    /* the way in is not a popup: it sits under the chat, in the page */
+    .demo-start { width: min(1040px, calc(100% - 48px)); margin: 76px auto 0; display: grid; gap: 16px; }
+    .demo-start h2 { font-size: clamp(34px, 5vw, 56px); line-height: 1.04; letter-spacing: -1px; margin: 0; }
+    .start-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; }
 
     .win {
       border: 1px solid var(--border); border-radius: 20px; background: var(--surface);
       box-shadow: 0 34px 70px -38px rgba(31, 30, 29, .4);
       overflow: hidden;
     }
-    .win-bar {
-      display: flex; align-items: center; gap: 7px;
-      padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2);
-    }
-    .win-bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--border); display: block; }
-    .win-bar span { margin-left: 8px; font-size: 13px; color: var(--text-faint); }
     .win-body { display: flex; min-height: 500px; }
     .win-side {
       flex: 0 0 54px; display: flex; flex-direction: column; gap: 7px;
@@ -223,18 +233,15 @@
     .set-row em { font-style: normal; padding: 6px 13px; border-radius: 999px; background: var(--text); color: var(--bg); font-size: 12px; font-weight: 600; }
     .set-note { font-size: 12.5px; color: var(--text-faint); max-width: 52ch; }
 
-    /* 700–1000px: the scrub still plays, but stacked, with the mock at full width —
-       two columns that small would leave neither the picture nor the copy room. */
+    /* 700–1000px: the same pinned, full-bleed stage, with a narrower popup. */
     @media (max-width: 1000px) {
-      .demo-scrub .demo-sticky { grid-template-columns: minmax(0, 1fr); gap: 26px; margin-inline: 0; }
-      .demo-scrub .demo-copy { min-height: 210px; }
-      .demo-scrub .win-body { min-height: 300px; }
+      .demo-scrub .demo-copy { right: 14px; width: min(300px, 46vw); }
+      .demo-scrub .cap { padding: 18px 19px; border-radius: 16px; gap: 11px; }
+      .demo-scrub .cap strong { font-size: 26px; letter-spacing: -.4px; }
+      .demo-scrub .cap-p { font-size: 13px; }
       .demo-scrub .win-main { padding: 12px 14px 14px; gap: 10px; }
       .demo-scrub .win .bubble { font-size: 13px; padding: 9px 12px; }
-      .demo-scrub .cap strong { font-size: clamp(26px, 5.4vw, 36px); }
-      .demo-scrub .cap-p, .demo-scrub .cap-fine { font-size: 13.5px; }
-      .demo-scrub .set-rail { flex-basis: 108px; padding: 12px 8px; }
-      .demo-scrub .set-body { padding: 14px 15px; gap: 8px; }
+      .demo-scrub .mopts { width: 240px; }
     }
     .row { display: flex; gap: 12px; align-items: flex-start; }
     .row.me { justify-content: flex-end; }
@@ -323,93 +330,95 @@
       </div>
       <p class="hero-note">Opens straight into the chat. Nothing to install, nothing to sign up for.</p>
     </header>
+  </div>
 
-    <div class="demo" id="demo">
-      <div class="demo-rail" id="demoRail">
-        <div class="demo-sticky">
-          <!-- a mock, not a screenshot: the sidebar, modes, picker rows and Security
-               panel all mirror what chat/ actually renders -->
-          <div class="win" aria-hidden="true">
-            <div class="win-bar"><i></i><i></i><i></i><span>Notal AI — chat</span></div>
-            <div class="win-body">
-              <nav class="win-side">
-                <b class="on"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4V5z"/></svg></b>
-                <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg></b>
-                <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 4a4 4 0 00-4 4v1a4 4 0 00-2 7 4 4 0 006 4h0a4 4 0 006-4 4 4 0 00-2-7V8a4 4 0 00-4-4z"/><path d="M12 4v16"/></svg></b>
-                <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg></b>
-                <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L15 4.5a3.3 3.3 0 014.7 4.7L10.4 18.5a1.7 1.7 0 01-2.4-2.4l7.8-7.8"/></svg></b>
-                <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="6.6" height="6.6" rx="1.6"/><rect x="13.4" y="4" width="6.6" height="6.6" rx="1.6"/><rect x="4" y="13.4" width="6.6" height="6.6" rx="1.6"/><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="1.6"/></svg></b>
-                <b class="push gear"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1.03 1.56V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.03-1.56 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.7 1.7 0 004.6 15a1.7 1.7 0 00-1.56-1.03H3a2 2 0 110-4h.09A1.7 1.7 0 004.68 8.6a1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001.03-1.56V3a2 2 0 114 0v.09A1.7 1.7 0 0015.06 4.65a1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.56 1.03H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1z"/></svg></b>
-              </nav>
-              <div class="win-main">
-                <div class="win-top">
-                  <span class="seg"><b class="on">Chat</b><b>Coding</b></span>
-                  <span>Notal AI v2</span>
+  <!-- The mock is the subject of this page, so it sits outside the reading measure
+       and fills the viewport the way the real app does; its copy arrives as popups. -->
+  <div class="demo" id="demo">
+    <div class="demo-rail" id="demoRail">
+      <div class="demo-sticky">
+        <!-- a mock, not a screenshot: the sidebar, modes, picker rows and Security
+             panel all mirror what chat/ actually renders -->
+        <div class="win" aria-hidden="true">
+          <div class="win-body">
+            <nav class="win-side">
+              <b class="on"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4V5z"/></svg></b>
+              <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg></b>
+              <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 4a4 4 0 00-4 4v1a4 4 0 00-2 7 4 4 0 006 4h0a4 4 0 006-4 4 4 0 00-2-7V8a4 4 0 00-4-4z"/><path d="M12 4v16"/></svg></b>
+              <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg></b>
+              <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L15 4.5a3.3 3.3 0 014.7 4.7L10.4 18.5a1.7 1.7 0 01-2.4-2.4l7.8-7.8"/></svg></b>
+              <b><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="6.6" height="6.6" rx="1.6"/><rect x="13.4" y="4" width="6.6" height="6.6" rx="1.6"/><rect x="4" y="13.4" width="6.6" height="6.6" rx="1.6"/><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="1.6"/></svg></b>
+              <b class="push gear"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1.03 1.56V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.03-1.56 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.7 1.7 0 004.6 15a1.7 1.7 0 00-1.56-1.03H3a2 2 0 110-4h.09A1.7 1.7 0 004.68 8.6a1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001.03-1.56V3a2 2 0 114 0v.09A1.7 1.7 0 0015.06 4.65a1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.56 1.03H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1z"/></svg></b>
+            </nav>
+            <div class="win-main">
+              <div class="win-top">
+                <span class="seg"><b class="on">Chat</b><b>Coding</b></span>
+                <span>Notal AI v2</span>
+              </div>
+              <div class="win-thread">
+                <div class="row me"><div class="bubble">Review this idea: an app that turns meeting notes into tasks</div></div>
+                <div class="row">
+                  <span class="mark notal-mark"></span>
+                  <div class="bubble">Good seed. Strengths — it solves a pain people already feel. Risks — the magic moment depends entirely on extraction quality.</div>
                 </div>
-                <div class="win-thread">
-                  <div class="row me"><div class="bubble">Review this idea: an app that turns meeting notes into tasks</div></div>
-                  <div class="row">
-                    <span class="mark notal-mark"></span>
-                    <div class="bubble">Good seed. Strengths — it solves a pain people already feel. Risks — the magic moment depends entirely on extraction quality.</div>
-                  </div>
+              </div>
+              <div class="win-composer">
+                <div class="mopts">
+                  <div class="mopt sel"><span>notal generic</span><small>Notal built-in</small></div>
+                  <div class="mdiv"></div>
+                  <div class="mopt add"><span>＋&nbsp;&nbsp;Add models in Settings</span></div>
                 </div>
-                <div class="win-composer">
-                  <div class="mopts">
-                    <div class="mopt sel"><span>notal generic</span><small>Notal built-in</small></div>
-                    <div class="mdiv"></div>
-                    <div class="mopt add"><span>＋&nbsp;&nbsp;Add models in Settings</span></div>
-                  </div>
-                  <div class="mpick">
-                    <span class="tile notal-mark"></span><span>notal generic</span>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
-                  </div>
-                  <div class="cbar"><span>Ask something…<i class="caret"></i></span><span class="csend">↑</span></div>
+                <div class="mpick">
+                  <span class="tile notal-mark"></span><span>notal generic</span>
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
-                <div class="win-set">
-                  <div class="set-rail">
-                    <b>General</b><b>Account</b><b>Providers</b><b>Notifications</b><b class="on">Security</b><b>Shortcuts</b><b>Extensions</b>
-                  </div>
-                  <div class="set-body">
-                    <h4>Security</h4>
-                    <div class="set-row"><span>App lock PIN</span><small>Not set</small><em>Set PIN</em></div>
-                    <div class="set-row"><span>Auto-lock on idle</span><small>Off</small></div>
-                    <div class="set-row"><span>Lock now</span><small>Ctrl Shift L</small></div>
-                    <p class="set-note">A PIN hides the app from someone glancing at your device. It does not encrypt your chats.</p>
-                  </div>
+                <div class="cbar"><span>Ask something…<i class="caret"></i></span><span class="csend">↑</span></div>
+              </div>
+              <div class="win-set">
+                <div class="set-rail">
+                  <b>General</b><b>Account</b><b>Providers</b><b>Notifications</b><b class="on">Security</b><b>Shortcuts</b><b>Extensions</b>
+                </div>
+                <div class="set-body">
+                  <h4>Security</h4>
+                  <div class="set-row"><span>App lock PIN</span><small>Not set</small><em>Set PIN</em></div>
+                  <div class="set-row"><span>Auto-lock on idle</span><small>Off</small></div>
+                  <div class="set-row"><span>Lock now</span><small>Ctrl Shift L</small></div>
+                  <p class="set-note">A PIN hides the app from someone glancing at your device. It does not encrypt your chats.</p>
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <div class="demo-copy">
-            <p class="cap" data-cap="open">
-              <span class="cap-k">Your workspace</span>
-              <strong>One sidebar for chats, projects, memory and skills.</strong>
-              <span class="cap-p">This is the layout you land in. Keep scrolling and it opens up.</span>
-            </p>
-            <p class="cap" data-cap="models">
-              <span class="cap-k">Everything is on your control</span>
-              <strong>Use any model for your chat.</strong>
-              <span class="cap-p">Open the picker and add OpenAI-compatible, Anthropic, Gemini or a local Ollama model under Settings → Providers. A key is typed once, stays in this browser, and the Chat / Coding switch decides how it answers.</span>
-            </p>
-            <p class="cap" data-cap="lock">
-              <span class="cap-k">Security</span>
-              <strong>Your chat privacy is secured on this device.</strong>
-              <span class="cap-p">Settings → Security puts a 4–8 digit PIN over the app, locks instantly with Ctrl Shift L, and can lock itself after idle. The PIN screens the app — it does not encrypt, and your chats stay in this browser's storage.</span>
-            </p>
-            <p class="cap" data-cap="start">
-              <span class="cap-k">Ready when you are</span>
-              <strong>Chat with Notal AI.</strong>
-              <span class="cap-actions">
-                <a class="btn btn-primary" href="chat/">Chat with Notal AI →</a>
-                <a class="btn btn-ghost" href="https://github.com/batbleseed/notal-ai-ui/tree/main/studio-app">Download the desktop app</a>
-              </span>
-              <span class="cap-p">Opens straight into the workspace. Nothing to install, nothing to sign up for.</span>
-              <span class="cap-fine">No desktop installer is published yet — the Windows build comes from <code>studio-app/</code> in the repo.</span>
-            </p>
-          </div>
+        <div class="demo-copy">
+          <p class="cap" data-cap="open">
+            <span class="cap-k">Your workspace</span>
+            <strong>One sidebar for chats, projects, memory and skills.</strong>
+            <span class="cap-p">This is the layout you land in. Keep scrolling and it opens up.</span>
+          </p>
+          <p class="cap" data-cap="models">
+            <span class="cap-k">Everything is on your control</span>
+            <strong>Use any model for your chat.</strong>
+            <span class="cap-p">Open the picker and add OpenAI-compatible, Anthropic, Gemini or a local Ollama model under Settings → Providers. A key is typed once, stays in this browser, and the Chat / Coding switch decides how it answers.</span>
+          </p>
+          <p class="cap" data-cap="lock">
+            <span class="cap-k">Security</span>
+            <strong>Your chat privacy is secured on this device.</strong>
+            <span class="cap-p">Settings → Security puts a 4–8 digit PIN over the app, locks instantly with Ctrl Shift L, and can lock itself after idle. The PIN screens the app — it does not encrypt, and your chats stay in this browser's storage.</span>
+          </p>
         </div>
       </div>
+    </div>
+
+    <!-- the one line that is not a popup: it comes after the chat, at its bottom -->
+    <div class="demo-start" data-reveal>
+      <h2>Chat with Notal AI.</h2>
+      <p class="start-actions">
+        <a class="btn btn-primary btn-lg" href="chat/">Open the chat →</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/batbleseed/notal-ai-ui/tree/main/studio-app">Download the desktop app</a>
+      </p>
+      <p class="cap-p">Opens straight into the workspace in this tab. Nothing to install, nothing to sign up for.</p>
+      <p class="cap-fine">No desktop installer is published yet — the Windows build comes from <code>studio-app/</code> in the repo.</p>
     </div>
   </div>
 
