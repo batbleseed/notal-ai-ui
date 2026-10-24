@@ -30,6 +30,7 @@ const els = {
   messages: $("#messages"),
   composer: $("#composer"),
   input: $("#input"),
+  mentionLayer: $("#mentionLayer"),
   sendBtn: $("#sendBtn"),
   modelPicker: $("#modelPicker"),
   modelButton: $("#modelButton"),
@@ -47,6 +48,7 @@ const els = {
   dropVeil: $("#dropVeil"),
   pluginNudge: $("#pluginNudge"),
   pluginNudgeIcons: $("#pluginNudgeIcons"),
+  pluginPickMenu: $("#pluginPickMenu"),
   micBtn: $("#micBtn"),
   pluginCubes: $("#pluginCubes"),
   pluginDetail: $("#pluginDetail"),
@@ -2351,11 +2353,40 @@ async function callProvider(model, messages, onDelta, signal, explicitIds = []) 
 }
 
 /* ---------- composer ---------- */
+/* a plugin mention glows, and the glow has to sit exactly under the textarea's
+   own glyphs: both layers use the same font, padding and wrapping, and the
+   textarea stays on top. The glow layer's text is transparent, so only its
+   text-shadow shows — the letters you can read are still the real input. */
+const MENTION_GLOW_RE = new RegExp(
+  `(^|[^\\w@])(@(?:${PLUGINS.map(def => def.id).join("|")})(?![\\w-]))`, "gi");
+
+function renderMentionGlow() {
+  const text = els.input.value;
+  const frag = document.createDocumentFragment();
+  let last = 0;
+  MENTION_GLOW_RE.lastIndex = 0;
+  for (let m; (m = MENTION_GLOW_RE.exec(text));) {
+    const start = m.index + m[1].length;
+    if (start > last) frag.append(text.slice(last, start));
+    const mark = document.createElement("mark");
+    mark.className = "mention";
+    mark.textContent = m[2];
+    frag.append(mark);
+    last = start + m[2].length;
+  }
+  /* the trailing newline keeps the layer as tall as a box whose last line is
+     empty, so both scroll to the same place */
+  frag.append(text.slice(last) + "\n");
+  els.mentionLayer.replaceChildren(frag);
+  els.mentionLayer.scrollTop = els.input.scrollTop;
+}
+
 function autoresize() {
   const ta = els.input;
   ta.style.height = "auto";
   ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
   $("#charCount").textContent = ta.value.length;
+  renderMentionGlow();
 }
 
 els.composer.addEventListener("submit", (e) => {
@@ -2377,6 +2408,9 @@ els.input.addEventListener("keydown", (e) => {
   }
 });
 els.input.addEventListener("input", autoresize);
+els.input.addEventListener("scroll", () => {
+  els.mentionLayer.scrollTop = els.input.scrollTop;
+});
 
 /* ---------- attachments ---------- */
 let pendingAtts = [];
@@ -2762,18 +2796,97 @@ function spinMark() {
 els.topMark?.addEventListener("animationend", () => els.topMark.classList.remove("mark-spin"));
 
 function updatePluginNudge() {
-  els.pluginNudge.hidden = !(state.mode === "coding" && els.main.classList.contains("fresh"));
+  const show = state.mode === "coding" && els.main.classList.contains("fresh");
+  els.pluginNudge.hidden = !show;
+  if (!show) setPluginMenu(false);
+}
+
+let pluginMenuOpen = false;
+
+function setPluginMenu(open) {
+  pluginMenuOpen = open;
+  els.pluginPickMenu.hidden = !open;
+  els.pluginNudge.classList.toggle("open", open);
+  els.pluginNudgeIcons.querySelectorAll("button").forEach(b =>
+    b.setAttribute("aria-expanded", String(open)));
+}
+
+function renderPluginMenu() {
+  els.pluginPickMenu.replaceChildren(...PLUGINS.map(def => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "plugin-pick";
+    item.dataset.pick = def.id;
+    item.setAttribute("role", "menuitem");
+    const mark = document.createElement("span");
+    mark.className = "pp-mark";
+    mark.append(pluginIcon(def, 18));
+    const body = document.createElement("span");
+    body.className = "pp-body";
+    const name = document.createElement("strong");
+    name.textContent = def.name;
+    const hint = document.createElement("small");
+    hint.textContent = `@${def.id} · ${pluginConfig(def).enabled ? "On" : "Off"}`;
+    body.append(name, hint);
+    item.append(mark, body);
+    return item;
+  }));
+}
+
+/* picks a plugin from the tray and writes it into the box, which is also what
+   turns the mention on: the glow is proof the message will name it */
+function insertMention(id) {
+  const ta = els.input;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? start;
+  const before = ta.value.slice(0, start);
+  const after = ta.value.slice(end);
+  const lead = before && !/\s$/.test(before) ? " " : "";
+  const mention = `${lead}@${id} `;
+  ta.value = before + mention + after;
+  const caret = before.length + mention.length;
+  ta.setSelectionRange(caret, caret);
+  autoresize();
+  ta.focus();
 }
 
 function renderPluginNudge() {
   const marks = ["github", "youtube", "browser"].map(id => PLUGINS.find(def => def.id === id)).filter(Boolean);
   els.pluginNudgeIcons.replaceChildren(...marks.map(def => {
-    const mark = document.createElement("span");
-    mark.append(pluginIcon(def, 15));
-    return mark;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "nudge-plugin";
+    btn.dataset.pluginId = def.id;
+    btn.title = `Insert @${def.id}`;
+    btn.setAttribute("aria-label", `Insert @${def.id}`);
+    btn.setAttribute("aria-haspopup", "true");
+    btn.setAttribute("aria-expanded", "false");
+    btn.setAttribute("aria-controls", "pluginPickMenu");
+    btn.append(pluginIcon(def, 22));
+    return btn;
   }));
   updatePluginNudge();
 }
+
+els.pluginNudgeIcons.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-plugin-id]");
+  if (!btn) return;
+  e.stopPropagation();
+  renderPluginMenu();
+  setPluginMenu(!pluginMenuOpen);
+});
+
+els.pluginPickMenu.addEventListener("click", (e) => {
+  const item = e.target.closest("button[data-pick]");
+  if (!item) return;
+  e.stopPropagation();
+  setPluginMenu(false);
+  insertMention(item.dataset.pick);
+});
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#pluginNudge")) setPluginMenu(false);
+});
 
 function setMode(mode) {
   if (!SUGGESTIONS[mode]) return;
@@ -4204,12 +4317,14 @@ document.addEventListener("keydown", (e) => {
     if (!els.lockScreen.hidden) return;
     setModelMenu(false);
     setAttachmentMenu(false);
+    setPluginMenu(false);
     setAccountMenu(false);
     if (!els.overlay.hidden) closeSettings();
     else if (!nameDialog.hidden) { closeNameDialog(); discardEditorMode(); }
     else if (!makerPick.hidden) makerPick.hidden = true;
     else if (editing) exitEditorMode();
-    else if (panelOpen || els.main.classList.contains("ext-open")) setView("chats");
+    else if (panelOpen || els.main.classList.contains("ext-open")
+      || els.main.classList.contains("plg-open")) setView("chats");
     return;
   }
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
@@ -4240,32 +4355,28 @@ function renderPanel(name) {
   else renderSkills();
 }
 
-/* hidden synchronously: an overlay that fades out but never finishes would
-   sit invisible on top of the chat and swallow every click */
-function closePanel(name) {
-  $(`#view-${name}`).hidden = true;
-}
-
-function openPanel(name) {
-  const overlay = $(`#view-${name}`);
-  overlay.hidden = false;
-  renderPanel(name);
-  motion.reveal(overlay.querySelector(".panel-modal"));
-}
-
 function setView(name) {
   const panel = PANELS.includes(name) ? name : null;
   const ext = name === "extensions";
   const plg = name === "plugins";
+  /* Projects, Memory and Skills are sections of the main column now, not
+     overlays: the old one is hidden synchronously so nothing invisible keeps
+     swallowing clicks, and the new one fills in before it is revealed. */
   if (panel !== panelOpen) {
-    if (panelOpen) closePanel(panelOpen);
+    if (panelOpen) $(`#view-${panelOpen}`).hidden = true;
     panelOpen = panel;
-    if (panel) openPanel(panel);
+    if (panel) {
+      const view = $(`#view-${panel}`);
+      view.hidden = false;
+      renderPanel(panel);
+      motion.reveal(view);
+    }
   } else if (panel) {
     renderPanel(panel);
   }
   const wasExt = els.main.classList.contains("ext-open");
   const wasPlg = els.main.classList.contains("plg-open");
+  els.main.classList.toggle("panel-open", Boolean(panel));
   els.main.classList.toggle("ext-open", ext);
   els.main.classList.toggle("plg-open", plg);
   /* the view stays in the DOM, so it only needs filling and animating on the
@@ -4283,17 +4394,10 @@ function setView(name) {
     b.classList.toggle("active", b.dataset.view === active));
   els.chatTitle.textContent = ext ? "Extensions"
     : plg ? "Plugins"
+    : panel ? panel[0].toUpperCase() + panel.slice(1)
     : activeConv()?.title
     || (state.activeProject ? projectName(state.activeProject) : "Notal AI");
 }
-
-for (const p of PANELS) {
-  $(`#view-${p}`).addEventListener("click", (e) => {
-    if (e.target === $(`#view-${p}`)) setView("chats");
-  });
-}
-document.querySelectorAll("[data-panel-close]").forEach(b =>
-  b.addEventListener("click", () => setView("chats")));
 
 function projectName(id) {
   return state.projects.find(p => p.id === id)?.name || "Notal AI";
