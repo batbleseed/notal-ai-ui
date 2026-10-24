@@ -26,13 +26,13 @@ const els = {
   search: $("#searchChats"),
   chat: $("#chat"),
   greeting: $("#greeting"),
-  greetingTitle: $("#greetingTitle"),
   suggestions: $("#suggestions"),
   messages: $("#messages"),
   composer: $("#composer"),
   input: $("#input"),
   sendBtn: $("#sendBtn"),
   modelPicker: $("#modelPicker"),
+  modelButton: $("#modelButton"),
   modelMenu: $("#modelMenu"),
   modelName: $(".model-name"),
   modeSeg: $("#modeSeg"),
@@ -41,6 +41,11 @@ const els = {
   shareBtn: $("#shareBtn"),
   fileInput: $("#fileInput"),
   attachTray: $("#attachTray"),
+  attachPicker: $("#attachPicker"),
+  attachBtn: $("#attachBtn"),
+  attachMenu: $("#attachMenu"),
+  pluginNudge: $("#pluginNudge"),
+  pluginNudgeIcons: $("#pluginNudgeIcons"),
   micBtn: $("#micBtn"),
   pluginCubes: $("#pluginCubes"),
   pluginDetail: $("#pluginDetail"),
@@ -386,13 +391,6 @@ function activeConv() {
   return state.conversations.find(c => c.id === state.activeId) ?? null;
 }
 
-/* ---------- greeting ---------- */
-function setGreeting() {
-  const h = new Date().getHours();
-  const part = h < 5 ? "Still up" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-  els.greetingTitle.textContent = `${part}, ${state.displayName || "there"}`;
-}
-
 /* ---------- conversations ---------- */
 function newConversation() {
   const conv = { id: crypto.randomUUID(), title: "New chat", messages: [], createdAt: Date.now(),
@@ -449,6 +447,8 @@ function renderMessages() {
   liveCards.clear();
   const showGreeting = !conv || conv.messages.length === 0;
   els.greeting.hidden = !showGreeting;
+  els.main.classList.toggle("fresh", showGreeting);
+  updatePluginNudge();
   if (showGreeting) return;
   for (const m of conv.messages) appendMessage(m);
   scrollToBottom();
@@ -1101,10 +1101,13 @@ function stopTurn() {
 
 async function sendMessage(text) {
   const trimmed = text.trim();
+  const explicitIds = explicitPluginRequests(trimmed);
   if (!trimmed && !pendingAtts.length) return;
   if (!activeConv()) newConversation();
   const conv = activeConv();
   els.greeting.hidden = true;
+  els.main.classList.remove("fresh");
+  updatePluginNudge();
 
   const userMsg = { role: "user", text: trimmed };
   if (pendingAtts.length) {
@@ -1197,7 +1200,7 @@ async function sendMessage(text) {
         browses++;
       }
       for (;;) {
-        const raw = await callProvider(model, context, onDelta, ac.signal);
+        const raw = await callProvider(model, context, onDelta, ac.signal, explicitIds);
         let ask = findNextRequest(raw);
         /* each kind gets its own allowance, so a question that needed three
            lookups is not left unable to make one phone call */
@@ -1494,7 +1497,13 @@ const SYSTEM_BY_MODE = {
     : "You are Notal in coding mode: a precise engineering partner. Lead with working code, keep prose short, name the language and version you assumed, point out edge cases and failure modes, and say how to test the change. Prefer the minimal fix over a rewrite.",
 };
 
-function systemPrompt() {
+function explicitPluginRequests(text) {
+  return PLUGINS.filter(def =>
+    new RegExp(`(^|[^\\w@])@${def.id}(?![\\w-])`, "i").test(text || "")
+  ).map(def => def.id);
+}
+
+function systemPrompt(explicitIds = []) {
   const facts = state.memories.filter(m => m.enabled).map(m => m.text);
   const proj = state.projects.find(p => p.id === state.activeProject);
   let s = SYSTEM_BY_MODE[state.mode] || SYSTEM_BY_MODE.chat;
@@ -1509,6 +1518,21 @@ function systemPrompt() {
   if (armed.length && typeof PLUGIN_PROTOCOL === "string") {
     s += PLUGIN_PROTOCOL;
     for (const def of armed) s += def.brief || "";
+  }
+  const requested = explicitIds.map(id => PLUGINS.find(def => def.id === id)).filter(Boolean);
+  if (requested.length) {
+    const available = requested.filter(def => armed.some(other => other.id === def.id));
+    const unavailable = requested.filter(def => !available.includes(def));
+    s += `\n\n## Explicit plugin requests\nThe user typed ${requested.map(def => "@" + def.id).join(", ")}. ` +
+      "A mention is an explicit request to use that plugin, not a casual reference.";
+    if (available.length) {
+      s += ` Before the final response, call an appropriate action from ${available.map(def => def.name).join(" and ")}. ` +
+        "Infer the action arguments from the user's request, use the real tool result, and do not merely describe or recommend using the plugin.";
+    }
+    if (unavailable.length) {
+      s += ` ${unavailable.map(def => def.name).join(" and ")} is not enabled and connected in Plugins. ` +
+        "Do not pretend it ran: explain that the user needs to enable and connect it there.";
+    }
   }
   /* in the desktop app this carries the Studio brief and the owner's skills.md,
      both read from disk moments ago — see refreshStudioBrief() */
@@ -1589,9 +1613,10 @@ function withDocuments(messages) {
     const body = (a.text || "").slice(0, Math.max(0, left));
     left -= body.length;
     const cut = (a.text || "").length > body.length ? "\n…(the file is longer than the app will read)" : "";
-    return `--- BEGIN FILE ${a.name} ---\n${body}${cut}\n--- END FILE ${a.name} ---`;
+    const kind = a.kind === "link" ? "LINK" : "FILE";
+    return `--- BEGIN ${kind} ${a.name} ---\n${body}${cut}\n--- END ${kind} ${a.name} ---`;
   });
-  return [...messages.slice(0, -1), { ...last, text: `${last.text || ""}\n\nThe user attached these files.\n\n${blocks.join("\n\n")}` }];
+  return [...messages.slice(0, -1), { ...last, text: `${last.text || ""}\n\nThe user attached these files or links.\n\n${blocks.join("\n\n")}` }];
 }
 
 /* ---------- export ----------
@@ -2219,7 +2244,7 @@ async function runIntoContext(turn, context, req, signal, noteText) {
   }
 }
 
-async function callProvider(model, messages, onDelta, signal) {
+async function callProvider(model, messages, onDelta, signal, explicitIds = []) {
   const p = state.providers.find(x => x.id === model.providerId);
   if (!p) throw new Error("Provider settings are missing — re-add the model in Settings → Providers.");
   const base = (p.baseUrl || KIND_DEFAULTS[p.kind] || "").replace(/\/+$/, "");
@@ -2247,7 +2272,7 @@ async function callProvider(model, messages, onDelta, signal) {
     const body = {
       model: p.name,
       max_tokens: wantThinking ? 2048 + THINKING_BUDGET : 2048,
-      system: systemPrompt(),
+      system: systemPrompt(explicitIds),
       messages: msgs,
       stream: true,
     };
@@ -2274,7 +2299,7 @@ async function callProvider(model, messages, onDelta, signal) {
         }),
       ],
     }));
-    const body = { systemInstruction: { parts: [{ text: systemPrompt() }] }, contents };
+    const body = { systemInstruction: { parts: [{ text: systemPrompt(explicitIds) }] }, contents };
     if (wantThinking) body.generationConfig = { thinkingConfig: { includeThoughts: true } };
     await streamProvider(
       `${base}/v1beta/models/${encodeURIComponent(p.name)}:streamGenerateContent?alt=sse`, {
@@ -2284,7 +2309,7 @@ async function callProvider(model, messages, onDelta, signal) {
       body: JSON.stringify(body),
     }, "gemini", emit);
   } else {
-    const msgs = [{ role: "system", content: systemPrompt() }];
+    const msgs = [{ role: "system", content: systemPrompt(explicitIds) }];
     for (const m of history) {
       const imgs = imageAtts(m);
       if (p.kind === "openai" && m.role === "user" && imgs.length) {
@@ -2364,6 +2389,41 @@ function readAsDataURL(file) {
   });
 }
 
+function setAttachmentMenu(open) {
+  els.attachMenu.hidden = !open;
+  els.attachPicker.classList.toggle("open", open);
+  els.attachBtn.setAttribute("aria-expanded", String(open));
+}
+
+els.attachBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setAttachmentMenu(els.attachMenu.hidden);
+});
+
+els.attachMenu.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-attach-kind]");
+  if (!btn) return;
+  e.stopPropagation();
+  const kind = btn.dataset.attachKind;
+  setAttachmentMenu(false);
+  if (kind === "link") {
+    const raw = window.prompt("Paste an http(s) link to attach:");
+    if (raw === null) return;
+    try {
+      const url = new URL(raw.trim());
+      if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
+      pendingAtts.push({ name: url.href, type: "text/uri-list", size: url.href.length,
+        kind: "link", url: url.href, text: url.href });
+      renderPending();
+    } catch { toast("Enter a complete http:// or https:// link."); }
+    return;
+  }
+  if (kind === "photos") els.fileInput.accept = "image/*";
+  else if (kind === "videos") els.fileInput.accept = "video/*";
+  else els.fileInput.removeAttribute("accept");
+  els.fileInput.click();
+});
+
 els.fileInput.addEventListener("change", async () => {
   for (const f of els.fileInput.files) {
     if (f.size > 5 * 1024 * 1024) {
@@ -2413,7 +2473,8 @@ function renderPending() {
     } else {
       const label = document.createElement("span");
       label.className = "pend-file";
-      label.textContent = `📄 ${a.name}`;
+      label.textContent = a.kind === "link" ? `Link: ${a.name}`
+        : (a.type || "").startsWith("video/") ? `Video: ${a.name}` : `📄 ${a.name}`;
       chip.append(label);
     }
     const x = document.createElement("button");
@@ -2650,6 +2711,20 @@ function spinMark() {
 }
 els.topMark?.addEventListener("animationend", () => els.topMark.classList.remove("mark-spin"));
 
+function updatePluginNudge() {
+  els.pluginNudge.hidden = !(state.mode === "coding" && els.main.classList.contains("fresh"));
+}
+
+function renderPluginNudge() {
+  const marks = ["github", "youtube", "browser"].map(id => PLUGINS.find(def => def.id === id)).filter(Boolean);
+  els.pluginNudgeIcons.replaceChildren(...marks.map(def => {
+    const mark = document.createElement("span");
+    mark.append(pluginIcon(def, 15));
+    return mark;
+  }));
+  updatePluginNudge();
+}
+
 function setMode(mode) {
   if (!SUGGESTIONS[mode]) return;
   const changed = state.mode !== mode;
@@ -2664,6 +2739,7 @@ function setMode(mode) {
   /* the rainbow edge belongs to the whole main column, so coding reads as a
      different room and not just a different prompt */
   if (els.main) els.main.dataset.mode = mode;
+  renderPluginNudge();
   renderSuggestions();
   if (changed) spinMark();
 }
@@ -2716,6 +2792,7 @@ els.search.addEventListener("input", () => renderHistory(els.search.value));
 function setModelMenu(open) {
   els.modelMenu.hidden = !open;
   els.modelPicker.classList.toggle("open", open);
+  els.modelButton.setAttribute("aria-expanded", String(open));
 }
 
 function renderModelMenu() {
@@ -2762,6 +2839,11 @@ els.modelMenu.addEventListener("click", (e) => {
   save();
   renderModelMenu();
   setModelMenu(false);
+});
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#modelPicker")) setModelMenu(false);
+  if (!e.target.closest("#attachPicker")) setAttachmentMenu(false);
 });
 
 /* ---------- settings modal ---------- */
@@ -2852,13 +2934,23 @@ function switchTab(name) {
 
 /* ---------- general ---------- */
 const THEME_SEGS = document.querySelectorAll("[data-theme-seg]");
+const systemDark = matchMedia("(prefers-color-scheme: dark)");
 function applyTheme() {
-  document.documentElement.dataset.theme = state.theme;
+  const effective = state.theme === "system"
+    ? (systemDark.matches ? "dark" : "light")
+    : state.theme;
+  document.documentElement.dataset.theme = effective;
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = THEME_COLORS[state.theme] || THEME_COLORS.light;
-  THEME_SEGS.forEach(seg => seg.querySelectorAll("button").forEach(b =>
-    b.classList.toggle("active", b.dataset.themeVal === state.theme)));
+  if (meta) meta.content = THEME_COLORS[effective] || THEME_COLORS.light;
+  THEME_SEGS.forEach(seg => seg.querySelectorAll("button").forEach(b => {
+    const selected = b.dataset.themeVal === state.theme;
+    b.classList.toggle("active", selected);
+    b.setAttribute("aria-pressed", String(selected));
+  }));
 }
+systemDark.addEventListener("change", () => {
+  if (state.theme === "system") applyTheme();
+});
 THEME_SEGS.forEach(seg => seg.addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-theme-val]");
   if (!btn) return;
@@ -2963,7 +3055,6 @@ els.displayNameInput.value = state.displayName;
 els.displayNameInput.addEventListener("input", () => {
   state.displayName = els.displayNameInput.value.trim();
   save();
-  setGreeting();
   if (!currentUser) renderAuthUI();
 });
 
@@ -3360,6 +3451,20 @@ function pluginShort(def) {
   return { tone: st.tone === "idle" ? "ready" : st.tone, text: `${label}. ${st.text}` };
 }
 
+function pluginIcon(def, size = 22) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.7");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.innerHTML = def.icon || "";
+  return svg;
+}
+
 function pluginCube(def) {
   const li = document.createElement("li");
   const picked = def.id === pluginPicked;
@@ -3369,18 +3474,7 @@ function pluginCube(def) {
   btn.className = "plg-cube" + (picked ? " on" : "");
   btn.setAttribute("aria-pressed", String(picked));
 
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("width", "22");
-  svg.setAttribute("height", "22");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "1.7");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  /* the drawing is authored in plugins.js next to the plugin it names — it is
-     never text that came back from a service */
-  svg.innerHTML = def.icon || "";
+  const svg = pluginIcon(def);
   const mark = document.createElement("span");
   mark.className = "plg-mark";
   mark.setAttribute("aria-hidden", "true");
@@ -3787,7 +3881,6 @@ async function ensureAuth() {
       state.displayName = u.displayName;
       els.displayNameInput.value = u.displayName;
       save();
-      setGreeting();
     }
     renderAuthUI();
     renderMessages();
@@ -4060,6 +4153,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (!els.lockScreen.hidden) return;
     setModelMenu(false);
+    setAttachmentMenu(false);
     setAccountMenu(false);
     if (!els.overlay.hidden) closeSettings();
     else if (!nameDialog.hidden) { closeNameDialog(); discardEditorMode(); }
@@ -5850,7 +5944,6 @@ renderSecurityUI();
 renderRelayUI();
 if (state.pinHash) lockApp(); else resetIdleTimer();
 setView("chats");
-setGreeting();
 setMode(state.mode);
 renderHistory();
 renderMessages();

@@ -99,13 +99,6 @@
                 <small class="am-sub" id="amSub">Not signed in</small>
               </div>
             </div>
-            <div class="am-row">
-              <span>Appearance</span>
-              <div class="seg" data-theme-seg id="amThemeSeg">
-                <button type="button" data-theme-val="light">Light</button>
-                <button type="button" data-theme-val="dark">Dark</button>
-              </div>
-            </div>
             <div class="am-divider"></div>
             <button class="am-item" id="amInstallBtn" type="button" hidden>
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>
@@ -159,11 +152,10 @@
 
       <section class="chat" id="chat">
         <div class="greeting" id="greeting">
-          <h1 id="greetingTitle">Welcome back</h1>
-          <p class="greeting-sub">What are you thinking about today?</p>
-          <!-- filled by renderSuggestions() in app.js: the set follows the
-               Chat / Coding mode, so it is data and not markup -->
-          <div class="suggestions" id="suggestions"></div>
+          <div class="wordmark" tabindex="0" role="img" aria-label="Notal AI">
+            <span class="wordmark-text" aria-hidden="true">Notal AI</span>
+            <span class="wordmark-logo notal-mark" aria-hidden="true"></span>
+          </div>
         </div>
         <div class="messages" id="messages"></div>
       </section>
@@ -223,22 +215,44 @@
           <textarea id="input" rows="1" placeholder="Message Notal AI..." autofocus></textarea>
           <div class="composer-bar">
             <div class="composer-left">
-              <div class="model-picker" id="modelPicker">
-                <span class="mp-star notal-mark" aria-hidden="true"></span>
-                <span class="model-name">Notal AI</span>
-                <svg class="mp-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
-                  <div class="model-menu" id="modelMenu" hidden></div>
-              </div>
               <input type="file" id="fileInput" multiple hidden />
-              <label class="icon-btn" for="fileInput" title="Attach file" aria-label="Attach file">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5l-8.5 8.5a5 5 0 01-7-7L15 4.5a3.3 3.3 0 014.7 4.7L10.4 18.5a1.7 1.7 0 01-2.4-2.4l7.8-7.8"/></svg>
-              </label>
+              <div class="attach-picker" id="attachPicker">
+                <button type="button" class="icon-btn" id="attachBtn" title="Add attachment" aria-label="Add attachment" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu">
+                  <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+                <div class="attach-menu" id="attachMenu" role="menu" hidden>
+                  <button type="button" role="menuitem" data-attach-kind="photos">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 4"/></svg>
+                    <span>Photos</span>
+                  </button>
+                  <button type="button" role="menuitem" data-attach-kind="videos">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/></svg>
+                    <span>Videos</span>
+                  </button>
+                  <button type="button" role="menuitem" data-attach-kind="files">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 14h8M8 17h5"/></svg>
+                    <span>Files</span>
+                  </button>
+                  <button type="button" role="menuitem" data-attach-kind="link">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg>
+                    <span>Link</span>
+                  </button>
+                </div>
+              </div>
               <button type="button" class="icon-btn" id="micBtn" title="Dictate" aria-label="Voice input">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3M8.5 21h7"/></svg>
               </button>
             </div>
             <div class="composer-right">
               <span class="char-count" id="charCount">0</span>
+              <div class="model-picker" id="modelPicker">
+                <button class="model-picker-btn" id="modelButton" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="modelMenu">
+                  <span class="mp-star notal-mark" aria-hidden="true"></span>
+                  <span class="model-name">Notal AI</span>
+                  <svg class="mp-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+                <div class="model-menu" id="modelMenu" hidden></div>
+              </div>
               <button type="submit" class="send-btn" id="sendBtn" title="Send" aria-label="Send message">
                 <svg class="i-send" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
                 <svg class="i-stop" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3" fill="currentColor"/></svg>
@@ -246,6 +260,14 @@
             </div>
           </div>
         </form>
+        <div class="plugin-nudge" id="pluginNudge" hidden>
+          <span class="plugin-nudge-icons" id="pluginNudgeIcons" aria-hidden="true"></span>
+          <strong>Plugins</strong>
+          <span>Type @github or @youtube</span>
+        </div>
+        <!-- filled by renderSuggestions() in app.js: the set follows the
+             Chat / Coding mode, so it is data and not markup -->
+        <div class="suggestions" id="suggestions"></div>
         <p class="fineprint">Notal AI can make mistakes. Double-check important information.</p>
       </footer>
     </main>
@@ -539,6 +561,7 @@
       <div class="modal-body">
         <nav class="settings-nav">
           <button class="settings-tab active" data-tab="general">General</button>
+          <button class="settings-tab" data-tab="appearance">Appearance</button>
           <button class="settings-tab" data-tab="account">Account</button>
           <button class="settings-tab" data-tab="providers">Providers</button>
           <button class="settings-tab" data-tab="notifications">Notifications</button>
@@ -549,13 +572,6 @@
         </nav>
         <div class="settings-panels">
           <section class="settings-panel" id="panel-general">
-            <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Appearance</span><small>Switch between light and dark</small></div>
-              <div class="seg" data-theme-seg id="themeSeg">
-                <button type="button" data-theme-val="light">Light</button>
-                <button type="button" data-theme-val="dark">Dark</button>
-              </div>
-            </div>
             <div class="setting-row">
               <div class="setting-info"><span class="setting-name">Chat history</span><small>Saved in this browser, on this device. Nothing is uploaded.</small></div>
               <button class="danger-btn" id="clearChatsBtn" type="button">Clear all chats</button>
@@ -569,7 +585,7 @@
                 <dt>A different browser, phone or incognito window</dt>
                 <dd>Starts completely empty. There is no server holding a copy to pull from, so nothing carries across.</dd>
                 <dt>Signing in with Google</dt>
-                <dd>Brings in your name and profile picture for the greeting and the avatar. It does not upload or sync your chats, your memory or your API keys.</dd>
+                <dd>Brings in your name and profile picture for the account menu and avatar. It does not upload or sync your chats, your memory or your API keys.</dd>
                 <dt>Clearing this site's browsing data</dt>
                 <dd>Deletes all of it for good. Export what you want to keep before you do.</dd>
               </dl>
@@ -594,9 +610,41 @@
               </div>
             </details>
           </section>
+          <section class="settings-panel" id="panel-appearance" hidden>
+            <p class="panel-note">Choose how Notal AI looks. System follows your device and changes with it.</p>
+            <div class="theme-cards" data-theme-seg role="group" aria-label="Color theme">
+              <button class="theme-card" type="button" data-theme-val="light" aria-pressed="false">
+                <span class="theme-thumb thumb-light" aria-hidden="true">
+                  <span class="thumb-side"></span>
+                  <span class="thumb-main"><span class="thumb-title"></span><span class="thumb-reply"></span><span class="thumb-input"></span></span>
+                </span>
+                <span class="theme-card-name">Light</span>
+              </button>
+              <button class="theme-card" type="button" data-theme-val="dark" aria-pressed="false">
+                <span class="theme-thumb thumb-dark" aria-hidden="true">
+                  <span class="thumb-side"></span>
+                  <span class="thumb-main"><span class="thumb-title"></span><span class="thumb-reply"></span><span class="thumb-input"></span></span>
+                </span>
+                <span class="theme-card-name">Dark</span>
+              </button>
+              <button class="theme-card" type="button" data-theme-val="system" aria-pressed="false">
+                <span class="theme-thumb thumb-system" aria-hidden="true">
+                  <span class="theme-mini thumb-light">
+                    <span class="thumb-side"></span>
+                    <span class="thumb-main"><span class="thumb-title"></span><span class="thumb-reply"></span><span class="thumb-input"></span></span>
+                  </span>
+                  <span class="theme-mini thumb-dark">
+                    <span class="thumb-side"></span>
+                    <span class="thumb-main"><span class="thumb-title"></span><span class="thumb-reply"></span><span class="thumb-input"></span></span>
+                  </span>
+                </span>
+                <span class="theme-card-name">System</span>
+              </button>
+            </div>
+          </section>
           <section class="settings-panel" id="panel-account" hidden>
             <div class="setting-row">
-              <div class="setting-info"><span class="setting-name">Display name</span><small>Used in the greeting</small></div>
+              <div class="setting-info"><span class="setting-name">Display name</span><small>Shown in the account menu</small></div>
               <input type="text" id="displayNameInput" class="text-input" placeholder="Your name" />
             </div>
             <div class="setting-row">
@@ -610,7 +658,7 @@
               <h3 class="note-title">What signing in actually does</h3>
               <dl class="fact-list">
                 <dt>It brings in</dt>
-                <dd>Your name for the greeting, and your Google photo for the avatar.</dd>
+                <dd>Your name for the account menu, and your Google photo for the avatar.</dd>
                 <dt>It does not</dt>
                 <dd>Upload or sync your chats, projects, memory, skills or API keys. Those stay in this browser on this device, whether you are signed in or not.</dd>
                 <dt>On another device</dt>

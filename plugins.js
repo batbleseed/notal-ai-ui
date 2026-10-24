@@ -1231,5 +1231,76 @@ never overwrite a file you have not read in this conversation.`,
   },
 };
 
-const PLUGIN_DEFS = [GITHUB_PLUGIN, BROWSER_PLUGIN, GMAIL_PLUGIN, DRIVE_PLUGIN];
+/* ---------- YouTube ----------
+   Search uses YouTube's official Data API. The key stays in this browser and is
+   sent only to googleapis; no search result is invented when it is not configured. */
+const YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
+
+async function youtubeSearch(a, cfg, signal) {
+  const query = String(a.query || "").trim();
+  if (!query) throw new Error("youtube.search needs a query");
+  const limit = Math.min(Math.max(Number(a.limit) || 5, 1), 10);
+  const params = new URLSearchParams({
+    part: "snippet", type: "video", q: query, maxResults: String(limit),
+    key: String(cfg.apiKey || "").trim(),
+  });
+  const res = await fetch(`${YOUTUBE_SEARCH_URL}?${params}`, { signal });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error?.message || `YouTube answered ${res.status}`);
+  const items = data?.items || [];
+  if (!items.length) return `No YouTube videos found for “${query}”.`;
+  return items.map((item, i) => {
+    const s = item.snippet || {};
+    const title = String(s.title || "Untitled").replace(/\s+/g, " ").trim();
+    const channel = String(s.channelTitle || "Unknown channel").replace(/\s+/g, " ").trim();
+    const description = String(s.description || "").replace(/\s+/g, " ").trim().slice(0, 220);
+    return `${i + 1}. ${title}\n${channel} — ${s.publishedAt || "date unknown"}\n` +
+      `https://www.youtube.com/watch?v=${encodeURIComponent(item.id?.videoId || "")}` +
+      (description ? `\n${description}` : "");
+  }).join("\n\n");
+}
+
+const YOUTUBE_PLUGIN = {
+  id: "youtube",
+  name: "YouTube",
+  icon: '<rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9 5 3-5 3z"/>',
+  desc: "Search YouTube for real videos through the official YouTube Data API and bring their titles, channels, descriptions and links into the chat.",
+  setup: [
+    "In Google Cloud Console, enable YouTube Data API v3 for a project. It is separate from the Gmail and Drive API switches.",
+    "Create an API key under APIs & Services → Credentials, then paste it below. You can restrict that key to YouTube Data API v3 in Google Cloud.",
+    "Switch the plugin on. Searches go from this browser to googleapis.com; the key is not sent to Notal's relay.",
+  ],
+  fields: [{
+    key: "apiKey",
+    label: "YouTube Data API key",
+    type: "password",
+    optional: true,
+    placeholder: "AIza…",
+    help: "Kept in this browser and sent only to googleapis.com for YouTube searches. Enable YouTube Data API v3 on the key's Google Cloud project first.",
+  }],
+  ready(cfg) { return Boolean(String(cfg.apiKey || "").trim()); },
+  notReady: "Add a YouTube Data API key below and switch the plugin on.",
+  async test(cfg) {
+    if (!YOUTUBE_PLUGIN.ready(cfg)) return { ok: false, message: "Add a YouTube Data API key first." };
+    const signal = typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(12000) : undefined;
+    await youtubeSearch({ query: "Notal AI", limit: 1 }, cfg, signal);
+    return { ok: true, message: "YouTube Data API answered a real search — this key works from this browser." };
+  },
+  brief: `
+### YouTube
+
+- youtube.search {"query":"lo-fi hip hop","limit":5} — real video results with
+  titles, channels, publication dates, descriptions and watch links. Use this
+  whenever the user explicitly writes @youtube, with their requested topic as
+  the query. Never invent a video or a link.`,
+  actions: {
+    "youtube.search": {
+      write: false,
+      summary: a => `YouTube videos about “${String(a.query || "").slice(0, 60)}”`,
+      run: (a, cfg, signal) => youtubeSearch(a, cfg, signal),
+    },
+  },
+};
+
+const PLUGIN_DEFS = [GITHUB_PLUGIN, BROWSER_PLUGIN, YOUTUBE_PLUGIN, GMAIL_PLUGIN, DRIVE_PLUGIN];
 
