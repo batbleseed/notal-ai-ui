@@ -2762,7 +2762,9 @@ function spinMark() {
 els.topMark?.addEventListener("animationend", () => els.topMark.classList.remove("mark-spin"));
 
 function updatePluginNudge() {
-  els.pluginNudge.hidden = !(state.mode === "coding" && els.main.classList.contains("fresh"));
+  const show = state.mode === "coding" && els.main.classList.contains("fresh");
+  els.pluginNudge.hidden = !show;
+  els.composer.classList.toggle("nudge-stuck", show);
 }
 
 function renderPluginNudge() {
