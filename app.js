@@ -2782,12 +2782,25 @@ function updatePluginNudge() {
 
 let pluginMenuOpen = false;
 
+/* The tray sits near the bottom of the phone, so a menu that drops down can run
+   past the screen edge. Cap it to the room that is left; it scrolls if needed. */
+function fitPluginMenu() {
+  if (!pluginMenuOpen) return;
+  const top = els.pluginPickMenu.getBoundingClientRect().top;
+  const room = window.innerHeight - top - 12;
+  els.pluginPickMenu.style.maxHeight = `${Math.max(140, Math.min(360, room))}px`;
+}
+
 function setPluginMenu(open) {
   pluginMenuOpen = open;
   els.pluginPickMenu.hidden = !open;
   els.pluginNudge.classList.toggle("open", open);
   els.nudgeOpen.setAttribute("aria-expanded", String(open));
+  if (open) fitPluginMenu();
+  else els.pluginPickMenu.style.maxHeight = "";
 }
+
+window.addEventListener("resize", fitPluginMenu);
 
 function renderPluginMenu() {
   els.pluginPickMenu.replaceChildren(...PLUGINS.map(def => {
