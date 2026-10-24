@@ -76,7 +76,7 @@
       <section class="chat">
         <div class="greeting">
           <div class="wordmark" role="img" aria-label="Notal AI">
-            <span class="wordmark-text" aria-hidden="true">Notal AI</span>
+            <span class="wordmark-text" aria-hidden="true"><span class="wm-letter" style="--i:0">N</span><span class="wm-letter" style="--i:1">o</span><span class="wm-letter" style="--i:2">t</span><span class="wm-letter" style="--i:3">a</span><span class="wm-letter" style="--i:4">l</span><span class="wm-space">&nbsp;</span><span class="wm-letter" style="--i:5">A</span><span class="wm-letter" style="--i:6">I</span></span>
             <span class="wordmark-logo notal-mark" aria-hidden="true"></span>
           </div>
         </div>
@@ -159,7 +159,8 @@
   <script>
     /* Enough of the composer to be honest about the box: the count follows what
        you type, the box grows, and the arrow only lights up when there is
-       something to send. Sending opens the real chat. */
+       something to send. Sending opens the real chat with the text waiting in
+       its composer — ready to read and edit, not already sent. */
     const input = document.getElementById("input");
     const count = document.getElementById("charCount");
     const send = document.getElementById("sendBtn");
@@ -171,6 +172,14 @@
     }
     input.addEventListener("input", syncComposer);
     syncComposer();
+
+    document.getElementById("composer").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = input.value;
+      if (!text.trim()) return;
+      try { sessionStorage.setItem("notal.handoff", text); } catch { /* storage off */ }
+      location.assign("chat/");
+    });
 
     if ("serviceWorker" in navigator)
       navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => {});

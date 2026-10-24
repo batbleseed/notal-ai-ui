@@ -745,12 +745,27 @@ button:disabled { opacity: .5; cursor: default; }
 .wordmark:hover .wordmark-logo::before, .wordmark:focus-visible .wordmark-logo::before {
   animation: notal-spin 3s linear infinite;
 }
+/* The wordmark's letters take turns hopping — up, a small overshoot, back to
+   rest — so the greeting reads as alive. Pure CSS; --i sets the stagger. */
+.wm-letter {
+  display: inline-block;
+  animation: wm-hop 2.4s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 105ms);
+}
+.wm-space { display: inline-block; }
+@keyframes wm-hop {
+  0%, 62%, 100% { transform: translateY(0); }
+  16% { transform: translateY(-9px); }
+  34% { transform: translateY(2px); }
+  48% { transform: translateY(0); }
+}
 @media (prefers-reduced-motion: reduce) {
   .wordmark-text, .wordmark-logo { transition: opacity .15s ease; }
   .wordmark-text, .wordmark-logo,
   .wordmark:hover .wordmark-text, .wordmark:focus-visible .wordmark-text,
   .wordmark:hover .wordmark-logo, .wordmark:focus-visible .wordmark-logo { transform: none; filter: none; }
   .wordmark:hover .wordmark-logo::before, .wordmark:focus-visible .wordmark-logo::before { animation: none; }
+  .wm-letter { animation: none; }
 }
 
 /* bento: two wide cards and two squares, offset so the row below mirrors the
@@ -994,6 +1009,10 @@ button:disabled { opacity: .5; cursor: default; }
   .boot-word { animation-duration: 3.6s; }
   .boot-splash.zoom .boot-mark { animation-duration: 2.4s; }
 }
+
+/* Arriving with a draft from the landing page runs the same curtain quicker. */
+.boot-splash.quick { transition-duration: .18s; }
+.boot-splash.quick.zoom .boot-mark { animation-duration: .45s; }
 
 /* Model reasoning folds into a one-line row once the answer is ready. */
 .msg-think { display: grid; gap: 3px; align-content: start; margin-bottom: 10px; }

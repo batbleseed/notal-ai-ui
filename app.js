@@ -6061,13 +6061,33 @@ setMode(state.mode);
 updateSendState();
 renderHistory();
 renderMessages();
+
+/* The landing composer hands its text over in sessionStorage. Start a fresh
+   chat with that text sitting in the box — it is never sent for the user. */
+let arrivedWithDraft = false;
+try {
+  const handoff = sessionStorage.getItem("notal.handoff");
+  if (handoff) {
+    sessionStorage.removeItem("notal.handoff");
+    arrivedWithDraft = true;
+    newConversation();
+    els.input.value = handoff;
+    autoresize();
+    els.input.setSelectionRange(handoff.length, handoff.length);
+  }
+} catch { /* sessionStorage unavailable */ }
+
 applyUiExtensions();
 ensureAuth().catch(() => {});
 
 /* The boot splash holds for a full two seconds, then the mark swells bigger
-   and bigger until the whole chat is revealed behind it. */
+   and bigger until the whole chat is revealed behind it. When we arrive with a
+   draft from the landing page the curtain lifts quickly, just this once, so
+   the handoff reads as one movement. */
 const bootSplash = document.getElementById("bootSplash");
 if (bootSplash) {
+  if (arrivedWithDraft) bootSplash.classList.add("quick");
+  const hold = arrivedWithDraft ? 250 : 2000;
   setTimeout(() => {
     bootSplash.classList.add("zoom");
     const mark = bootSplash.querySelector(".boot-mark");
@@ -6075,6 +6095,6 @@ if (bootSplash) {
       bootSplash.classList.add("closing");
       bootSplash.addEventListener("transitionend", () => bootSplash.remove(), { once: true });
     }, { once: true });
-  }, Math.max(0, 2000 - performance.now()));
+  }, Math.max(0, hold - performance.now()));
 }
 
