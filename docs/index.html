@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Docs — Notal AI</title>
   <meta name="description" content="How to use Notal AI: models and providers, projects, memory, skills, extensions, plugins, privacy, themes, shortcuts and troubleshooting." />
-  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
-  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png" />
+  <link rel="manifest" href="../manifest.webmanifest" />
   <meta name="theme-color" content="#f5f1ea" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="site.css" />
+  <link rel="stylesheet" href="../site.css" />
   <style>
     /* ---------- docs hero ---------- */
     .docs-hero { padding: clamp(34px, 7vh, 66px) 0 40px; border-bottom: 1px solid var(--border); }
@@ -35,7 +35,7 @@
       gap: clamp(30px, 5vw, 64px); align-items: start;
       padding: 42px 0 78px;
     }
-    .docs-toc { position: sticky; top: 22px; display: grid; gap: 10px; }
+    .docs-toc { position: sticky; top: 78px; display: grid; gap: 10px; }
     .toc-k {
       font-size: 11.5px; font-weight: 600; letter-spacing: .7px;
       text-transform: uppercase; color: var(--text-faint);
@@ -52,7 +52,7 @@
 
     /* ---------- article ---------- */
     .doc { min-width: 0; max-width: 760px; }
-    .doc section { scroll-margin-top: 20px; }
+    .doc section { scroll-margin-top: 92px; }
     .doc section + section { margin-top: 54px; padding-top: 42px; border-top: 1px solid var(--border); }
     .kicker {
       font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
@@ -168,14 +168,14 @@
 <body id="top">
   <div class="wrap">
     <nav class="nav">
-      <a class="brand" href="index.html">
+      <a class="brand" href="../">
         <span class="tile notal-mark"></span>
         <span>Notal AI</span>
       </a>
       <div class="nav-links">
-        <a href="docs.html" aria-current="page">Docs</a>
-        <a href="chat/">Chat</a>
-        <a href="index.html#demo">Preview</a>
+        <a href="./" aria-current="page">Docs</a>
+        <a href="../chat/">Chat</a>
+        <a href="../oldindex.html#demo">Preview</a>
       </div>
     </nav>
 
@@ -220,7 +220,7 @@
             <div class="step-card">
               <span class="step-n">1</span>
               <h3>Open the workspace</h3>
-              <p>Press <a href="chat/">Chat</a>. You land in a new chat with the built-in model already selected.</p>
+              <p>Press <a href="../chat/">Chat</a>. You land in a new chat with the built-in model already selected.</p>
             </div>
             <div class="step-card">
               <span class="step-n">2</span>
@@ -621,8 +621,8 @@
           </div>
 
           <div class="doc-actions">
-            <a class="btn btn-primary" href="chat/">Open the chat →</a>
-            <a class="btn btn-ghost" href="index.html#demo">Preview the workspace</a>
+            <a class="btn btn-primary" href="../chat/">Open the chat →</a>
+            <a class="btn btn-ghost" href="../oldindex.html#demo">Preview the workspace</a>
             <a class="btn btn-ghost" href="https://github.com/batbleseed/notal-ai-ui/issues" target="_blank" rel="noreferrer">Report a problem</a>
           </div>
         </section>
@@ -630,10 +630,10 @@
     </div>
   </div>
 
-  <footer>
+  <footer class="site-footer">
     <div class="wrap">
       <span>Notal AI · built by batbleseed · MIT licensed</span>
-      <span><a href="chat/">Open chat</a> · <a href="index.html">Home</a> · <a href="https://github.com/batbleseed/notal-ai-ui" target="_blank" rel="noreferrer">Source on GitHub</a></span>
+      <span><a href="../chat/">Open chat</a> · <a href="../">Home</a> · <a href="https://github.com/batbleseed/notal-ai-ui" target="_blank" rel="noreferrer">Source on GitHub</a></span>
     </div>
   </footer>
 </body>

@@ -18,14 +18,22 @@ body {
   background: var(--bg); color: var(--text);
   font-family: var(--sans); font-size: 16px; line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  padding-top: 62px; /* room for the fixed nav */
 }
 a { color: inherit; }
 .wrap { width: min(1040px, calc(100% - 48px)); margin: 0 auto; }
 
-/* ---------- nav ---------- */
+/* ---------- nav ----------
+   The bar sticks to the top of the window while the page scrolls under it.
+   It is full-bleed so nothing shows at its sides, and its inline padding is
+   the same maths as .wrap, so the brand and the links stay on the measure. */
 .nav {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 22px 0;
+  position: fixed; inset: 0 0 auto 0; z-index: 50;
+  padding: 16px max(24px, calc(50vw - 520px));
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
 }
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 600; }
 /* the Notal mark: three petals around a core, built from the brand PNGs */
@@ -61,14 +69,17 @@ a { color: inherit; }
 }
 .eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--accent); }
 
-footer { border-top: 1px solid var(--border); padding: 26px 0 40px; font-size: 13.5px; color: var(--text-faint); }
-footer .wrap { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
-footer a { color: var(--text-soft); text-decoration: none; }
-footer a:hover { color: var(--accent); }
+/* scoped: the app's composer sits in a <footer> too, and a bare footer
+   selector would draw its border straight across the chat */
+.site-footer { border-top: 1px solid var(--border); padding: 26px 0 40px; font-size: 13.5px; color: var(--text-faint); }
+.site-footer .wrap { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+.site-footer a { color: var(--text-soft); text-decoration: none; }
+.site-footer a:hover { color: var(--accent); }
 
 /* On a phone the brand and three words still fit; they only get closer. */
 @media (max-width: 620px) {
-  .nav { padding: 18px 0; gap: 12px; }
+  body { padding-top: 58px; }
+  .nav { padding-block: 14px; gap: 12px; }
   .nav-links { gap: 14px; font-size: 13.5px; }
 }
 

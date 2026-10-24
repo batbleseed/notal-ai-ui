@@ -1,9 +1,9 @@
 /* Notal AI service worker — offline shell for the landing page and the app. */
-const CACHE = "notal-ai-v46";
+const CACHE = "notal-ai-v47";
 const CORE = [
   "./",
   "./index.html",
-  "./docs.html",
+  "./docs/",
   "./site.css",
   "./chat/index.html",
   "./styles.css",
@@ -63,7 +63,7 @@ self.addEventListener("fetch", (e) => {
         c.put(req, res.clone());
         return res;
       } catch {
-        return (await caches.match(req)) || (await caches.match("./chat/index.html")) || Response.error();
+        return (await caches.match(req)) || (await caches.match("./index.html")) || Response.error();
       }
     })());
     return;

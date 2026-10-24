@@ -15,6 +15,13 @@ const types = {
 
 http.createServer((req, res) => {
   const route = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+  /* The docs live in docs/index.html. Redirect the bare folder and the old
+     file name so its relative links resolve from /docs/, not from the root. */
+  if (route === "/docs" || route === "/docs.html") {
+    res.writeHead(301, { Location: "/docs/" });
+    res.end();
+    return;
+  }
   let file = path.resolve(__dirname, "." + (route === "/" ? "/index.html" : route));
   if (!file.startsWith(__dirname + path.sep)) {
     res.writeHead(403);
