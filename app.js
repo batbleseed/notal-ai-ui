@@ -2882,9 +2882,6 @@ function setMode(mode) {
     b.setAttribute("aria-pressed", String(on));
   });
   els.input.placeholder = PLACEHOLDER_BY_MODE[mode];
-  /* the rainbow edge belongs to the whole main column, so coding reads as a
-     different room and not just a different prompt */
-  if (els.main) els.main.dataset.mode = mode;
   renderPluginNudge();
   renderSuggestions();
   if (changed) spinMark();

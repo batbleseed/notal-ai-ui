@@ -1130,8 +1130,8 @@ button:disabled { opacity: .5; cursor: default; }
 .send-btn.stop { background: var(--accent); color: #fff; }
 .fineprint { text-align: center; font-size: 11.5px; color: var(--text-faint); margin-top: 10px; }
 .plugin-nudge {
-  /* above the composer, whose coding-mode ring sits at z-index 2, and below
-     the sidebar drawer at 40 — the dropdown opens upward over the box */
+  /* above the suggestion cards the open menu covers, and below the sidebar
+     drawer at 40 */
   position: relative; z-index: 20;
   width: 100%; max-width: 700px; margin: 0 auto;
   border: 1px solid var(--border); border-top: 0;
@@ -1275,65 +1275,15 @@ button:disabled { opacity: .5; cursor: default; }
 .mode-btn:hover { color: var(--text); }
 .mode-btn.active { background: var(--accent); color: #fff; }
 
-/* ---------------- Coding mode ----------------
-   Coding is a different head space, and the page says so out loud: the message
-   box grows a rainbow edge that slides and glows, and the mark by the switch
-   turns once each time the mode changes. Decoration only — the composer works
-   exactly the same with the animation switched off. */
-.main[data-mode="coding"] .composer {
-  border-color: transparent;
-  animation: rainbow-halo 7s linear infinite;
-}
-.main[data-mode="coding"] .composer::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  z-index: 2;
-  padding: 1.5px;
-  border-radius: calc(var(--radius-hero) + 1.5px);
-  background: linear-gradient(90deg,
-    #ff4d4d, #ff9500, #ffd60a, #30d158, #00c7be, #409cff, #bf5af2, #ff2d95, #ff4d4d);
-  background-size: 300% 100%;
-  animation: rainbow-slide 7s linear infinite;
-  /* two copies of the box, cut away from each other, leave only the ring */
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  transition: padding .15s;
-}
-/* the halo animation owns box-shadow, so the usual focus ring cannot show here.
-   Clicking in thickens the edge instead, and the stroke breathes and warms while
-   the colours slide — focus stays visible in every mode, even in the corner of
-   an eye. */
-.main[data-mode="coding"] .composer:focus-within::before {
-  padding: 2.5px;
-  border-radius: calc(var(--radius-hero) + 2.5px);
-  animation: rainbow-slide 7s linear infinite, halo-breathe 3.4s ease-in-out infinite;
-}
-@keyframes halo-breathe {
-  0%, 100% { padding: 2px; filter: brightness(1) saturate(1); }
-  50% { padding: 3.2px; filter: brightness(1.22) saturate(1.25); }
-}
-/* 300% of a 300%-wide strip is two full turns, so the loop has no seam */
-@keyframes rainbow-slide { to { background-position: 300% 0; } }
-@keyframes rainbow-halo {
-  0%, 100% { box-shadow: var(--shadow), 0 0 20px -6px rgba(255, 77, 77, .6); }
-  17% { box-shadow: var(--shadow), 0 0 20px -6px rgba(255, 149, 0, .6); }
-  33% { box-shadow: var(--shadow), 0 0 20px -6px rgba(48, 209, 88, .6); }
-  50% { box-shadow: var(--shadow), 0 0 20px -6px rgba(0, 199, 190, .6); }
-  67% { box-shadow: var(--shadow), 0 0 20px -6px rgba(64, 156, 255, .6); }
-  83% { box-shadow: var(--shadow), 0 0 20px -6px rgba(191, 90, 242, .6); }
-}
+/* ---------------- Mode switch ----------------
+   The composer looks the same in Chat and Coding; the only signal is the mark
+   by the switch, which turns once each time the mode changes. */
 .topbar .brand-logo.mark-spin::before {
   animation: notal-spin .8s cubic-bezier(.25, .9, .25, 1);
 }
 @media (prefers-reduced-motion: reduce) {
   /* slowed rather than dropped, the same deal as the hopping thinking words: a
-     machine that dials motion back still gets a coding mode that looks like one */
-  .main[data-mode="coding"] .composer,
-  .main[data-mode="coding"] .composer::before { animation-duration: 26s; }
+     machine that dials motion back still gets a turn instead of a cut */
   .topbar .brand-logo.mark-spin::before { animation-duration: 2.4s; }
 }
 
