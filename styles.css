@@ -678,6 +678,7 @@ button:disabled { opacity: .5; cursor: default; }
 /* a wash of accent lightest behind the greeting, so the eye lands on the
    middle of the column and the chat itself is what holds attention */
 .main {
+  position: relative;
   flex: 1; display: flex; flex-direction: column; min-width: 0;
   background: radial-gradient(115% 55% at 50% 0%,
     color-mix(in srgb, var(--accent-soft) 30%, var(--bg)) 0%, var(--bg) 62%);
@@ -1115,6 +1116,28 @@ button:disabled { opacity: .5; cursor: default; }
 .plugin-nudge strong { color: var(--text); font-size: 12.5px; }
 .plugin-nudge-icons { display: inline-flex; align-items: center; gap: 3px; color: var(--accent); }
 .plugin-nudge-icons > span { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; }
+
+/* ---------- file drop target ---------- */
+.drop-veil {
+  position: absolute; inset: 10px; z-index: 60; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px dashed var(--accent); border-radius: 22px;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  animation: drop-veil-in .16s ease-out;
+}
+.drop-veil[hidden] { display: none; }
+.drop-box {
+  display: grid; justify-items: center; gap: 9px;
+  padding: 24px 34px; border-radius: var(--radius-lg);
+  background: var(--surface); border: 1px solid var(--border);
+  box-shadow: var(--shadow); color: var(--text);
+  font-size: 16px; font-weight: 600;
+}
+.drop-box svg { color: var(--accent); }
+@keyframes drop-veil-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .drop-veil { animation: none; } }
 
 .attach-picker { position: relative; display: inline-flex; }
 .attach-picker.open > .icon-btn { background: var(--surface-2); color: var(--text); }

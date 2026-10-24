@@ -44,6 +44,7 @@ const els = {
   attachPicker: $("#attachPicker"),
   attachBtn: $("#attachBtn"),
   attachMenu: $("#attachMenu"),
+  dropVeil: $("#dropVeil"),
   pluginNudge: $("#pluginNudge"),
   pluginNudgeIcons: $("#pluginNudgeIcons"),
   micBtn: $("#micBtn"),
@@ -2424,8 +2425,8 @@ els.attachMenu.addEventListener("click", (e) => {
   els.fileInput.click();
 });
 
-els.fileInput.addEventListener("change", async () => {
-  for (const f of els.fileInput.files) {
+async function addFiles(files) {
+  for (const f of files) {
     if (f.size > 5 * 1024 * 1024) {
       toast(`"${f.name}" is over 5 MB — skipped`);
       continue;
@@ -2446,9 +2447,58 @@ els.fileInput.addEventListener("change", async () => {
     }
     pendingAtts.push(item);
   }
-  els.fileInput.value = "";
   renderPending();
+}
+
+els.fileInput.addEventListener("change", async () => {
+  await addFiles(els.fileInput.files);
+  els.fileInput.value = "";
 });
+
+/* ---------- dropping files into the chat ----------
+   Entering the column only shows the drop target; nothing is read or attached
+   until the user lets go, and a drag that leaves takes the target away again. */
+let dragDepth = 0;
+
+function setDropVeil(open) {
+  els.dropVeil.hidden = !open;
+}
+
+function dragHasFiles(e) {
+  return Array.from(e.dataTransfer?.types || []).includes("Files");
+}
+
+els.main.addEventListener("dragenter", (e) => {
+  if (!dragHasFiles(e)) return;
+  e.preventDefault();
+  dragDepth++;
+  setDropVeil(true);
+});
+
+els.main.addEventListener("dragover", (e) => {
+  if (!dragHasFiles(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+});
+
+els.main.addEventListener("dragleave", () => {
+  if (!dragDepth) return;
+  dragDepth--;
+  if (!dragDepth) setDropVeil(false);
+});
+
+els.main.addEventListener("drop", async (e) => {
+  if (!dragHasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  setDropVeil(false);
+  await addFiles(e.dataTransfer.files);
+});
+
+/* a drop on the sidebar or topbar must not navigate the tab to the file */
+window.addEventListener("dragover", (e) => { if (dragHasFiles(e)) e.preventDefault(); });
+window.addEventListener("drop", (e) => { if (dragHasFiles(e)) e.preventDefault(); });
+window.addEventListener("dragend", () => { dragDepth = 0; setDropVeil(false); });
 
 function readAsText(file) {
   return new Promise((resolve, reject) => {
