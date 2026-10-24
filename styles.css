@@ -1298,10 +1298,17 @@ button:disabled { opacity: .5; cursor: default; }
   transition: padding .15s;
 }
 /* the halo animation owns box-shadow, so the usual focus ring cannot show here.
-   The rainbow edge thickens instead — focus stays visible in every mode. */
+   Clicking in thickens the edge instead, and the stroke breathes and warms while
+   the colours slide — focus stays visible in every mode, even in the corner of
+   an eye. */
 .main[data-mode="coding"] .composer:focus-within::before {
   padding: 2.5px;
   border-radius: calc(var(--radius-hero) + 2.5px);
+  animation: rainbow-slide 7s linear infinite, halo-breathe 3.4s ease-in-out infinite;
+}
+@keyframes halo-breathe {
+  0%, 100% { padding: 2px; filter: brightness(1) saturate(1); }
+  50% { padding: 3.2px; filter: brightness(1.22) saturate(1.25); }
 }
 /* 300% of a 300%-wide strip is two full turns, so the loop has no seam */
 @keyframes rainbow-slide { to { background-position: 300% 0; } }
@@ -1448,7 +1455,10 @@ button:disabled { opacity: .5; cursor: default; }
 }
 .lib-grid {
   list-style: none; display: grid; gap: 14px;
-  grid-template-columns: repeat(auto-fill, minmax(min(440px, 100%), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 620px) {
+  .lib-grid { grid-template-columns: 1fr; }
 }
 .lib-card {
   display: grid; gap: 8px; align-content: start;

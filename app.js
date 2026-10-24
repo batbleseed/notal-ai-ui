@@ -1094,6 +1094,7 @@ function setStreaming(on) {
   els.sendBtn.title = on ? "Stop generating" : "Send";
   els.sendBtn.setAttribute("aria-label", els.sendBtn.title);
   els.input.disabled = on;
+  updateSendState();
   /* the tray and Quick Chat show this, so a busy app looks busy from anywhere */
   if (DESKTOP) window.notal.engineBusy(on);
 }
@@ -2381,12 +2382,21 @@ function renderMentionGlow() {
   els.mentionLayer.scrollTop = els.input.scrollTop;
 }
 
+/* The arrow only reads as "send" when there is something to send: it is greyed
+   out on an empty box and lights up with the first character or attachment.
+   While a reply streams, the same button is Stop, so it stays live. */
+function updateSendState() {
+  const ready = Boolean(els.input.value.trim()) || pendingAtts.length > 0;
+  els.sendBtn.disabled = !ready && !turnController;
+}
+
 function autoresize() {
   const ta = els.input;
   ta.style.height = "auto";
   ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
   $("#charCount").textContent = ta.value.length;
   renderMentionGlow();
+  updateSendState();
 }
 
 els.composer.addEventListener("submit", (e) => {
@@ -2573,6 +2583,7 @@ function renderPending() {
     chip.append(x);
     els.attachTray.append(chip);
   });
+  updateSendState();
 }
 
 els.lightbox.addEventListener("click", () => {
@@ -2751,7 +2762,7 @@ const SUGGESTIONS = {
    only knowable from the system prompt. */
 const PLACEHOLDER_BY_MODE = {
   chat: "Message Notal AI… or hand me a page: [browse]https://…[/browse]",
-  coding: "Let's code — paste a bug, or hand me a page: [browse]https://…[/browse]",
+  coding: "Paste a bug, ask a question, or type a URL…",
 };
 
 function renderSuggestions() {
@@ -2826,7 +2837,7 @@ function renderPluginMenu() {
     const name = document.createElement("strong");
     name.textContent = def.name;
     const hint = document.createElement("small");
-    hint.textContent = `@${def.id} · ${pluginConfig(def).enabled ? "On" : "Off"}`;
+    hint.textContent = `@${def.id}`;
     body.append(name, hint);
     item.append(mark, body);
     return item;
@@ -6099,6 +6110,7 @@ renderRelayUI();
 if (state.pinHash) lockApp(); else resetIdleTimer();
 setView("chats");
 setMode(state.mode);
+updateSendState();
 renderHistory();
 renderMessages();
 applyUiExtensions();
