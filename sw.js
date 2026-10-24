@@ -1,8 +1,10 @@
 /* Notal AI service worker — offline shell for the landing page and the app. */
-const CACHE = "notal-ai-v45";
+const CACHE = "notal-ai-v46";
 const CORE = [
   "./",
   "./index.html",
+  "./docs.html",
+  "./site.css",
   "./chat/index.html",
   "./styles.css",
   "./app.js",
@@ -23,13 +25,17 @@ const CORE = [
 
 self.addEventListener("install", (e) => {
   /* addAll would happily store whatever the HTTP cache already held, which is
-     how a fixed stylesheet stayed invisible for a whole release */
-  const reqs = CORE.map(href => new Request(href, { cache: "reload" }));
-  e.waitUntil(
-    caches.open(CACHE)
-      .then(c => Promise.all(reqs.map(r => c.put(r, fetch(r)))))
-      .then(() => self.skipWaiting())
-  );
+     how a fixed stylesheet stayed invisible for a whole release. Fetch each file
+     fresh, one at a time: a burst of parallel fetches and puts can reject the
+     whole install, and a failed install leaves no offline shell at all. */
+  e.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    for (const href of CORE) {
+      const res = await fetch(href, { cache: "reload" });
+      if (res.ok) await c.put(new Request(href), res);
+    }
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener("activate", (e) => {

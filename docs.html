@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Docs — Notal AI</title>
+  <meta name="description" content="How to use Notal AI: models and providers, projects, memory, skills, extensions, plugins, privacy, themes, shortcuts and troubleshooting." />
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#f5f1ea" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="site.css" />
+  <style>
+    /* ---------- docs hero ---------- */
+    .docs-hero { padding: clamp(34px, 7vh, 66px) 0 40px; border-bottom: 1px solid var(--border); }
+    .docs-hero h1 {
+      font-family: var(--serif); font-weight: 600;
+      font-size: clamp(36px, 6vw, 56px); line-height: 1.06; letter-spacing: -.5px;
+      max-width: 18ch;
+    }
+    .docs-hero h1 em { font-style: italic; color: var(--accent); }
+    .docs-hero .lede {
+      margin-top: 20px; max-width: 58ch;
+      font-size: clamp(16px, 1.9vw, 18px); color: var(--text-soft);
+    }
+    .docs-meta { margin-top: 18px; font-size: 13.5px; color: var(--text-faint); }
+    .docs-meta code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+
+    /* ---------- layout ---------- */
+    .docs-layout {
+      display: grid; grid-template-columns: 236px minmax(0, 1fr);
+      gap: clamp(30px, 5vw, 64px); align-items: start;
+      padding: 42px 0 78px;
+    }
+    .docs-toc { position: sticky; top: 22px; display: grid; gap: 10px; }
+    .toc-k {
+      font-size: 11.5px; font-weight: 600; letter-spacing: .7px;
+      text-transform: uppercase; color: var(--text-faint);
+    }
+    .docs-toc nav { display: grid; gap: 2px; border-left: 1px solid var(--border); }
+    .docs-toc nav a {
+      margin-left: -1px; padding: 5px 0 5px 12px; border-left: 2px solid transparent;
+      text-decoration: none; font-size: 13.5px; color: var(--text-soft);
+      transition: color .14s ease, border-color .14s ease;
+    }
+    .docs-toc nav a:hover { color: var(--text); border-left-color: var(--border); }
+    .toc-top { font-size: 12.5px; color: var(--text-faint); text-decoration: none; }
+    .toc-top:hover { color: var(--accent); }
+
+    /* ---------- article ---------- */
+    .doc { min-width: 0; max-width: 760px; }
+    .doc section { scroll-margin-top: 20px; }
+    .doc section + section { margin-top: 54px; padding-top: 42px; border-top: 1px solid var(--border); }
+    .kicker {
+      font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 10px;
+    }
+    .doc h2 {
+      font-family: var(--serif); font-size: clamp(26px, 3.4vw, 34px); font-weight: 600;
+      line-height: 1.15; letter-spacing: -.3px;
+    }
+    .doc h3 { margin-top: 28px; font-size: 16px; font-weight: 600; color: var(--text); }
+    .doc p { margin-top: 14px; font-size: 15.5px; line-height: 1.72; color: var(--text-soft); }
+    .doc .doc-lead { margin-top: 16px; font-size: 17px; line-height: 1.65; color: var(--text); max-width: 62ch; }
+    .doc ul, .doc ol { margin: 14px 0 0 22px; display: grid; gap: 8px; font-size: 15.5px; line-height: 1.65; color: var(--text-soft); }
+    .doc li::marker { color: var(--text-faint); }
+    .doc a {
+      color: var(--accent); text-decoration: none;
+      border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    .doc a:hover { border-bottom-color: var(--accent); }
+    /* a button inside the article is a button, not a prose link */
+    .doc .btn { border-bottom: 0; }
+    .doc .btn-primary { color: var(--bg); }
+    .doc .btn-ghost { color: var(--text); }
+    .doc strong { color: var(--text); font-weight: 600; }
+    .doc code, .chip {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .88em;
+    }
+    .doc code { padding: 1.5px 5px; border-radius: 5px; background: var(--surface-2); color: var(--text); }
+    .chip {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      color: var(--accent); font-weight: 600;
+    }
+    .doc kbd {
+      display: inline-block; min-width: 22px; padding: 1px 6px;
+      border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px;
+      background: var(--surface); color: var(--text);
+      font-family: var(--sans); font-size: 12px; text-align: center;
+    }
+
+    /* three small cards for the quick start */
+    .steps3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 24px; }
+    .step-card { padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+    .step-n {
+      display: grid; place-items: center; width: 26px; height: 26px; margin-bottom: 10px;
+      border: 1px solid var(--border); border-radius: 50%;
+      font-family: var(--serif); font-size: 14px; color: var(--text-soft);
+    }
+    .step-card h3 { margin: 0 0 4px; font-size: 15px; }
+    .step-card p { margin: 0; font-size: 14px; }
+
+    .callout {
+      display: grid; gap: 6px; margin-top: 26px; padding: 18px 20px;
+      border: 1px dashed var(--border); border-radius: 14px; background: var(--surface-2);
+    }
+    .callout strong { font-size: 14.5px; color: var(--text); }
+    .callout p { margin: 0; font-size: 14px; }
+
+    /* tables scroll sideways on a phone instead of squeezing */
+    .table-wrap {
+      margin-top: 20px; overflow-x: auto;
+      border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+    }
+    .doc table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .doc th {
+      padding: 10px 14px; text-align: left; white-space: nowrap;
+      font-size: 11.5px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
+      color: var(--text-faint); background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .doc td {
+      padding: 11px 14px; border-bottom: 1px solid var(--border);
+      color: var(--text-soft); vertical-align: top; line-height: 1.55;
+    }
+    .doc tr:last-child td { border-bottom: 0; }
+    .doc td strong { color: var(--text); }
+    .shortcuts td:last-child { white-space: nowrap; }
+
+    .faq { margin-top: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: hidden; }
+    .faq details + details { border-top: 1px solid var(--border); }
+    .faq summary {
+      display: flex; justify-content: space-between; gap: 12px;
+      padding: 13px 16px; font-size: 14.5px; font-weight: 600; color: var(--text);
+      cursor: pointer; list-style: none;
+    }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after { content: "+"; color: var(--text-faint); font-weight: 400; }
+    .faq details[open] summary::after { content: "–"; }
+    .faq p { margin: 0; padding: 0 16px 15px; font-size: 14.5px; }
+
+    .doc-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+
+    @media (max-width: 900px) {
+      .docs-layout { grid-template-columns: 1fr; gap: 26px; padding-top: 28px; }
+      .docs-toc {
+        position: static; padding: 14px 16px;
+        border: 1px solid var(--border); border-radius: 14px; background: var(--surface);
+      }
+      .docs-toc nav { display: flex; flex-wrap: wrap; gap: 4px 14px; border-left: 0; }
+      .docs-toc nav a { padding: 4px 0; border-left: 0; }
+      .toc-top { display: none; }
+    }
+    @media (max-width: 620px) {
+      .docs-hero { padding-top: 26px; }
+      .docs-hero h1 { font-size: clamp(32px, 9vw, 44px); }
+      .doc p, .doc ul, .doc ol { font-size: 15px; }
+      .doc section + section { margin-top: 40px; padding-top: 32px; }
+      .steps3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body id="top">
+  <div class="wrap">
+    <nav class="nav">
+      <a class="brand" href="index.html">
+        <span class="tile notal-mark"></span>
+        <span>Notal AI</span>
+      </a>
+      <div class="nav-links">
+        <a href="docs.html" aria-current="page">Docs</a>
+        <a href="chat/">Chat</a>
+        <a href="index.html#demo">Preview</a>
+      </div>
+    </nav>
+
+    <header class="docs-hero">
+      <span class="eyebrow">Documentation</span>
+      <h1>Use Notal AI, <em>start to finish</em>.</h1>
+      <p class="lede">
+        A plain guide to the workspace: the two chat modes, adding a real model, projects and memory,
+        extensions and plugins, where your data lives, and what to check when something does not answer.
+      </p>
+      <p class="docs-meta">Covers the browser app at <code>chat/</code> and the Windows build in <code>studio-app/</code>.</p>
+    </header>
+
+    <div class="docs-layout">
+      <aside class="docs-toc" aria-label="On this page">
+        <p class="toc-k">On this page</p>
+        <nav>
+          <a href="#start">Start here</a>
+          <a href="#workspace">The workspace</a>
+          <a href="#models">Talk to a real model</a>
+          <a href="#context">Projects, memory, skills</a>
+          <a href="#extensions">Extensions</a>
+          <a href="#plugins">Plugins</a>
+          <a href="#privacy">Privacy and security</a>
+          <a href="#themes">Themes and install</a>
+          <a href="#shortcuts">Shortcuts</a>
+          <a href="#help">If something breaks</a>
+        </nav>
+        <a class="toc-top" href="#top">Back to top ↑</a>
+      </aside>
+
+      <article class="doc">
+        <section id="start">
+          <p class="kicker">01 · Getting started</p>
+          <h2>Start here</h2>
+          <p class="doc-lead">
+            Notal AI is a workspace for talking with AI models. Chats, projects, memory, skills and
+            settings are saved in this browser, on this device. There is no Notal account to create
+            and no server holding your history.
+          </p>
+          <div class="steps3">
+            <div class="step-card">
+              <span class="step-n">1</span>
+              <h3>Open the workspace</h3>
+              <p>Press <a href="chat/">Chat</a>. You land in a new chat with the built-in model already selected.</p>
+            </div>
+            <div class="step-card">
+              <span class="step-n">2</span>
+              <h3>Add a model</h3>
+              <p>Settings → Providers. Pick a provider, type the model ID and your key, add it, then press Test on its row.</p>
+            </div>
+            <div class="step-card">
+              <span class="step-n">3</span>
+              <h3>Make it yours</h3>
+              <p>Start a project, write down what Notal should remember, save your best prompts as skills.</p>
+            </div>
+          </div>
+          <div class="callout">
+            <strong>The built-in model is a demonstration.</strong>
+            <p>
+              <code>notal generic</code> answers from written templates so you can see the interface
+              work. It is not a real language model, it cannot read a page, and it ignores memory and
+              plugin calls. Add a provider key for real answers.
+            </p>
+          </div>
+        </section>
+
+        <section id="workspace">
+          <p class="kicker">02 · The layout</p>
+          <h2>The workspace, one piece at a time</h2>
+          <p class="doc-lead">Everything lives in one column, with the sidebar for getting around and the composer for doing the work.</p>
+
+          <h3>The sidebar</h3>
+          <p>
+            <strong>Chats</strong>, <strong>Projects</strong>, <strong>Memory</strong>,
+            <strong>Skills</strong>, <strong>Extensions</strong> and <strong>Plugins</strong> switch
+            the main column. New chat sits under them, search below that, then your recent chats.
+            The account button at the bottom opens Settings, where models, appearance and security live.
+          </p>
+
+          <h3>Chat and Coding</h3>
+          <p>
+            The switch in the top bar changes the system prompt and the four suggestion cards.
+            <strong>Chat</strong> is for general conversation, writing and thinking.
+            <strong>Coding</strong> is for code, bugs and technical answers: it leads with working
+            code, names its assumptions, and points out failure modes. Your choice is remembered for
+            the next visit, and the composer itself works the same in both modes.
+          </p>
+
+          <h3>The composer</h3>
+          <p>
+            From left to right: the <strong>+</strong> attach menu, the microphone, the model picker,
+            and the send arrow. The arrow stays greyed out until there is text or an attachment to
+            send, and becomes <strong>Stop</strong> while a reply streams.
+          </p>
+          <ul>
+            <li>
+              <strong>Attachments.</strong> Photos, videos, files and links. Dragging files anywhere
+              over the chat brings up “Drop files into the chat” and attaches them when you let go.
+              Each file can be up to 5 MB. Text files are read in — up to 12,000 characters each and
+              30,000 per message. Images travel to the model as images; videos and other binaries are
+              listed by name only.
+            </li>
+            <li>
+              <strong>Dictation.</strong> In the browser, the mic uses Chrome or Edge's own speech
+              service. In the desktop app it records and asks a Gemini model you configured to
+              transcribe the audio.
+            </li>
+            <li>
+              <strong>The model picker.</strong> Shows what will answer the next message. Until you add
+              a provider it reads <code>notal generic</code>.
+            </li>
+            <li>
+              <strong>Keys.</strong> <kbd>Enter</kbd> sends and <kbd>Shift</kbd> + <kbd>Enter</kbd>
+              starts a new line. <kbd>Esc</kbd> closes a menu, a panel or Settings.
+            </li>
+          </ul>
+
+          <h3>Reading answers</h3>
+          <p>
+            Replies are rendered as Markdown, including code blocks. Every code card carries its own
+            <strong>Copy</strong> and <strong>Download</strong>. Click an attached image to open it full
+            size. Right-click anywhere in the app (or long-press on a phone) for the app's own menu:
+            Copy, Paste, Ask AI, and — with text selected — Make a new extension.
+          </p>
+        </section>
+
+        <section id="models">
+          <p class="kicker">03 · Models</p>
+          <h2>Talk to a real model</h2>
+          <p class="doc-lead">
+            One key is all it takes. The model menu beside the send arrow lists everything you have
+            added, and you can switch between them message by message.
+          </p>
+
+          <h3>Add a provider</h3>
+          <p>Open <strong>Settings → Providers</strong> and follow the three steps on screen:</p>
+          <ol>
+            <li><strong>Who answers.</strong> Pick Anthropic, OpenAI, Google Gemini, Ollama on this computer, or an OpenAI-shaped service of your own.</li>
+            <li><strong>Which model.</strong> Type the exact model ID the provider lists. For Ollama, it is the name it prints when the model is pulled.</li>
+            <li><strong>Add it, then check it.</strong> Adding puts it in the model menu. Press <strong>Test</strong> on its row: Notal sends one short message with your key, so a wrong key or model name shows up here rather than mid-chat.</li>
+          </ol>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Provider</th><th>What it gives you</th><th>What it needs</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><strong>Anthropic</strong></td><td>Claude models</td><td>A key from console.anthropic.com</td></tr>
+                <tr><td><strong>OpenAI</strong></td><td>GPT models</td><td>A key from platform.openai.com</td></tr>
+                <tr><td><strong>Google Gemini</strong></td><td>Gemini models</td><td>A key from aistudio.google.com</td></tr>
+                <tr><td><strong>Ollama, here</strong></td><td>Models already on your computer</td><td>Ollama running at <code>localhost:11434</code>; no key</td></tr>
+                <tr><td><strong>Something else</strong></td><td>Any OpenAI-shaped API</td><td>Its key, model ID and base URL</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Where the key goes</h3>
+          <p>
+            Keys are saved in this browser, not on a Notal server. A request goes from this tab straight
+            to the provider you picked. Settings → General → Advanced → Diagnostics names the address
+            Notal is actually using.
+          </p>
+
+          <h3>If the provider refuses the browser</h3>
+          <p>
+            Some services reject calls that come from a web page. A <strong>relay</strong> is a small
+            forwarder you host yourself — the <code>worker/</code> folder in the repo, or the one that
+            ships inside Notal AI Studio. Open <strong>Settings → Providers → Advanced</strong>, paste
+            the relay address, and press <strong>Test</strong>. Until that test is green, Notal keeps
+            calling the provider directly.
+          </p>
+
+          <h3>Local AI, on this machine</h3>
+          <p>
+            <strong>Settings → Providers → Local AI · developer</strong> is off by default. Switched on,
+            a 0.5B model joins the model menu and runs inside this tab on the graphics card through
+            WebGPU. Its 290 MB of weights come down on the first question and stay cached by the
+            browser. Nothing about the reply leaves the tab. It needs a browser with WebGPU — a recent
+            Chrome or Edge.
+          </p>
+        </section>
+
+        <section id="context">
+          <p class="kicker">04 · Context</p>
+          <h2>Projects, memory, skills</h2>
+          <p class="doc-lead">
+            These three buttons open sections in the main column. The chat stays behind them, so
+            <kbd>Esc</kbd> or <strong>Chats</strong> brings you back with your draft untouched.
+          </p>
+
+          <h3>Projects</h3>
+          <p>
+            A project groups related chats. Give it a name, then press <strong>Open</strong> to make it
+            active: new chats and new memories belong to it, and the top bar shows its name. Removing a
+            project returns its chats and memories to General rather than deleting them.
+          </p>
+
+          <h3>Memory</h3>
+          <p>
+            Write down the facts you are tired of repeating. Each one can be scoped to <strong>General</strong>
+            or to a project, and switched off without deleting it. Everything left on is added to the
+            prompt of every real model call — the built-in template model cannot use it.
+          </p>
+
+          <h3>Skills</h3>
+          <p>
+            A skill is a saved prompt with a name. <strong>Use</strong> sends it right away;
+            <strong>Insert</strong> puts it in the message box so you can fill in the blanks first.
+            Skills are handy for review, summarising, and any instruction you type over and over.
+          </p>
+        </section>
+
+        <section id="extensions">
+          <p class="kicker">05 · Extensions</p>
+          <h2>Extensions</h2>
+          <p class="doc-lead">
+            Extensions change how Notal answers and, if you want, how the page looks. The Extensions
+            view lists built-in ones, yours, and the shared library.
+          </p>
+
+          <h3>Prompt add-ons</h3>
+          <p>
+            An instruction saved under <strong>Settings → Extensions</strong>. While it is switched on,
+            its text rides along in every reply — “answer like a lawyer”, “always show the SQL first”.
+            You can export one as JSON, import it on another device, and switch it off at any time.
+          </p>
+
+          <h3>UI extensions</h3>
+          <p>
+            A UI extension is CSS, HTML and JavaScript drawn over the workspace. Open
+            <strong>Extension Maker</strong> in the Extensions view, write it, then use editor mode to
+            drag and resize the piece on the page itself. When it looks right, download it or publish
+            it. UI extensions run in this page with the page's own access, so only switch on ones you
+            trust.
+          </p>
+
+          <h3>The library</h3>
+          <p>
+            <strong>Library</strong> shows extensions other people have published. Publishing from the
+            Maker adds a card with your creator name and, if you add one, a screenshot; you can edit or
+            withdraw your own entries, and one maker can keep up to ten published at a time. The library
+            loads over the network, so a blank list usually means it could not be reached.
+          </p>
+        </section>
+
+        <section id="plugins">
+          <p class="kicker">06 · Plugins</p>
+          <h2>Plugins</h2>
+          <p class="doc-lead">
+            A plugin lets Notal do something outside this page and report back what actually happened.
+            Reading is free. Anything that changes something — a commit, a click, a sent message —
+            stops and shows you a card first, and nothing runs until you press <strong>Approve</strong>.
+          </p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Plugin</th><th>What it reaches</th><th>What it needs</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>GitHub</strong></td>
+                  <td>Repositories, issues and files; commits made through GitHub's API</td>
+                  <td>Sign in with GitHub. The device flow needs a relay, or Notal AI Studio's own relay.</td>
+                </tr>
+                <tr>
+                  <td><strong>Browser</strong></td>
+                  <td>Your open Chrome tabs: read a page, follow a link, fill a field, press a button</td>
+                  <td>The Notal companion extension, from the Chrome Web Store or <code>browser-extension/</code>, with this page's address added in its options.</td>
+                </tr>
+                <tr>
+                  <td><strong>YouTube</strong></td>
+                  <td>Real video search: titles, channels, dates and watch links</td>
+                  <td>A YouTube Data API key with YouTube Data API v3 enabled.</td>
+                </tr>
+                <tr>
+                  <td><strong>Gmail</strong></td>
+                  <td>Read and search the signed-in mailbox; write a message you approve before it sends</td>
+                  <td>A Google OAuth client plus a relay holding the client secret, or a temporary token from Google's OAuth Playground.</td>
+                </tr>
+                <tr>
+                  <td><strong>Drive</strong></td>
+                  <td>Find and read files; write plain-text files Notal made</td>
+                  <td>The same Google client, with Drive API switched on for it.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Typing @</h3>
+          <p>
+            Type <span class="chip">@github</span>, <span class="chip">@browser</span>,
+            <span class="chip">@youtube</span>, <span class="chip">@gmail</span> or
+            <span class="chip">@drive</span> in a message to name the plugin you mean. Switched-on
+            plugins are already described to the model, and a mention makes it explicit: Notal must call
+            that plugin before it answers, rather than just talk about it. Unknown mentions are left as
+            ordinary text. In a new Coding chat, the Plugins tray under the composer opens a list and
+            types the mention for you so you can keep writing.
+          </p>
+
+          <h3>Connecting and testing</h3>
+          <p>
+            Open <strong>Plugins</strong> in the sidebar, pick a cube, and follow its own setup steps.
+            Each plugin has a <strong>Sign in</strong> button where it needs one and a
+            <strong>Test</strong> button that reports what really answered. A plugin that is switched
+            off, or still waiting for a token, is not offered to the model at all.
+          </p>
+        </section>
+
+        <section id="privacy">
+          <p class="kicker">07 · Privacy</p>
+          <h2>Privacy and security</h2>
+          <p class="doc-lead">Notal is local-first. The short version: your history is in this browser, and your keys go only where you point them.</p>
+
+          <h3>Where your data lives</h3>
+          <p>
+            Chats, projects, memory, skills, models, extensions and preferences are stored in this
+            browser on this device. There is no server copy to pull from: a different browser, a phone
+            or an incognito window starts empty. Clearing this site's browsing data deletes all of it
+            for good. The desktop build can save the open chat as Markdown; in the browser, export what
+            you need before clearing anything.
+          </p>
+
+          <h3>Google sign-in</h3>
+          <p>
+            Signing in brings your name and profile picture to the account button and your messages. It
+            does not upload or sync your chats, memory or API keys.
+          </p>
+
+          <h3>The PIN</h3>
+          <p>
+            <strong>Settings → Security</strong> puts a 4–8 digit PIN over the app, can lock it after
+            idle, and locks instantly with <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd>. The PIN
+            screens the app — it does not encrypt it. Chats stay plain text in this browser's storage,
+            readable by anyone who can open that storage.
+          </p>
+
+          <h3>Keys, tokens and relays</h3>
+          <p>
+            Provider keys and plugin tokens live in this browser. A key is sent only to the provider it
+            belongs to, or to the relay you configured. A relay is yours: if you host one, your provider
+            calls pass through it, so treat it like a server you trust with those requests.
+          </p>
+
+          <h3>Extensions run code</h3>
+          <p>
+            A UI extension can draw on the page and run JavaScript in it. That is what makes them
+            useful, and it is why the only safe rule is: install and switch on what you trust.
+          </p>
+        </section>
+
+        <section id="themes">
+          <p class="kicker">08 · Look and install</p>
+          <h2>Themes and install</h2>
+
+          <h3>Light, dark, or the device</h3>
+          <p>
+            <strong>Settings → Appearance</strong> offers three cards: Light, Dark and System. System
+            follows your device and changes with it. The choice is remembered, and every panel, menu
+            and code block follows it.
+          </p>
+
+          <h3>Install it like an app</h3>
+          <p>
+            Notal is a PWA. In Chrome or Edge, use the install button in the address bar (or
+            <strong>Install app</strong> from the browser menu); on a phone, <strong>Add to Home
+            Screen</strong>. It opens without browser chrome, and the app shell is cached so it still
+            opens offline. Real answers still need a provider, or the local model after its first
+            download.
+          </p>
+
+          <h3>The Windows build</h3>
+          <p>
+            <code>studio-app/</code> turns the same workspace into a desktop app with a quick-chat
+            overlay on a global shortcut, a tray icon, desktop notifications, its own local relay for
+            provider calls and page reads, a <code>skills.md</code> file reread on every message, a
+            native Save dialog, and dictation transcribed by your own Gemini model. No desktop
+            installer is published yet — build it from the repo:
+            <a href="https://github.com/batbleseed/notal-ai-ui/tree/main/studio-app" target="_blank" rel="noreferrer">studio-app on GitHub</a>.
+          </p>
+        </section>
+
+        <section id="shortcuts">
+          <p class="kicker">09 · Keyboard</p>
+          <h2>Shortcuts</h2>
+          <p>These work anywhere in the app. <kbd>Ctrl</kbd> on Windows and Linux, <kbd>⌘</kbd> on a Mac.</p>
+          <div class="table-wrap">
+            <table class="shortcuts">
+              <thead><tr><th>Action</th><th>Keys</th></tr></thead>
+              <tbody>
+                <tr><td>New chat</td><td><kbd>Ctrl</kbd> <kbd>K</kbd></td></tr>
+                <tr><td>Search chats</td><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>F</kbd></td></tr>
+                <tr><td>Focus the message box</td><td><kbd>Ctrl</kbd> <kbd>I</kbd></td></tr>
+                <tr><td>Toggle the sidebar</td><td><kbd>Ctrl</kbd> <kbd>B</kbd></td></tr>
+                <tr><td>Open Settings</td><td><kbd>Ctrl</kbd> <kbd>,</kbd></td></tr>
+                <tr><td>Lock the app (with a PIN)</td><td><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>L</kbd></td></tr>
+                <tr><td>Send a message</td><td><kbd>Enter</kbd></td></tr>
+                <tr><td>New line</td><td><kbd>Shift</kbd> <kbd>Enter</kbd></td></tr>
+                <tr><td>Close a menu, panel or Settings</td><td><kbd>Esc</kbd></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="help">
+          <p class="kicker">10 · When it does not</p>
+          <h2>If something breaks</h2>
+          <div class="faq">
+            <details>
+              <summary>The answers look generic or repeat a template.</summary>
+              <p>That is the built-in model. <code>notal generic</code> answers from written examples by design. Add a provider in Settings → Providers and pick it in the model menu.</p>
+            </details>
+            <details>
+              <summary>A provider says it cannot be called from a browser.</summary>
+              <p>Point Notal at a relay you host: Settings → Providers → Advanced, paste its address, press Test. The <code>worker/</code> folder and Notal AI Studio both contain one.</p>
+            </details>
+            <details>
+              <summary>GitHub sign-in will not finish.</summary>
+              <p>Check that Device Flow is switched on for the OAuth app, and that a relay is configured — GitHub's token exchange cannot run in a browser tab on its own. Then sign in again and enter the code at github.com/login/device.</p>
+            </details>
+            <details>
+              <summary>The Browser plugin says the companion is not answering.</summary>
+              <p>Install the companion extension, add the address Notal is served from in its options, then reload this tab. A page only carries the bridge from the moment it loads. Finish with the plugin's Test button.</p>
+            </details>
+            <details>
+              <summary>The extension library is empty.</summary>
+              <p>It loads over the network. Check the connection and reload. If it still says it could not be reached, the shared library is unavailable rather than empty — your installed extensions keep working.</p>
+            </details>
+            <details>
+              <summary>My chats disappeared.</summary>
+              <p>They live in the browser that made them. A different browser or profile, a private window, or clearing site data starts from empty — there is no server copy to restore.</p>
+            </details>
+            <details>
+              <summary>Does the PIN encrypt my chats?</summary>
+              <p>No. It hides the app behind a screen. The chats stay plain text in this browser's storage. Use full-disk encryption or a separate browser profile if you need real protection at rest.</p>
+            </details>
+            <details>
+              <summary>Can I use it offline?</summary>
+              <p>The app shell is cached, so it opens offline. Answers need a provider connection, unless you have already downloaded the local AI model.</p>
+            </details>
+          </div>
+
+          <div class="doc-actions">
+            <a class="btn btn-primary" href="chat/">Open the chat →</a>
+            <a class="btn btn-ghost" href="index.html#demo">Preview the workspace</a>
+            <a class="btn btn-ghost" href="https://github.com/batbleseed/notal-ai-ui/issues" target="_blank" rel="noreferrer">Report a problem</a>
+          </div>
+        </section>
+      </article>
+    </div>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <span>Notal AI · built by batbleseed · MIT licensed</span>
+      <span><a href="chat/">Open chat</a> · <a href="index.html">Home</a> · <a href="https://github.com/batbleseed/notal-ai-ui" target="_blank" rel="noreferrer">Source on GitHub</a></span>
+    </div>
+  </footer>
+</body>
+</html>

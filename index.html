@@ -14,73 +14,17 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="site.css" />
   <style>
-    :root {
-      --bg: #f5f1ea;
-      --surface: #fffdfa;
-      --surface-2: #efe9df;
-      --text: #1f1e1d;
-      --text-soft: #5c5750;
-      --text-faint: #8b847b;
-      --border: #e0d8cb;
-      --accent: #d97757;
-      --serif: "Source Serif 4", Georgia, serif;
-      --sans: Inter, system-ui, -apple-system, sans-serif;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
-    body {
-      background: var(--bg); color: var(--text);
-      font-family: var(--sans); font-size: 16px; line-height: 1.6;
-      -webkit-font-smoothing: antialiased;
-    }
-    a { color: inherit; }
-    .wrap { width: min(1040px, calc(100% - 48px)); margin: 0 auto; }
-
-    /* ---------- nav ---------- */
-    .nav {
-      display: flex; align-items: center; justify-content: space-between; gap: 16px;
-      padding: 22px 0;
-    }
-    .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 600; }
-    /* the Notal mark: three petals around a core, built from the brand PNGs */
-    .notal-mark { position: relative; display: inline-block; width: 100%; height: 100%; }
-    .notal-mark::before, .notal-mark::after {
-      content: ""; position: absolute; inset: 0;
-      background-size: contain; background-repeat: no-repeat; background-position: center;
-    }
-    .notal-mark::before { background-image: url("icons/notal-petals.png"); }
-    .notal-mark::after { background-image: url("icons/notal-core.png"); }
-    .tile { width: 30px; height: 30px; flex-shrink: 0; }
+    /* shared tokens, nav, buttons and footer live in site.css */
     /* the feature grid is not a logo wall — each card gets its own line icon */
     .feature .tile {
       width: 34px; height: 34px; border-radius: 10px; margin-bottom: 14px;
       display: grid; place-items: center; background: var(--surface-2); color: var(--accent);
     }
-    .nav-links { display: flex; align-items: center; gap: 22px; font-size: 14.5px; }
-    .nav-links a { text-decoration: none; color: var(--text-soft); }
-    .nav-links a:hover { color: var(--text); }
-
-    .btn {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 11px 20px; border-radius: 999px; text-decoration: none;
-      font-size: 14.5px; font-weight: 600; border: 1px solid transparent;
-      transition: transform .14s ease, background .14s ease, border-color .14s ease;
-    }
-    .btn-primary { background: var(--text); color: var(--bg); }
-    .btn-primary:hover { transform: translateY(-1px); background: #000; }
-    .btn-ghost { border-color: var(--border); background: var(--surface); color: var(--text); }
-    .btn-ghost:hover { border-color: var(--text-faint); }
-    .btn-lg { padding: 14px 28px; font-size: 16px; }
 
     /* ---------- hero ---------- */
     .hero { padding: clamp(48px, 11vh, 104px) 0 68px; }
-    .eyebrow {
-      display: inline-flex; align-items: center; gap: 8px;
-      font-size: 12.5px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
-      color: var(--accent); margin-bottom: 22px;
-    }
-    .eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--accent); }
     h1 {
       font-family: var(--serif); font-weight: 600;
       font-size: clamp(38px, 7vw, 66px); line-height: 1.06; letter-spacing: -.5px;
@@ -394,14 +338,6 @@
     .closing h2 { max-width: 22ch; margin: 0 auto; }
     .closing p { margin: 14px auto 30px; max-width: 46ch; color: var(--text-soft); }
 
-    footer { border-top: 1px solid var(--border); padding: 26px 0 40px; font-size: 13.5px; color: var(--text-faint); }
-    footer .wrap { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
-    footer a { color: var(--text-soft); text-decoration: none; }
-    footer a:hover { color: var(--accent); }
-
-    @media (max-width: 620px) {
-      .nav-links a:not(.btn) { display: none; }
-    }
   </style>
 </head>
 <body>
@@ -412,10 +348,9 @@
         <span>Notal AI</span>
       </a>
       <div class="nav-links">
-        <a href="#features">What it does</a>
-        <a href="#how">How it works</a>
-        <a href="#private">Privacy</a>
-        <a class="btn btn-primary" href="chat/">Try now</a>
+        <a href="docs.html">Docs</a>
+        <a href="chat/">Chat</a>
+        <a href="#demo">Preview</a>
       </div>
     </nav>
 
@@ -649,7 +584,7 @@
   <footer>
     <div class="wrap">
       <span>Notal AI · built by batbleseed · MIT licensed</span>
-      <span><a href="https://github.com/batbleseed/notal-ai-ui" target="_blank" rel="noreferrer">Source on GitHub</a> · <a href="chat/">Open chat</a></span>
+      <span><a href="docs.html">Docs</a> · <a href="https://github.com/batbleseed/notal-ai-ui" target="_blank" rel="noreferrer">Source on GitHub</a> · <a href="chat/">Open chat</a></span>
     </div>
   </footer>
   <script src="motion.min.js"></script>

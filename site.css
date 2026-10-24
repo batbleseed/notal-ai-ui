@@ -1,0 +1,77 @@
+/* Shared chrome for the reading pages — the landing page and the docs.
+   The app itself carries its own tokens in styles.css. */
+:root {
+  --bg: #f5f1ea;
+  --surface: #fffdfa;
+  --surface-2: #efe9df;
+  --text: #1f1e1d;
+  --text-soft: #5c5750;
+  --text-faint: #8b847b;
+  --border: #e0d8cb;
+  --accent: #d97757;
+  --serif: "Source Serif 4", Georgia, serif;
+  --sans: Inter, system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--sans); font-size: 16px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+.wrap { width: min(1040px, calc(100% - 48px)); margin: 0 auto; }
+
+/* ---------- nav ---------- */
+.nav {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 22px 0;
+}
+.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 600; }
+/* the Notal mark: three petals around a core, built from the brand PNGs */
+.notal-mark { position: relative; display: inline-block; width: 100%; height: 100%; }
+.notal-mark::before, .notal-mark::after {
+  content: ""; position: absolute; inset: 0;
+  background-size: contain; background-repeat: no-repeat; background-position: center;
+}
+.notal-mark::before { background-image: url("icons/notal-petals.png"); }
+.notal-mark::after { background-image: url("icons/notal-core.png"); }
+.tile { width: 30px; height: 30px; flex-shrink: 0; }
+.nav-links { display: flex; align-items: center; gap: 22px; font-size: 14.5px; }
+.nav-links a { text-decoration: none; color: var(--text-soft); }
+.nav-links a:hover { color: var(--text); }
+.nav-links a[aria-current="page"] { color: var(--text); font-weight: 600; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 20px; border-radius: 999px; text-decoration: none;
+  font-size: 14.5px; font-weight: 600; border: 1px solid transparent;
+  transition: transform .14s ease, background .14s ease, border-color .14s ease;
+}
+.btn-primary { background: var(--text); color: var(--bg); }
+.btn-primary:hover { transform: translateY(-1px); background: #000; }
+.btn-ghost { border-color: var(--border); background: var(--surface); color: var(--text); }
+.btn-ghost:hover { border-color: var(--text-faint); }
+.btn-lg { padding: 14px 28px; font-size: 16px; }
+
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 22px;
+}
+.eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--accent); }
+
+footer { border-top: 1px solid var(--border); padding: 26px 0 40px; font-size: 13.5px; color: var(--text-faint); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; }
+footer a { color: var(--text-soft); text-decoration: none; }
+footer a:hover { color: var(--accent); }
+
+/* On a phone the brand and three words still fit; they only get closer. */
+@media (max-width: 620px) {
+  .nav { padding: 18px 0; gap: 12px; }
+  .nav-links { gap: 14px; font-size: 13.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
