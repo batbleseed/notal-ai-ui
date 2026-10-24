@@ -1362,7 +1362,7 @@ button:disabled { opacity: .5; cursor: default; }
 
   .topbar { padding: 10px 12px; padding-top: calc(10px + env(safe-area-inset-top)); gap: 8px; }
   /* the drawer carries the mark, and at this width the top bar has to spend its
-     room on the mode pill and Share rather than on a second logo */
+     room on the mode pill rather than on a second logo */
   .topbar .brand-logo { display: none; }
   .topbar .icon-btn { flex-shrink: 0; }
   .chat-title { font-size: 15px; }
@@ -1510,7 +1510,7 @@ button:disabled { opacity: .5; cursor: default; }
 }
 .panel-view:not([hidden]) { display: block; }
 .main.panel-open .chat, .main.panel-open .composer-wrap,
-.main.panel-open .mode-seg, .main.panel-open #shareBtn { display: none; }
+.main.panel-open .mode-seg { display: none; }
 .panel-view-head {
   max-width: 880px; margin: 0 auto;
   padding: clamp(18px, 5vh, 44px) 0 18px;
@@ -1530,7 +1530,7 @@ button:disabled { opacity: .5; cursor: default; }
   padding: 0 24px 40px;
 }
 .main.ext-open .chat, .main.ext-open .composer-wrap,
-.main.ext-open .mode-seg, .main.ext-open #shareBtn { display: none; }
+.main.ext-open .mode-seg { display: none; }
 .main.ext-open .ext-view { display: block; }
 .ext-view-head {
   display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 18px;
@@ -1557,7 +1557,7 @@ button:disabled { opacity: .5; cursor: default; }
   padding: 0 24px 40px;
 }
 .main.plg-open .chat, .main.plg-open .composer-wrap,
-.main.plg-open .mode-seg, .main.plg-open #shareBtn { display: none; }
+.main.plg-open .mode-seg { display: none; }
 .main.plg-open .plg-view { display: block; }
 .plg-view-head {
   max-width: 880px; margin: 0 auto;

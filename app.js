@@ -39,7 +39,6 @@ const els = {
   modeSeg: $("#modeSeg"),
   main: $(".main"),
   topMark: $(".topbar .brand-logo"),
-  shareBtn: $("#shareBtn"),
   fileInput: $("#fileInput"),
   attachTray: $("#attachTray"),
   attachPicker: $("#attachPicker"),
@@ -1624,9 +1623,7 @@ function withDocuments(messages) {
 }
 
 /* ---------- export ----------
-   The Share button used to print "Link copied" and copy nothing. In the desktop
-   app it opens a real Save dialog; in a browser it puts the same Markdown on the
-   clipboard, which is the honest version of the same promise. */
+   The desktop app asks for the open chat as Markdown through studioAction(). */
 function conversationMarkdown(conv) {
   const proj = state.projects.find(p => p.id === conv.projectId);
   const lines = [`# ${conv.title || "Notal AI chat"}`, ""];
@@ -1644,38 +1641,8 @@ function conversationMarkdown(conv) {
   return lines.join("\n");
 }
 
-function conversationJson(conv) {
-  return JSON.stringify({
-    exportedAt: new Date().toISOString(), app: "notal-ai", version: 2,
-    title: conv.title, mode: state.mode, messages: conv.messages,
-  }, null, 2);
-}
-
 function safeFileName(s) {
   return (s || "notal-chat").replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").slice(0, 60).trim() || "notal-chat";
-}
-
-async function exportConversation(conv, format = "markdown") {
-  conv = conv || activeConv();
-  if (!conv || !conv.messages.length) { toast("Start a chat first."); return false; }
-  const json = format === "json";
-  const text = json ? conversationJson(conv) : conversationMarkdown(conv);
-  const name = safeFileName(conv.title) + (json ? ".json" : ".md");
-  if (DESKTOP) {
-    const out = await window.notal.saveFile({ suggestedName: name, text, format: json ? "json" : "md",
-      title: "Save this chat" });
-    if (out && out.saved) { toast("Saved to " + out.path); return true; }
-    if (out && out.error) toast("Could not save: " + out.error);
-    return false;
-  }
-  /* a tab has no Save dialog of its own, so the clipboard carries the text */
-  if (await writeClipboard(text)) { toast(json ? "Chat copied as JSON." : "Chat copied as Markdown."); return true; }
-  const url = URL.createObjectURL(new Blob([text], { type: json ? "application/json" : "text/markdown" }));
-  const a = document.createElement("a");
-  a.href = url; a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-  toast("Saved as " + name);
-  return true;
 }
 
 /* ---------- what the tray and the keyboard shortcuts ask for ---------- */
@@ -4012,27 +3979,6 @@ document.querySelectorAll(".adv[data-adv]").forEach(d => {
     if (d.dataset.adv === "general") renderDiagnostics();
     save();
   });
-});
-
-/* ---------- share / export ----------
-   This used to write "Link copied ✓" on a button that copied nothing, which is
-   the worst kind of UI: a lie with good timing. One click now produces the chat
-   itself — a Save dialog in the desktop app, the Markdown on the clipboard in a
-   browser tab, where there is no dialog to open. */
-els.shareBtn.addEventListener("click", () => {
-  const conv = activeConv();
-  const label = els.shareBtn.querySelector("span");
-  if (!conv || !conv.messages.length) {
-    label.textContent = "Start a chat first";
-  } else {
-    label.textContent = "Saving…";
-    /* the reset waits for the answer, not the clock — in the desktop app a Save
-       dialog can stay open far longer than any timeout would be sane */
-    exportConversation(conv, "markdown")
-      .then((done) => { label.textContent = done ? "Saved ✓" : "Nothing saved"; })
-      .catch(() => { label.textContent = "Could not save"; })
-      .finally(() => setTimeout(() => { label.textContent = "Share"; }, 1800));
-  }
 });
 
 /* ---------- firebase google sign-in ---------- */
