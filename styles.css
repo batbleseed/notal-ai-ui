@@ -1133,26 +1133,32 @@ button:disabled { opacity: .5; cursor: default; }
   /* above the composer, whose coding-mode ring sits at z-index 2, and below
      the sidebar drawer at 40 — the dropdown opens upward over the box */
   position: relative; z-index: 20;
-  width: 100%; max-width: 700px; min-height: 50px; margin: 0 auto;
-  display: flex; align-items: center; justify-content: center; gap: 12px;
-  padding: 0 20px;
+  width: 100%; max-width: 700px; margin: 0 auto;
   border: 1px solid var(--border); border-top: 0;
   border-radius: 0 0 var(--radius-hero) var(--radius-hero);
   background: var(--surface); color: var(--text-soft); font-size: 14px;
   box-shadow: var(--shadow);
 }
 .plugin-nudge[hidden] { display: none; }
+/* the whole tray is one button: pressing anywhere on it, icon or words, opens
+   the picker. The marks inside are a preview, not controls of their own. */
+.nudge-open {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  width: 100%; min-height: 50px; padding: 0 20px;
+  border: 0; border-radius: inherit; background: transparent;
+  color: inherit; font: inherit; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.nudge-open:hover, .nudge-open:focus-visible,
+.plugin-nudge.open .nudge-open {
+  background: var(--surface-2); color: var(--text); outline: none;
+}
 .plugin-nudge strong { color: var(--text); font-size: 14.5px; }
 .plugin-nudge-icons { display: inline-flex; align-items: center; gap: 3px; color: var(--accent); }
 .nudge-plugin {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; border-radius: 9px; color: var(--accent);
-  transition: background .15s, color .15s;
+  width: 30px; height: 30px;
 }
-.nudge-plugin:hover, .nudge-plugin:focus-visible {
-  background: var(--surface-2); color: var(--text); outline: none;
-}
-.plugin-nudge.open .nudge-plugin { color: var(--text); }
 .plugin-nudge-icons svg { width: 22px; height: 22px; }
 /* the tray sits at the bottom of the screen, so its menu opens upward over the
    composer rather than running off the bottom on a phone */
@@ -1351,7 +1357,8 @@ button:disabled { opacity: .5; cursor: default; }
   .wordmark { min-width: 0; min-height: 76px; }
   .wordmark-text { font-size: clamp(38px, 12vw, 56px); letter-spacing: -1.4px; }
   .wordmark-logo { width: 62px; height: 62px; }
-  .plugin-nudge { min-height: 46px; padding: 0 12px; gap: 8px; font-size: 13px; }
+  .plugin-nudge { font-size: 13px; }
+  .nudge-open { min-height: 46px; padding: 0 12px; gap: 8px; }
   .plugin-nudge strong { font-size: 13.5px; }
   .nudge-plugin { width: 26px; height: 26px; }
   .plugin-nudge-icons svg { width: 20px; height: 20px; }

@@ -260,9 +260,13 @@
           </div>
         </form>
         <div class="plugin-nudge" id="pluginNudge" hidden>
-          <span class="plugin-nudge-icons" id="pluginNudgeIcons"></span>
-          <strong>Plugins</strong>
-          <span>Type @github or @youtube</span>
+          <button class="nudge-open" id="nudgeOpen" type="button"
+                  aria-haspopup="menu" aria-expanded="false" aria-controls="pluginPickMenu"
+                  aria-label="Choose a plugin to mention">
+            <span class="plugin-nudge-icons" id="pluginNudgeIcons" aria-hidden="true"></span>
+            <strong>Plugins</strong>
+            <span>Type @github or @youtube</span>
+          </button>
           <div class="plugin-menu" id="pluginPickMenu" role="menu" hidden></div>
         </div>
         <!-- filled by renderSuggestions() in app.js: the set follows the

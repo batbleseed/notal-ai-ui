@@ -46,6 +46,7 @@ const els = {
   attachMenu: $("#attachMenu"),
   dropVeil: $("#dropVeil"),
   pluginNudge: $("#pluginNudge"),
+  nudgeOpen: $("#nudgeOpen"),
   pluginNudgeIcons: $("#pluginNudgeIcons"),
   pluginPickMenu: $("#pluginPickMenu"),
   micBtn: $("#micBtn"),
@@ -2785,8 +2786,7 @@ function setPluginMenu(open) {
   pluginMenuOpen = open;
   els.pluginPickMenu.hidden = !open;
   els.pluginNudge.classList.toggle("open", open);
-  els.pluginNudgeIcons.querySelectorAll("button").forEach(b =>
-    b.setAttribute("aria-expanded", String(open)));
+  els.nudgeOpen.setAttribute("aria-expanded", String(open));
 }
 
 function renderPluginMenu() {
@@ -2830,26 +2830,18 @@ function insertMention(id) {
 
 function renderPluginNudge() {
   const marks = ["github", "youtube", "browser"].map(id => PLUGINS.find(def => def.id === id)).filter(Boolean);
+  /* the icons are a preview of what is inside, not separate controls: the whole
+     tray is the button that opens the picker */
   els.pluginNudgeIcons.replaceChildren(...marks.map(def => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "nudge-plugin";
-    btn.dataset.pluginId = def.id;
-    btn.title = `Insert @${def.id}`;
-    btn.setAttribute("aria-label", `Insert @${def.id}`);
-    btn.setAttribute("aria-haspopup", "true");
-    btn.setAttribute("aria-expanded", "false");
-    btn.setAttribute("aria-controls", "pluginPickMenu");
-    btn.append(pluginIcon(def, 22));
-    return btn;
+    const mark = document.createElement("span");
+    mark.className = "nudge-plugin";
+    mark.append(pluginIcon(def, 22));
+    return mark;
   }));
   updatePluginNudge();
 }
 
-els.pluginNudgeIcons.addEventListener("click", (e) => {
-  const btn = e.target.closest("button[data-plugin-id]");
-  if (!btn) return;
-  e.stopPropagation();
+els.nudgeOpen.addEventListener("click", () => {
   renderPluginMenu();
   setPluginMenu(!pluginMenuOpen);
 });
