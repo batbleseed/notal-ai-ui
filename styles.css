@@ -1431,9 +1431,11 @@ button:disabled { opacity: .5; cursor: default; }
     gap: 2px; padding: 5px 6px 5px 8px;
   }
   .composer-bar { display: contents; }
-  .composer-left { order: 1; flex-shrink: 0; }
+  /* bottom-aligned, but the two ends are different heights: lift each onto the
+     last line of text, whose centre sits about 20px above the bottom of the box */
+  .composer-left { order: 1; flex-shrink: 0; padding-bottom: 5px; }
   .input-wrap { order: 2; flex: 1 1 90px; min-width: 0; }
-  .composer-right { order: 3; flex-shrink: 0; }
+  .composer-right { order: 3; flex-shrink: 0; padding-bottom: 3px; }
   .attach-tray { order: 0; flex: 1 0 100%; }
   #micBtn, .char-count, .mp-star { display: none; }
   .composer textarea { padding: 9px 0; }
@@ -1979,6 +1981,9 @@ kbd {
   .send-btn { width: 44px; height: 44px; }
   .ghost-btn { padding: 11px 15px; }
   .nav-item, .history-item { padding: 11px 12px; }
+  /* at these button sizes the phone composer's two ends already land on the last
+     line of text, so the lift the narrower buttons need is not needed here */
+  .composer-left, .composer-right { padding-bottom: 0; }
   .am-item { padding: 13px 12px; }
   .settings-tab { padding: 12px 14px; }
   .mode-btn { padding: 10px 15px; }
