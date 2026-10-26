@@ -1458,7 +1458,11 @@ button:disabled { opacity: .5; cursor: default; }
 
 @media (max-width: 420px) {
   .char-count { display: none; }
-  .model-name { max-width: 74px; }
+  /* the topbar carries the model pill at this width, so everything on it gives a
+     little — otherwise the row is wider than the phone and runs off the edge */
+  .topbar { gap: 8px; padding: 12px; }
+  .mode-btn { padding: 6px 9px; }
+  .model-name { max-width: 64px; }
   .model-picker-btn { gap: 4px; padding: 6px 8px; }
   .composer-left, .composer-right { gap: 2px; }
   .suggestion { gap: 7px; padding: 10px; }
