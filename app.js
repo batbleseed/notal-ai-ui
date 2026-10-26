@@ -3037,8 +3037,15 @@ const modelHome = els.modelPicker.parentElement;
 const narrowChrome = window.matchMedia("(max-width: 860px)");
 
 function placeModelPicker() {
-  const want = narrowChrome.matches ? $(".topbar") : modelHome;
-  if (els.modelPicker.parentElement !== want) want.append(els.modelPicker);
+  const topbar = $(".topbar");
+  if (narrowChrome.matches) {
+    if (els.modelPicker.parentElement !== topbar) topbar.append(els.modelPicker);
+    return;
+  }
+  /* back in front of the arrow — append would tack it on after the send button
+     and leave the arrow stranded in the middle of the row */
+  if (els.modelPicker.nextElementSibling !== els.sendBtn)
+    modelHome.insertBefore(els.modelPicker, els.sendBtn);
 }
 narrowChrome.addEventListener("change", placeModelPicker);
 placeModelPicker();
