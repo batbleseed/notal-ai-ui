@@ -23,7 +23,12 @@ const els = {
   sidebarOpen: $("#sidebarOpen"),
   newChat: $("#newChatBtn"),
   historyList: $("#historyList"),
-  search: $("#searchChats"),
+  chatSearchBtn: $("#chatSearchBtn"),
+  chatSearchDialog: $("#chatSearchDialog"),
+  chatSearchInput: $("#chatSearchInput"),
+  chatSearchResults: $("#chatSearchResults"),
+  chatSearchEmpty: $("#chatSearchEmpty"),
+  chatSearchClose: $("#chatSearchClose"),
   chat: $("#chat"),
   greeting: $("#greeting"),
   suggestions: $("#suggestions"),
@@ -415,14 +420,12 @@ function openConversation(id) {
   renderMessages();
 }
 
-function renderHistory(filter = "") {
-  const q = filter.trim().toLowerCase();
+function renderHistory() {
   const items = state.conversations.filter(c =>
-    (!state.activeProject || (c.projectId ?? null) === state.activeProject) &&
-    (!q || c.title.toLowerCase().includes(q)));
+    !state.activeProject || (c.projectId ?? null) === state.activeProject);
   els.historyList.innerHTML = "";
   if (!items.length) {
-    els.historyList.innerHTML = `<li class="history-empty">${q ? "No matching chats" : "No chats yet"}</li>`;
+    els.historyList.innerHTML = `<li class="history-empty">No chats yet</li>`;
     return;
   }
   for (const c of items) {
@@ -440,6 +443,100 @@ function renderHistory(filter = "") {
     els.historyList.append(li);
   }
 }
+
+/* ---------- chat search ----------
+   The list in the sidebar only ever shows what is newest, so this is how you
+   reach an old chat: by what it was called, or by anything said inside it. */
+let searchPick = 0;
+let searchReturnFocus = null;
+
+function chatSnippet(conv, needle) {
+  for (const m of conv.messages) {
+    const text = typeof m.text === "string" ? m.text : "";
+    const at = text.toLowerCase().indexOf(needle);
+    if (at < 0) continue;
+    const from = Math.max(0, at - 24);
+    const cut = at + 70;
+    return `${from ? "…" : ""}${text.slice(from, cut).replace(/\s+/g, " ").trim()}${cut < text.length ? "…" : ""}`;
+  }
+  return "";
+}
+
+function renderChatSearch() {
+  const query = els.chatSearchInput.value.trim();
+  const needle = query.toLowerCase();
+  const hits = state.conversations.filter(c =>
+    (!state.activeProject || (c.projectId ?? null) === state.activeProject) &&
+    (!needle || c.title.toLowerCase().includes(needle) ||
+      c.messages.some(m => String(m.text || "").toLowerCase().includes(needle))));
+  els.chatSearchResults.innerHTML = "";
+  searchPick = 0;
+  for (const c of hits.slice(0, 25)) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "search-row";
+    const title = document.createElement("span");
+    title.className = "sr-title";
+    title.textContent = c.title;
+    const snip = document.createElement("span");
+    snip.className = "sr-snip";
+    snip.textContent = needle ? chatSnippet(c, needle)
+      : String(c.messages.at(-1)?.text || "").replace(/\s+/g, " ").trim() || "No messages yet";
+    row.append(title, snip);
+    row.addEventListener("click", () => {
+      closeChatSearch();
+      openConversation(c.id);
+    });
+    const li = document.createElement("li");
+    li.append(row);
+    els.chatSearchResults.append(li);
+  }
+  els.chatSearchEmpty.hidden = hits.length > 0;
+  els.chatSearchEmpty.textContent = needle
+    ? `Nothing matches “${query}”.`
+    : "No chats yet.";
+}
+
+function moveChatSearch(delta) {
+  const rows = [...els.chatSearchResults.querySelectorAll(".search-row")];
+  if (!rows.length) return;
+  rows[searchPick]?.classList.remove("sel");
+  searchPick = Math.min(rows.length - 1, Math.max(0, searchPick + delta));
+  rows[searchPick].classList.add("sel");
+  rows[searchPick].scrollIntoView({ block: "nearest" });
+}
+
+function openChatSearch() {
+  searchReturnFocus = document.activeElement;
+  els.chatSearchDialog.hidden = false;
+  els.chatSearchBtn.setAttribute("aria-expanded", "true");
+  els.chatSearchInput.value = "";
+  renderChatSearch();
+  motion.reveal(els.chatSearchDialog.querySelector(".modal"));
+  els.chatSearchInput.focus();
+}
+
+function closeChatSearch() {
+  els.chatSearchDialog.hidden = true;
+  els.chatSearchBtn.setAttribute("aria-expanded", "false");
+  if (searchReturnFocus?.focus) searchReturnFocus.focus();
+  searchReturnFocus = null;
+}
+
+els.chatSearchBtn.addEventListener("click", openChatSearch);
+els.chatSearchClose.addEventListener("click", closeChatSearch);
+els.chatSearchDialog.addEventListener("click", e => {
+  if (e.target === els.chatSearchDialog) closeChatSearch();
+});
+els.chatSearchInput.addEventListener("input", renderChatSearch);
+els.chatSearchInput.addEventListener("keydown", e => {
+  if (e.key === "ArrowDown") { e.preventDefault(); moveChatSearch(1); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); moveChatSearch(-1); }
+  else if (e.key === "Enter") {
+    e.preventDefault();
+    els.chatSearchResults.querySelectorAll(".search-row")[searchPick]?.click();
+  }
+});
 
 /* ---------- messages ---------- */
 function renderMessages() {
@@ -1129,7 +1226,7 @@ async function sendMessage(text) {
   appendMessage(userMsg);
   scrollToBottom();
   save();
-  renderHistory(els.search.value);
+  renderHistory();
 
   els.input.value = "";
   autoresize();
@@ -2915,21 +3012,23 @@ els.sidebarClose.addEventListener("click", () => setSidebar(els.sidebar.classLis
 els.sidebarOpen.addEventListener("click", () => setSidebar(true));
 
 /* The drawer floats over the chat, so tapping anything — a view, a conversation,
-   the page behind it — is also what puts it away. Only the search field, and the
-   two buttons that open and close the drawer themselves, are worth keeping it for. */
+   the page behind it — is also what puts it away. Only the two buttons that open
+   and close the drawer themselves are worth keeping it for. */
 document.addEventListener("click", (e) => {
   if (window.innerWidth > 860) return;
   if (els.sidebar.classList.contains("collapsed")) return;
-  if (e.target.closest("#sidebarOpen, #sidebarClose, .search-wrap")) return;
+  if (e.target.closest("#sidebarOpen, #sidebarClose")) return;
   setSidebar(false);
 }, true);
 
 document.querySelectorAll(".nav-item").forEach(btn => {
+  /* New chat and Search sit in the same list but are actions, not views, so
+     they carry no data-view and keep their own handlers */
+  if (!btn.dataset.view) return;
   btn.addEventListener("click", () => setView(btn.dataset.view));
 });
 
 els.newChat.addEventListener("click", newConversation);
-els.search.addEventListener("input", () => renderHistory(els.search.value));
 
 /* ---------- model picker ---------- */
 function setModelMenu(open) {
@@ -3103,7 +3202,7 @@ $("#clearChatsBtn").addEventListener("click", () => {
   state.conversations = [];
   state.activeId = null;
   save();
-  renderHistory(els.search.value);
+  renderHistory();
   renderMessages();
 });
 
@@ -4403,6 +4502,7 @@ document.addEventListener("keydown", (e) => {
     setPluginMenu(false);
     setAccountMenu(false);
     if (!els.overlay.hidden) closeSettings();
+    else if (!els.chatSearchDialog.hidden) closeChatSearch();
     else if (!nameDialog.hidden) { closeNameDialog(); discardEditorMode(); }
     else if (!makerPick.hidden) makerPick.hidden = true;
     else if (editing) exitEditorMode();
@@ -4417,7 +4517,7 @@ document.addEventListener("keydown", (e) => {
   else if (k === "b") { e.preventDefault(); lockScreenSafe(() => els.sidebarClose.click()); }
   else if (k === ",") { e.preventDefault(); shortcutOpenSettings(); }
   else if (k === "l" && e.shiftKey) { e.preventDefault(); lockApp(); }
-  else if (k === "f" && e.shiftKey) { e.preventDefault(); lockScreenSafe(() => els.search.focus()); }
+  else if (k === "f" && e.shiftKey) { e.preventDefault(); lockScreenSafe(openChatSearch); }
 });
 
 /* ---------- projects / memory / skills panels ----------
@@ -4523,7 +4623,7 @@ function renderProjects() {
       renderProjects();
       renderMemory();
       setView("chats");
-      renderHistory(els.search.value);
+      renderHistory();
       renderMessages();
       toast(`Now working in "${p.name}" — new chats belong to it.`);
     });
@@ -4552,7 +4652,7 @@ function renderProjects() {
       if (state.activeProject === p.id) state.activeProject = null;
       save();
       renderProjects();
-      renderHistory(els.search.value);
+      renderHistory();
     });
 
     li.append(h, meta, open, mem, del);

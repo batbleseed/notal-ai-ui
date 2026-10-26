@@ -42,9 +42,13 @@
       </div>
 
       <nav class="sidebar-nav">
-        <button class="nav-item active" data-view="chats" title="Chats" aria-label="Chats">
-          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 01-9 8.3 8.6 8.6 0 01-3.8-.9L3 20l1.1-4.9a8.4 8.4 0 01-.9-3.6 8.4 8.4 0 018.3-9 8.4 8.4 0 019.5 9z"/></svg>
-          <span>Chats</span>
+        <button class="nav-item" id="newChatBtn" type="button" title="New chat" aria-label="New chat">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span>New chat</span>
+        </button>
+        <button class="nav-item" id="chatSearchBtn" type="button" title="Search chats" aria-label="Search chats" aria-haspopup="dialog" aria-expanded="false" aria-controls="chatSearchDialog">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <span>Search</span>
         </button>
         <button class="nav-item" data-view="projects" title="Projects" aria-label="Projects">
           <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
@@ -67,17 +71,6 @@
           <span>Plugins</span>
         </button>
       </nav>
-
-      <div class="new-chat-wrap">
-        <button class="new-chat-btn" id="newChatBtn" title="New chat" aria-label="New chat">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          <span>New chat</span>
-        </button>
-        <div class="search-wrap">
-          <svg class="search-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          <input type="text" id="searchChats" placeholder="Search chats…" aria-label="Search chats" />
-        </div>
-      </div>
 
       <div class="history">
         <p class="history-label">Recent</p>
@@ -491,6 +484,23 @@
 
   <!-- Login is its own screen rather than a card over the chat: the workspace
        is hidden behind the page colour, and one card asks how to come in. -->
+  <!-- Chat search. The sidebar list only ever shows what is newest, so this is
+       the way back to an old chat: it matches the title and anything said in it. -->
+  <div class="modal-overlay search-overlay" id="chatSearchDialog" hidden>
+    <div class="modal search-modal" role="dialog" aria-modal="true" aria-labelledby="chatSearchTitle">
+      <header class="search-head">
+        <svg class="search-glyph" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <h2 id="chatSearchTitle" class="sr-only">Search chats</h2>
+        <input type="text" id="chatSearchInput" placeholder="Search chats…" aria-label="Search chats" autocomplete="off" spellcheck="false" />
+        <button class="icon-btn" type="button" id="chatSearchClose" aria-label="Close search">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <ul class="search-results" id="chatSearchResults"></ul>
+      <p class="search-empty" id="chatSearchEmpty" hidden></p>
+    </div>
+  </div>
+
   <div class="login-screen" id="loginScreen" hidden>
     <div class="login-card" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
       <button class="icon-btn login-close" type="button" id="loginClose" aria-label="Close login">
