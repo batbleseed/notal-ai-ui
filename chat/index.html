@@ -105,6 +105,10 @@
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
               <span>Login</span>
             </button>
+            <button class="am-item" id="amVerifyBtn" type="button" hidden>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6.5h18v11H3z"/><path d="m3.5 7 8.5 6 8.5-6"/></svg>
+              <span>Send the verification link again</span>
+            </button>
             <button class="am-item" id="amSwitchBtn" type="button" hidden>
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h3a2 2 0 012 2v14a2 2 0 01-2 2h-3M8 21H5a2 2 0 01-2-2V5a2 2 0 012-2h3M9 12h11M17 8l4 4-4 4"/></svg>
               <span>Switch account</span>
@@ -508,24 +512,36 @@
       </button>
       <span class="brand-logo notal-mark login-mark" aria-hidden="true"></span>
       <h2 id="loginTitle">Login</h2>
-      <p class="login-sub">Sign in to publish extensions and keep them under one account.</p>
+      <p class="login-sub" id="loginSub">Sign in to publish extensions and keep them under one account.</p>
 
       <button class="login-google" type="button" id="loginGoogle">
         <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-        <span>Login with Google</span>
+        <span id="loginGoogleLabel">Login with Google</span>
       </button>
 
-      <div class="login-or"><span>or login with email</span></div>
+      <div class="login-or"><span id="loginOr">or login with email</span></div>
 
+      <!-- One card, two moods: Login checks a password you already have, Sign up
+           makes the account and emails the link that confirms the address. -->
       <form class="login-form" id="loginForm" novalidate>
+        <div class="login-signup-only" hidden>
+          <label for="loginName">Name</label>
+          <input id="loginName" name="name" type="text" autocomplete="nickname" placeholder="The name on the cards you publish" />
+        </div>
         <label for="loginEmail">Email</label>
         <input id="loginEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
         <label for="loginPassword">Password</label>
-        <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="At least 6 characters" required />
+        <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Your password" required />
+        <div class="login-signup-only" hidden>
+          <label for="loginConfirm">Confirm password</label>
+          <input id="loginConfirm" name="confirm" type="password" autocomplete="new-password" placeholder="Type it again" />
+        </div>
+        <div class="login-captcha" id="turnstileBox" hidden></div>
         <p class="login-error" id="loginError" role="alert" hidden></p>
         <button class="primary-btn login-submit" type="submit" id="loginSubmit">Login with email</button>
-        <small class="login-hint">First time? The same button creates your account.</small>
+        <small class="login-hint" id="loginHint" hidden></small>
       </form>
+      <button class="login-switch" type="button" id="loginSwitch">New here? Create an account</button>
     </div>
   </div>
 
@@ -698,7 +714,9 @@
                 <dt>It does not</dt>
                 <dd>Upload or sync your chats, projects, memory, skills or API keys. Those stay in this browser on this device, whether you are signed in or not.</dd>
                 <dt>Email accounts</dt>
-                <dd>Email and password accounts are created in Firebase Authentication. The password is handled there; this app never stores it.</dd>
+                <dd>Made on the card's <strong>Create an account</strong> side. Firebase handles the password — this app never stores it — and emails a link to confirm the address. Publishing waits for that click.</dd>
+                <dt>The captcha</dt>
+                <dd>Only sign-up asks, and only once a Cloudflare Turnstile key is set in the app and its secret in the relay. With no key it never appears. It turns away casual scripts; Firebase's own abuse protection does the heavier lifting.</dd>
                 <dt>On another device</dt>
                 <dd>You sign in there too, and it starts with an empty history. The account is not a backup.</dd>
               </dl>

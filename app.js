@@ -4109,6 +4109,21 @@ els.loginEmail = $("#loginEmail");
 els.loginPassword = $("#loginPassword");
 els.loginError = $("#loginError");
 els.loginSubmit = $("#loginSubmit");
+els.loginTitle = $("#loginTitle");
+els.loginSub = $("#loginSub");
+els.loginHint = $("#loginHint");
+els.loginName = $("#loginName");
+els.loginConfirm = $("#loginConfirm");
+els.loginSwitch = $("#loginSwitch");
+els.loginGoogleLabel = $("#loginGoogleLabel");
+els.loginOr = $("#loginOr");
+els.turnstileBox = $("#turnstileBox");
+els.amVerifyBtn = $("#amVerifyBtn");
+
+/* Cloudflare Turnstile, when both ends of it are filled in: the key ships with
+   the page, the secret stays in the relay. Left empty, no box appears and the
+   form behaves exactly as it did without one. */
+const TURNSTILE_SITE_KEY = "";
 
 let fbAuth = null, fbMods = null, currentUser = null;
 
@@ -4133,25 +4148,71 @@ async function ensureAuth() {
 }
 
 /* ---------- login ----------
-   One card for both ways in. The screen is opaque, so the chat and the top bar
-   are not visible behind it; the card is the only thing in view. */
+   One card, two moods. Login checks a password you already have; Sign up makes
+   the account, asks the captcha first, and emails the link that confirms the
+   address. The screen is opaque, so the chat and the top bar are not visible
+   behind it; the card is the only thing in view. */
 let loginNext = null;
 let loginBusy = false;
 let loginReturnFocus = null;
+let loginMode = "login";
+
+const LOGIN_COPY = {
+  login: {
+    title: "Login",
+    sub: "Sign in to publish extensions and keep them under one account.",
+    google: "Login with Google",
+    or: "or login with email",
+    submit: "Login with email",
+    switch: "New here? Create an account",
+    hint: "",
+    password: "Your password",
+  },
+  signup: {
+    title: "Create an account",
+    sub: "Your name rides on every extension card you publish.",
+    google: "Sign up with Google",
+    or: "or sign up with email",
+    submit: "Create account",
+    switch: "Already have an account? Login",
+    hint: "We email a link to confirm the address — publishing unlocks once you click it.",
+    password: "At least 6 characters",
+  },
+};
 
 function setLoginError(message) {
   els.loginError.textContent = message || "";
   els.loginError.hidden = !message;
 }
 
-function openLogin(next) {
+function setLoginMode(mode, email = "") {
+  loginMode = mode === "signup" ? "signup" : "login";
+  const copy = LOGIN_COPY[loginMode];
+  const up = loginMode === "signup";
+  els.loginTitle.textContent = copy.title;
+  els.loginSub.textContent = copy.sub;
+  els.loginGoogleLabel.textContent = copy.google;
+  els.loginOr.textContent = copy.or;
+  els.loginSubmit.textContent = copy.submit;
+  els.loginSwitch.textContent = copy.switch;
+  els.loginHint.textContent = copy.hint;
+  els.loginHint.hidden = !copy.hint;
+  els.loginPassword.placeholder = copy.password;
+  els.loginPassword.autocomplete = up ? "new-password" : "current-password";
+  document.querySelectorAll(".login-signup-only").forEach(el => { el.hidden = !up; });
+  showTurnstile(up && turnstileEnabled());
+  if (email) els.loginEmail.value = email;
+  setLoginError("");
+}
+
+function openLogin(next, mode = "login") {
   loginNext = typeof next === "function" ? next : null;
   loginReturnFocus = document.activeElement;
-  setLoginError("");
   els.loginForm.reset();
+  setLoginMode(mode);
   els.loginScreen.hidden = false;
   document.body.classList.add("login-open");
-  setTimeout(() => els.loginEmail.focus(), 40);
+  setTimeout(() => (mode === "signup" ? els.loginName : els.loginEmail).focus(), 40);
 }
 
 function hideLogin() {
@@ -4223,43 +4284,160 @@ els.loginGoogle.addEventListener("click", async () => {
 els.loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (loginBusy) return;
+  const up = loginMode === "signup";
   const email = els.loginEmail.value.trim();
   const password = els.loginPassword.value;
+  const name = els.loginName.value.trim();
   if (!email) { setLoginError("Enter your email address."); return; }
   if (password.length < 6) { setLoginError("Use at least 6 characters for the password."); return; }
+  if (up && !name) { setLoginError("Give the name that should appear on your cards."); return; }
+  if (up && password !== els.loginConfirm.value) { setLoginError("The two passwords do not match."); return; }
   loginBusy = true;
   els.loginSubmit.disabled = true;
   els.loginGoogle.disabled = true;
   setLoginError("");
   try {
     const { auth, mods } = await ensureAuth();
-    try {
-      await mods.signInWithEmailAndPassword(auth, email, password);
-    } catch (err) {
-      const unknown = ["auth/user-not-found", "auth/invalid-credential"].includes(err?.code);
-      if (!unknown) throw err;
-      /* First time on this email: make the account with the same details. An
-         existing email lands in email-already-in-use just below. */
+    if (!up) {
       try {
-        const cred = await mods.createUserWithEmailAndPassword(auth, email, password);
-        if (cred.user && !cred.user.displayName)
-          await mods.updateProfile(cred.user, { displayName: email.split("@")[0] }).catch(() => {});
-        toast("Account created — you are signed in.");
-      } catch (err2) {
-        if (err2?.code === "auth/email-already-in-use")
-          throw new Error("That email already has an account — check the password.");
-        throw err2;
+        await mods.signInWithEmailAndPassword(auth, email, password);
+      } catch (err) {
+        /* Login only logs in. A missing account is a sign-up, and the card says
+           so and switches over with what you typed still in it. */
+        if (!["auth/user-not-found", "auth/invalid-credential"].includes(err?.code)) throw err;
+        setLoginMode("signup", email);
+        setLoginError("There is no account for that email yet — this is a sign-up now.");
+        return;
       }
+      finishLogin();
+      return;
     }
+    if (!await turnstilePass()) return;
+    const cred = await mods.createUserWithEmailAndPassword(auth, email, password);
+    if (cred.user) {
+      await mods.updateProfile(cred.user, { displayName: name }).catch(() => {});
+      state.displayName = name;
+      els.displayNameInput.value = name;
+      save();
+    }
+    await sendVerification(true, cred.user);
     finishLogin();
   } catch (err) {
-    setLoginError(firebaseLoginMessage(err));
+    if (String(err?.code || "").includes("email-already-in-use")) {
+      setLoginMode("login", email);
+      setLoginError("That email already has an account — log in instead.");
+    } else setLoginError(firebaseLoginMessage(err));
   } finally {
     loginBusy = false;
     els.loginSubmit.disabled = false;
     els.loginGoogle.disabled = false;
+    turnstileReset();
   }
 });
+
+els.loginSwitch.addEventListener("click", () =>
+  setLoginMode(loginMode === "signup" ? "login" : "signup", els.loginEmail.value.trim()));
+
+/* ---------- email verification ----------
+   A Google account arrives with its address already checked. An email-and-
+   password one has to click the link Firebase sends before it can publish. */
+function emailConfirmed() {
+  if (!currentUser) return false;
+  if (currentUser.providerData?.some(p => p.providerId === "google.com")) return true;
+  return Boolean(currentUser.emailVerified);
+}
+
+/* Signing up and then pressing Publish would otherwise mail two links at once. */
+let verifySentAt = 0;
+
+async function sendVerification(onSignup, user = currentUser) {
+  if (!user) return;
+  if (Date.now() - verifySentAt < 20_000) {
+    toast("The link is on its way — check your inbox.");
+    return;
+  }
+  try {
+    const { mods } = await ensureAuth();
+    await mods.sendEmailVerification(user);
+    verifySentAt = Date.now();
+    toast(onSignup
+      ? "Account made — click the link in your inbox to unlock publishing."
+      : "Verification link sent — check your inbox.");
+  } catch (err) {
+    toast(firebaseLoginMessage(err));
+  }
+}
+
+els.amVerifyBtn.addEventListener("click", () => {
+  setAccountMenu(false);
+  sendVerification(false);
+});
+
+/* ---------- turnstile ----------
+   The widget hands us a token and the relay checks it against the secret, which
+   is the only place that half lives. Be honest about what that buys: the
+   account is still created straight against Firebase, so this stops a lazy
+   script, not a determined one — Firebase's own abuse protection is the part
+   that bites. With no site key filled in, the box never appears. */
+let turnstileWidget = null;
+let turnstileToken = "";
+
+function turnstileEnabled() {
+  return Boolean(TURNSTILE_SITE_KEY) && Boolean(relayBase());
+}
+
+function loadTurnstile() {
+  if (window.turnstile) return Promise.resolve(window.turnstile);
+  return new Promise((resolve, reject) => {
+    const id = "turnstile-js";
+    let s = document.getElementById(id);
+    if (!s) {
+      s = document.createElement("script");
+      s.id = id;
+      s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      s.async = true;
+      s.onerror = () => reject(new Error("turnstile script"));
+      document.head.append(s);
+    }
+    s.addEventListener("load", () => resolve(window.turnstile), { once: true });
+  });
+}
+
+function showTurnstile(wanted) {
+  els.turnstileBox.hidden = !wanted;
+  if (!wanted || turnstileWidget !== null) return;
+  loadTurnstile().then(api => {
+    turnstileWidget = api.render(els.turnstileBox, {
+      sitekey: TURNSTILE_SITE_KEY,
+      callback: token => { turnstileToken = token; },
+      "expired-callback": () => { turnstileToken = ""; },
+      "error-callback": () => setLoginError("The captcha could not load — try again."),
+    });
+  }).catch(() => { els.turnstileBox.hidden = true; });
+}
+
+function turnstileReset() {
+  turnstileToken = "";
+  if (turnstileWidget !== null && window.turnstile) window.turnstile.reset(turnstileWidget);
+}
+
+async function turnstilePass() {
+  if (!turnstileEnabled()) return true;
+  if (!turnstileToken) { setLoginError("Tick the box to show you are not a script."); return false; }
+  try {
+    const res = await fetch(`${relayBase()}/turnstile`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: turnstileToken }),
+    });
+    const verdict = await res.json().catch(() => null);
+    if (res.ok && verdict?.ok) return true;
+    setLoginError("The captcha answer did not check out — try it again.");
+  } catch {
+    setLoginError("The captcha could not be checked — the relay did not answer.");
+  }
+  return false;
+}
 
 els.googleSignInBtn.addEventListener("click", () => openLogin());
 
@@ -4274,14 +4452,16 @@ function renderAuthUI() {
   els.amSignOutBtn.hidden = !currentUser;
   els.amSwitchBtn.hidden = !currentUser;
   const viaEmail = currentUser?.providerData?.[0]?.providerId === "password";
+  const unverified = Boolean(currentUser) && !emailConfirmed();
+  els.amVerifyBtn.hidden = !unverified;
   els.authStatus.textContent = currentUser
-    ? `${currentUser.displayName || currentUser.email} — signed in${viaEmail ? " with email" : " with Google"}`
+    ? `${currentUser.displayName || currentUser.email} — signed in${viaEmail ? " with email" : " with Google"}${unverified ? " · address not confirmed" : ""}`
     : "Not signed in";
   const label = els.signinBtn.querySelector("span");
   let photo = els.signinBtn.querySelector("img");
 
   els.amSub.textContent = currentUser
-    ? (currentUser.email || "Signed in")
+    ? `${currentUser.email || "Signed in"}${unverified ? " · not confirmed" : ""}`
     : "Not signed in";
   els.amName.textContent = currentUser
     ? (currentUser.displayName || currentUser.email || "Account")
@@ -5425,6 +5605,11 @@ async function publishToLibrary(d, onDone) {
     openLogin();
     return;
   }
+  /* the dialog already asks for this; this is the same door from the other side */
+  if (!emailConfirmed()) {
+    sendVerification(false);
+    return;
+  }
   const updating = !!d.rowId;
   if (updating && !state.claims[d.rowId]) {
     toast("Only the maker can change that one — it was published from another browser.");
@@ -5505,7 +5690,8 @@ function pubPreview() {
 function openPublishDialog(x) {
   /* Publishing carries an account name, so a guest meets the login screen
      first and lands back here after signing in. */
-  if (!currentUser) { openLogin(() => openPublishDialog(x)); return; }
+  if (!currentUser) { openLogin(() => openPublishDialog(x), "signup"); return; }
+  if (!emailConfirmed()) { sendVerification(false); return; }
   pubTarget = x;
   pubShot = x.screenshot || "";
   $("#pubShot").value = "";

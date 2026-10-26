@@ -418,6 +418,47 @@ async function handleGoogle(request, env, cors) {
   return json(payload, { status: answer.status, headers: { ...cors, "x-relay": "notal" } });
 }
 
+/* The login card asks Cloudflare whether the visitor is a person, and only this
+   Worker holds the secret, so the answer has to come from here. Be clear about
+   what that buys: the account is still created straight against Firebase, so a
+   captcha checked only here stops a lazy script, not a determined one. */
+async function handleTurnstile(request, env, cors) {
+  const secret = env?.TURNSTILE_SECRET || "";
+  if (!secret)
+    return refuse("this relay has no TURNSTILE_SECRET set, so it cannot check a captcha", 501, cors);
+
+  let input;
+  try { input = await request.json(); }
+  catch { return refuse('turnstile expects JSON like {"token":"…"}', 400, cors); }
+
+  const token = input?.token;
+  if (typeof token !== "string" || !token || token.length > 4096)
+    return refuse("turnstile needs the token string from the widget", 400, cors);
+
+  const form = new URLSearchParams({ secret, response: token });
+  const ip = request.headers.get("cf-connecting-ip");
+  if (ip) form.set("remoteip", ip);
+
+  let answer;
+  try {
+    answer = await fetchToHeaders("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "application/json",
+      },
+      body: form.toString(),
+    }, GOOGLE_TIMEOUT_MS);
+  } catch (err) {
+    const reason = err?.name === "TimeoutError" ? "timed out" : "could not be reached";
+    return refuse(`Cloudflare ${reason}`, 502, cors);
+  }
+
+  const verdict = await answer.json().catch(() => null);
+  if (!verdict?.success) return refuse("the captcha answer did not check out", 403, cors);
+  return json({ ok: true }, { headers: cors });
+}
+
 export default {
   async fetch(request, env) {
     const cors = corsHeaders(request, env);
@@ -430,7 +471,8 @@ export default {
        finding out by failing: google is only true when the secret is set */
     if (pathname === "/health")
       return json({ ok: true, relay: "notal", hosts: ALLOWED_HOSTS.size, browse: true, github: true,
-        google: Boolean(env?.GOOGLE_CLIENT_SECRET) }, { headers: cors });
+        google: Boolean(env?.GOOGLE_CLIENT_SECRET),
+        turnstile: Boolean(env?.TURNSTILE_SECRET) }, { headers: cors });
 
     if (pathname === "/browse") {
       if (request.method !== "POST")
@@ -450,8 +492,14 @@ export default {
       return handleGoogle(request, env, cors);
     }
 
+    if (pathname === "/turnstile") {
+      if (request.method !== "POST")
+        return json({ error: { message: "turnstile is a POST endpoint" } }, { status: 405, headers: cors });
+      return handleTurnstile(request, env, cors);
+    }
+
     if (pathname !== "/relay" || request.method !== "POST")
-      return json({ error: { message: "unknown endpoint — use POST /relay, POST /browse, POST /github, POST /google or GET /health" } },
+      return json({ error: { message: "unknown endpoint — use POST /relay, POST /browse, POST /github, POST /google, POST /turnstile or GET /health" } },
         { status: 404, headers: cors });
 
     return handleRelay(request, env, cors);
