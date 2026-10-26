@@ -3038,11 +3038,12 @@ function setAccountMenu(open) {
 
 els.signinBtn.addEventListener("click", (e) => {
   e.stopPropagation();
+  if (!currentUser) { setAccountMenu(false); openLogin(); return; }
   setAccountMenu(els.accountMenu.hidden);
 });
 els.accountMenu.addEventListener("click", (e) => e.stopPropagation());
 els.amSettingsBtn.addEventListener("click", () => { setAccountMenu(false); openSettings(); });
-els.amSignInBtn.addEventListener("click", () => { setAccountMenu(false); els.googleSignInBtn.click(); });
+els.amSignInBtn.addEventListener("click", () => { setAccountMenu(false); openLogin(); });
 els.amSignOutBtn.addEventListener("click", () => { setAccountMenu(false); els.googleSignOutBtn.click(); });
 els.amSwitchBtn.addEventListener("click", async () => {
   setAccountMenu(false);
@@ -3050,15 +3051,9 @@ els.amSwitchBtn.addEventListener("click", async () => {
   try {
     const { auth, mods } = await ensureAuth();
     await mods.signOut(auth);
-    const provider = new mods.GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
-    await mods.signInWithPopup(auth, provider);
-    toast("Switched account.");
+    openLogin();
   } catch (err) {
-    const cancelled = String(err?.code || "").includes("popup-closed-by-user")
-      || String(err?.code || "").includes("cancelled");
-    toast(cancelled ? "Sign-in cancelled — you are signed out."
-      : "Could not switch account: " + String(err?.message || err).slice(0, 120));
+    toast("Could not switch account: " + String(err?.message || err).slice(0, 120));
   } finally {
     els.amSwitchBtn.disabled = false;
   }
@@ -3983,10 +3978,19 @@ document.querySelectorAll(".adv[data-adv]").forEach(d => {
   });
 });
 
-/* ---------- firebase google sign-in ---------- */
+/* ---------- firebase sign-in ---------- */
 els.authStatus = $("#authStatus");
 els.googleSignInBtn = $("#googleSignInBtn");
 els.googleSignOutBtn = $("#googleSignOutBtn");
+
+els.loginScreen = $("#loginScreen");
+els.loginClose = $("#loginClose");
+els.loginGoogle = $("#loginGoogle");
+els.loginForm = $("#loginForm");
+els.loginEmail = $("#loginEmail");
+els.loginPassword = $("#loginPassword");
+els.loginError = $("#loginError");
+els.loginSubmit = $("#loginSubmit");
 
 let fbAuth = null, fbMods = null, currentUser = null;
 
@@ -4010,17 +4014,136 @@ async function ensureAuth() {
   return { auth: fbAuth, mods: authMod };
 }
 
-els.googleSignInBtn.addEventListener("click", async () => {
-  els.googleSignInBtn.disabled = true;
+/* ---------- login ----------
+   One card for both ways in. The screen is opaque, so the chat and the top bar
+   are not visible behind it; the card is the only thing in view. */
+let loginNext = null;
+let loginBusy = false;
+let loginReturnFocus = null;
+
+function setLoginError(message) {
+  els.loginError.textContent = message || "";
+  els.loginError.hidden = !message;
+}
+
+function openLogin(next) {
+  loginNext = typeof next === "function" ? next : null;
+  loginReturnFocus = document.activeElement;
+  setLoginError("");
+  els.loginForm.reset();
+  els.loginScreen.hidden = false;
+  document.body.classList.add("login-open");
+  setTimeout(() => els.loginEmail.focus(), 40);
+}
+
+function hideLogin() {
+  els.loginScreen.hidden = true;
+  document.body.classList.remove("login-open");
+  setLoginError("");
+  if (loginReturnFocus && typeof loginReturnFocus.focus === "function")
+    loginReturnFocus.focus();
+  loginReturnFocus = null;
+}
+
+/* Closing by hand leaves a pending publish where it was; the continuation
+   only runs after a successful sign-in. */
+function closeLogin() {
+  loginNext = null;
+  hideLogin();
+}
+
+function finishLogin() {
+  const next = loginNext;
+  loginNext = null;
+  hideLogin();
+  if (next) setTimeout(next, 0);
+}
+
+function firebaseLoginMessage(err) {
+  const code = String(err?.code || "");
+  if (code.includes("operation-not-allowed"))
+    return "Email login is not switched on in Firebase yet. Enable Email/Password under Authentication → Sign-in method.";
+  if (code.includes("invalid-email")) return "That email address does not look right.";
+  if (code.includes("weak-password")) return "Use at least 6 characters for the password.";
+  if (code.includes("email-already-in-use")) return "That email already has an account — check the password.";
+  if (code.includes("wrong-password")) return "That password is not right for this email.";
+  if (code.includes("user-disabled")) return "This account is disabled.";
+  if (code.includes("too-many-requests")) return "Too many attempts — wait a moment and try again.";
+  if (code.includes("network-request-failed")) return "The network dropped in the middle. Try again.";
+  if (code.includes("popup-blocked")) return "The browser blocked the Google window — allow popups for this page.";
+  return String(err?.message || err || "Login failed.").slice(0, 180);
+}
+
+els.loginClose.addEventListener("click", closeLogin);
+els.loginScreen.addEventListener("click", (e) => {
+  if (e.target === els.loginScreen) closeLogin();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !els.loginScreen.hidden) closeLogin();
+});
+
+els.loginGoogle.addEventListener("click", async () => {
+  if (loginBusy) return;
+  loginBusy = true;
+  els.loginGoogle.disabled = true;
+  setLoginError("");
   try {
     const { auth, mods } = await ensureAuth();
-    await mods.signInWithPopup(auth, new mods.GoogleAuthProvider());
+    const provider = new mods.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    await mods.signInWithPopup(auth, provider);
+    finishLogin();
   } catch (err) {
-    toast("Sign-in failed: " + String(err?.message || err).slice(0, 140));
+    const code = String(err?.code || "");
+    if (!/popup-closed|cancelled/.test(code)) setLoginError(firebaseLoginMessage(err));
   } finally {
-    els.googleSignInBtn.disabled = false;
+    loginBusy = false;
+    els.loginGoogle.disabled = false;
   }
 });
+
+els.loginForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (loginBusy) return;
+  const email = els.loginEmail.value.trim();
+  const password = els.loginPassword.value;
+  if (!email) { setLoginError("Enter your email address."); return; }
+  if (password.length < 6) { setLoginError("Use at least 6 characters for the password."); return; }
+  loginBusy = true;
+  els.loginSubmit.disabled = true;
+  els.loginGoogle.disabled = true;
+  setLoginError("");
+  try {
+    const { auth, mods } = await ensureAuth();
+    try {
+      await mods.signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      const unknown = ["auth/user-not-found", "auth/invalid-credential"].includes(err?.code);
+      if (!unknown) throw err;
+      /* First time on this email: make the account with the same details. An
+         existing email lands in email-already-in-use just below. */
+      try {
+        const cred = await mods.createUserWithEmailAndPassword(auth, email, password);
+        if (cred.user && !cred.user.displayName)
+          await mods.updateProfile(cred.user, { displayName: email.split("@")[0] }).catch(() => {});
+        toast("Account created — you are signed in.");
+      } catch (err2) {
+        if (err2?.code === "auth/email-already-in-use")
+          throw new Error("That email already has an account — check the password.");
+        throw err2;
+      }
+    }
+    finishLogin();
+  } catch (err) {
+    setLoginError(firebaseLoginMessage(err));
+  } finally {
+    loginBusy = false;
+    els.loginSubmit.disabled = false;
+    els.loginGoogle.disabled = false;
+  }
+});
+
+els.googleSignInBtn.addEventListener("click", () => openLogin());
 
 els.googleSignOutBtn.addEventListener("click", async () => {
   if (fbAuth && fbMods) await fbMods.signOut(fbAuth);
@@ -4032,14 +4155,15 @@ function renderAuthUI() {
   els.amSignInBtn.hidden = !!currentUser;
   els.amSignOutBtn.hidden = !currentUser;
   els.amSwitchBtn.hidden = !currentUser;
+  const viaEmail = currentUser?.providerData?.[0]?.providerId === "password";
   els.authStatus.textContent = currentUser
-    ? `${currentUser.displayName || currentUser.email} — signed in with Google`
-    : "Configured — click Sign in with Google";
+    ? `${currentUser.displayName || currentUser.email} — signed in${viaEmail ? " with email" : " with Google"}`
+    : "Not signed in";
   const label = els.signinBtn.querySelector("span");
   let photo = els.signinBtn.querySelector("img");
 
   els.amSub.textContent = currentUser
-    ? (currentUser.email || "Signed in with Google")
+    ? (currentUser.email || "Signed in")
     : "Not signed in";
   els.amName.textContent = currentUser
     ? (currentUser.displayName || currentUser.email || "Account")
@@ -4067,7 +4191,7 @@ function renderAuthUI() {
       photo.src = currentUser.photoURL;
     } else if (photo) photo.remove();
   } else {
-    label.textContent = "Sign in";
+    label.textContent = "Login";
     els.signinBtn.classList.remove("signed-in");
     if (photo) photo.remove();
   }
@@ -4651,7 +4775,7 @@ function renderLibrary() {
   }
   els.libStatus.textContent = libResult.source === "supabase"
     ? libResult.count
-      ? `${libResult.count} ${libResult.count === 1 ? "entry" : "entries"} in the library — ${myPublications()} of ${LIB_LIMIT} yours.`
+      ? `${libResult.count} ${libResult.count === 1 ? "entry" : "entries"} in the library — ${currentUser ? `${accountPublications()} of ${LIB_LIMIT} yours.` : "log in to publish."}`
       : "Connected to the library — it is empty. Publish something from Extension Maker."
     : "Could not reach the library — showing the built-in demo set.";
   const installed = new Set(state.extensions.map(x => x.libId).filter(Boolean));
@@ -5150,6 +5274,16 @@ function myPublications() {
   return Object.keys(state.claims).length;
 }
 
+/* Ten to an account, not ten to a browser: count the library rows published
+   under this account's name, across devices. The guarded database functions
+   remain the hard stop underneath. */
+function accountPublications() {
+  const me = makerName().trim().toLowerCase();
+  if (currentUser && me && libResult?.source === "supabase")
+    return libResult.entries.filter(e => String(e.creator || "").trim().toLowerCase() === me).length;
+  return myPublications();
+}
+
 /* One uuid, minted the first time this browser publishes and reused for every
    row after it, so the database counts a maker rather than a row when it holds
    them to ten. */
@@ -5169,7 +5303,7 @@ async function publishToLibrary(d, onDone) {
   if (publishing) return;
   const creator = makerName();
   if (!creator) {
-    toast("Publishing puts your Google account name on the card — sign in first.");
+    openLogin();
     return;
   }
   const updating = !!d.rowId;
@@ -5177,8 +5311,8 @@ async function publishToLibrary(d, onDone) {
     toast("Only the maker can change that one — it was published from another browser.");
     return;
   }
-  if (!updating && myPublications() >= LIB_LIMIT) {
-    toast(`Ten published extensions is the limit for one maker — withdraw one first.`);
+  if (!updating && accountPublications() >= LIB_LIMIT) {
+    toast(`Ten published extensions is the limit for one account — withdraw one first.`);
     return;
   }
   const rowId = updating ? d.rowId : crypto.randomUUID();
@@ -5203,7 +5337,7 @@ async function publishToLibrary(d, onDone) {
     onDone?.(rowId);
     toast(updating
       ? `"${d.name}" updated in the library.`
-      : `"${d.name}" is published — ${myPublications()} of ${LIB_LIMIT}.`);
+      : `"${d.name}" is published — ${accountPublications()} of ${LIB_LIMIT}.`);
   } catch (err) {
     console.warn("Publish failed:", err);
     toast(`Could not publish — ${err.message}`);
@@ -5250,6 +5384,9 @@ function pubPreview() {
 }
 
 function openPublishDialog(x) {
+  /* Publishing carries an account name, so a guest meets the login screen
+     first and lands back here after signing in. */
+  if (!currentUser) { openLogin(() => openPublishDialog(x)); return; }
   pubTarget = x;
   pubShot = x.screenshot || "";
   $("#pubShot").value = "";
@@ -5259,7 +5396,7 @@ function openPublishDialog(x) {
     : "Anyone who opens the library will find it in their list.";
   $("#pubAs").textContent = makerName()
     ? `The card will read “by ${makerName()}”.`
-    : "Sign in with Google first — the card carries your account name, and nothing else can.";
+    : "Log in first — the card carries your account name, and nothing else can.";
   pubShotNote();
   pubPreview();
   $("#extPublishDialog").hidden = false;

@@ -147,7 +147,9 @@ input, textarea { font: inherit; color: inherit; }
   .sidebar.collapsed .sidebar-nav { padding: 0 10px 10px; }
   .sidebar.collapsed .nav-item,
   .sidebar.collapsed .new-chat-btn { justify-content: center; gap: 0; padding-left: 0; padding-right: 0; }
-  /* a full-width block would be too heavy for a 68px rail */
+  /* a full-width block would be too heavy for a 68px rail, and a wide one makes
+     the hover state a rectangle — every icon in the rail is a 40px square */
+  .sidebar.collapsed .nav-item,
   .sidebar.collapsed .new-chat-btn { width: 40px; height: 40px; margin: 0 auto; border-radius: var(--radius-sm); }
   .sidebar.collapsed .new-chat-wrap { padding: 0 10px 14px; }
   .sidebar.collapsed .search-wrap,
@@ -157,7 +159,8 @@ input, textarea { font: inherit; color: inherit; }
   .sidebar.collapsed .new-chat-btn span,
   .sidebar.collapsed .signin-btn span { display: none; }
   .sidebar.collapsed .sidebar-footer { flex-direction: column; gap: 4px; padding: 12px 10px 14px; }
-  .sidebar.collapsed .signin-btn { padding: 8px 10px; }
+  .sidebar.collapsed .signin-btn { width: 40px; height: 40px; padding: 0; justify-content: center; border-radius: var(--radius-sm); }
+  .sidebar.collapsed .sidebar-footer .icon-btn { width: 40px; height: 40px; }
   /* the account button drops its label in the rail, so it needs a glyph to
      stand on — but only for an account that has no photo to show */
   .sidebar.collapsed .signin-btn.signed-in:not(:has(.user-photo)) svg { display: inline-block; }
@@ -239,6 +242,9 @@ input, textarea { font: inherit; color: inherit; }
 .history-empty { padding: 10px; color: var(--text-faint); font-size: 13px; }
 
 .sidebar-footer {
+  /* the rail hides the history, which is the only thing that grows, so the
+     account and settings need auto margins to stay at the bottom */
+  margin-top: auto;
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
   padding: 12px 12px 14px; border-top: 1px solid var(--border);
 }
@@ -314,6 +320,64 @@ input, textarea { font: inherit; color: inherit; }
 }
 .modal-header h2 { font-family: var(--serif); font-size: 20px; font-weight: 600; }
 .modal-body { display: flex; overflow-y: auto; }
+
+/* ---------- login ----------
+   A screen of its own: the workspace sits behind an opaque page colour, and
+   the card is the only thing in view. */
+.login-screen {
+  position: fixed; inset: 0; z-index: 600;
+  display: grid; place-items: center; padding: 20px;
+  background: var(--bg);
+  animation: fadein .18s ease;
+}
+.login-screen[hidden] { display: none; }
+body.login-open { overflow: hidden; }
+.login-card {
+  position: relative; width: min(400px, 100%);
+  padding: 30px 28px 26px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .18);
+}
+.login-close { position: absolute; top: 10px; right: 10px; }
+.login-mark { display: block; width: 42px; height: 42px; margin-bottom: 15px; }
+.login-card h2 { font-family: var(--serif); font-size: 28px; font-weight: 600; line-height: 1.1; }
+.login-sub { margin-top: 6px; color: var(--text-soft); font-size: 13.5px; line-height: 1.5; }
+.login-google {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  width: 100%; margin-top: 22px; padding: 11px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-2); color: var(--text);
+  font-size: 14px; font-weight: 600;
+  transition: background .15s;
+}
+.login-google:hover { background: var(--bg); }
+.login-google:disabled { opacity: .55; cursor: default; }
+.login-or {
+  display: flex; align-items: center; gap: 10px;
+  margin: 18px 0 4px; color: var(--text-faint);
+  font-size: 11.5px; letter-spacing: .3px;
+}
+.login-or::before, .login-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.login-form { display: grid; gap: 6px; }
+.login-form label { margin-top: 9px; font-size: 12px; font-weight: 600; color: var(--text-soft); }
+.login-form input {
+  width: 100%; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg); color: var(--text);
+  font: inherit; font-size: 14px; outline: none;
+  transition: border-color .15s;
+}
+.login-form input:focus { border-color: var(--text-faint); }
+.login-error {
+  margin: 9px 0 0; padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #c0392b 10%, transparent);
+  color: #c0392b; font-size: 12.5px; line-height: 1.45;
+}
+.login-error[hidden] { display: none; }
+.login-submit { width: 100%; margin-top: 13px; padding: 10px 18px; }
+.login-hint { margin-top: 3px; color: var(--text-faint); font-size: 11.5px; line-height: 1.45; text-align: center; }
+
 .settings-nav {
   width: 150px; flex-shrink: 0;
   padding: 12px 10px; border-right: 1px solid var(--border);

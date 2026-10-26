@@ -36,11 +36,17 @@
     .nav .brand-mark { width: 30px; height: 30px; flex: 0 0 30px; }
 
     /* The chat is the first screen, and it keeps the app's own proportions.
-       The shell is one viewport tall, less the fixed nav's height. */
-    .hero-shell { display: flex; height: calc(100dvh - 62px); }
+       The shell is one viewport tall, less the fixed nav's height — a minimum,
+       so a short window grows the page instead of clipping the wordmark. */
+    .hero-shell { display: flex; min-height: calc(100dvh - 62px); }
     .hero-shell .main { flex: 1; min-width: 0; }
+    /* The app sheet makes the fresh-chat column its own scroller and contains
+       its overscroll. Here the landing is one scrolling document, so that box
+       would swallow the wheel: it never overflows on its own, and contain stops
+       the scroll from reaching the page. */
+    .hero-shell .main.fresh { overflow: visible; overscroll-behavior: auto; }
     @media (max-width: 620px) {
-      .hero-shell { height: calc(100dvh - 58px); }
+      .hero-shell { min-height: calc(100dvh - 58px); }
     }
 
     /* ---------- closing ---------- */
