@@ -1430,15 +1430,16 @@ button:disabled { opacity: .5; cursor: default; }
   .composer-bar { display: contents; }
   .composer-left { order: 1; flex-shrink: 0; }
   .input-wrap { order: 2; flex: 1 1 90px; min-width: 0; }
-  /* the model is a setting you check, the arrow is what you press: the setting
-     goes to the top of the right edge and the arrow keeps the bottom */
-  .composer-right {
-    order: 3; flex-shrink: 0; align-self: stretch; flex-direction: column;
-    align-items: flex-end; justify-content: space-between; gap: 4px;
-  }
+  /* the model pill has moved to the topbar, so the right end is only the arrow:
+     it keeps the bottom of the box, where the thumb already is */
+  .composer-right { order: 3; flex-shrink: 0; align-self: stretch; align-items: flex-end; }
   .attach-tray { order: 0; flex: 1 0 100%; }
   #micBtn, .char-count, .mp-star { display: none; }
   .composer textarea { padding: 9px 0; }
+  /* the picker is the last thing in the topbar, past its spacer, and its menu
+     has to fall down from there rather than rise out of the composer */
+  .topbar .model-picker { flex-shrink: 0; margin-right: 0; }
+  .topbar .model-menu { bottom: auto; top: calc(100% + 8px); }
   .chat { overscroll-behavior: contain; }
 
   /* a modal is the whole screen here, so its side tabs become a top strip */

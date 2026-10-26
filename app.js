@@ -3031,6 +3031,18 @@ document.querySelectorAll(".nav-item").forEach(btn => {
 els.newChat.addEventListener("click", newConversation);
 
 /* ---------- model picker ---------- */
+/* On a phone the model lives at the top right of the page instead of in the
+   composer: the box has one job there and the pill crowded out the words. */
+const modelHome = els.modelPicker.parentElement;
+const narrowChrome = window.matchMedia("(max-width: 860px)");
+
+function placeModelPicker() {
+  const want = narrowChrome.matches ? $(".topbar") : modelHome;
+  if (els.modelPicker.parentElement !== want) want.append(els.modelPicker);
+}
+narrowChrome.addEventListener("change", placeModelPicker);
+placeModelPicker();
+
 function setModelMenu(open) {
   els.modelMenu.hidden = !open;
   els.modelPicker.classList.toggle("open", open);
