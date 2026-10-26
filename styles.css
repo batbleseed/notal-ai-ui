@@ -1420,12 +1420,14 @@ button:disabled { opacity: .5; cursor: default; }
   .composer-wrap { padding: 6px 12px 12px;
     padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   /* One row on a phone: the plus at the left edge, the words in the middle and
-     the arrow at the right, all level with each other. The bar's two groups
-     become the ends of that row, so the box reads as one control rather than a
-     form with a footer. The model has gone up to the topbar, and dictation and
-     the count step out — there is no room for a fourth thing. */
+     the arrow at the right. They sit on the bottom of the box, so a message
+     that grows to several lines takes the arrow down with it instead of leaving
+     it stranded in the middle. The bar's two groups become the ends of that row,
+     so the box reads as one control rather than a form with a footer. The model
+     has gone up to the topbar, and dictation and the count step out — there is
+     no room for a fourth thing. */
   .composer {
-    flex-direction: row; flex-wrap: wrap; align-items: center;
+    flex-direction: row; flex-wrap: wrap; align-items: flex-end;
     gap: 2px; padding: 5px 6px 5px 8px;
   }
   .composer-bar { display: contents; }
