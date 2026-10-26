@@ -2823,10 +2823,10 @@ const SUGGESTIONS = {
   ],
 };
 
-/* The browse syntax is worth a hint where it is actually used, otherwise it is
-   only knowable from the system prompt. */
+/* The browse syntax has to be spelled out somewhere, and the placeholder is too
+   short for it now — the hints below the box and the docs carry it instead. */
 const PLACEHOLDER_BY_MODE = {
-  chat: "Message Notal AI… or hand me a page: [browse]https://…[/browse]",
+  chat: "Message Notal AI",
   coding: "Paste a bug, ask a question, or type a URL…",
 };
 
