@@ -145,6 +145,9 @@ input, textarea { font: inherit; color: inherit; }
     opacity: 1; border-color: var(--border); background: var(--surface);
   }
   .sidebar.collapsed .sidebar-nav { padding: 0 10px 10px; }
+  /* Search is a rail thing: an open sidebar already shows the recent list, and
+     the phone drawer keeps the button because it never folds to icons. */
+  .sidebar:not(.collapsed) #chatSearchBtn { display: none; }
   .sidebar.collapsed .nav-item { justify-content: center; gap: 0; padding-left: 0; padding-right: 0; }
   /* a full-width block would be too heavy for a 68px rail, and a wide one makes
      the hover state a rectangle — every icon in the rail is a 40px square */

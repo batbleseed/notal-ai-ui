@@ -399,8 +399,16 @@ function activeConv() {
   return state.conversations.find(c => c.id === state.activeId) ?? null;
 }
 
-/* ---------- conversations ---------- */
+/* ---------- conversations ----------
+   A chat is only a chat once something has been said in it. Pressing New chat
+   twice in a row, or once and then walking away, must not leave rows behind. */
 function newConversation() {
+  const current = activeConv();
+  if (current && !current.messages.length) {
+    els.input.focus();
+    return;
+  }
+  state.conversations = state.conversations.filter(c => c.messages.length);
   const conv = { id: crypto.randomUUID(), title: "New chat", messages: [], createdAt: Date.now(),
     projectId: state.activeProject };
   state.conversations.unshift(conv);
@@ -421,8 +429,9 @@ function openConversation(id) {
 }
 
 function renderHistory() {
-  const items = state.conversations.filter(c =>
-    !state.activeProject || (c.projectId ?? null) === state.activeProject);
+  /* only a chat with something said in it earns a row */
+  const items = state.conversations.filter(c => c.messages.length &&
+    (!state.activeProject || (c.projectId ?? null) === state.activeProject));
   els.historyList.innerHTML = "";
   if (!items.length) {
     els.historyList.innerHTML = `<li class="history-empty">No chats yet</li>`;
