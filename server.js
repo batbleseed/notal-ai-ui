@@ -36,7 +36,13 @@ http.createServer((req, res) => {
         res.end("Not found");
         return;
       }
-      res.writeHead(200, { "Content-Type": types[path.extname(file)] || "application/octet-stream" });
+      /* no-store: with no cache header at all the browser invents a freshness
+         lifetime, and a preview server that hands back yesterday's stylesheet is
+         worse than no server — every check against it looks like a passing one. */
+      res.writeHead(200, {
+        "Content-Type": types[path.extname(file)] || "application/octet-stream",
+        "Cache-Control": "no-store",
+      });
       res.end(data);
     });
   });
