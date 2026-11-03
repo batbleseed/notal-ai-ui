@@ -77,9 +77,18 @@ a { color: inherit; }
   justify-self: center; display: flex; align-items: center; gap: clamp(16px, 4vw, 44px);
   font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase;
 }
-.nav-links a { text-decoration: none; color: var(--text-soft); }
+.nav-links a { position: relative; text-decoration: none; color: var(--text-soft); padding-bottom: 5px; }
 .nav-links a:hover { color: var(--text); }
-.nav-links a[aria-current="page"] { color: var(--text); font-weight: 600; }
+/* The bar is drawn rather than a text-decoration, so it can grow in and sit on
+   its own line instead of crowding the descenders of a small caps label. */
+.nav-links a::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  border-radius: 2px; background: var(--accent);
+  transform: scaleX(0); transform-origin: center;
+  transition: transform .24s cubic-bezier(.22, 1, .36, 1);
+}
+.nav-links a.on::after, .nav-links a[aria-current="page"]::after { transform: scaleX(1); }
+.nav-links a.on, .nav-links a[aria-current="page"] { color: var(--text); font-weight: 600; }
 /* The way in is a chip of the same glass, not a slab of grey sitting on it. */
 .nav-cta {
   justify-self: end; display: inline-flex; align-items: center;
