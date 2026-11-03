@@ -101,6 +101,27 @@
       box-shadow: 0 18px 44px rgba(31, 30, 29, .1), var(--ring);
     }
 
+    /* What you type glows. The glyphs stay a deep readable green and the light
+       comes from the shadow around them — a pale green text colour on a white
+       box would be unreadable, and this is the same trick the workspace uses
+       for @plugin names. */
+    .hero-shell .composer textarea {
+      color: #16856b;
+      caret-color: #16856b;
+      text-shadow: 0 0 10px rgba(64, 214, 170, .5), 0 0 2px rgba(64, 214, 170, .6);
+      transition: text-shadow .2s;
+    }
+    .hero-shell .composer textarea::placeholder {
+      color: var(--text-faint);
+      text-shadow: none;
+    }
+    .hero-shell .composer:focus-within textarea {
+      text-shadow: 0 0 14px rgba(64, 214, 170, .68), 0 0 3px rgba(64, 214, 170, .8);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .hero-shell .composer textarea { transition: none; }
+    }
+
     /* The chat is the first screen, and it keeps the app's own proportions.
        The shell is one viewport tall, less the pill's height and its 20px gap —
        a minimum, so a short window grows the page instead of clipping the
