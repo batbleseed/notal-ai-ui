@@ -11,6 +11,11 @@
   --accent: #d97757;
   --serif: "Source Serif 4", Georgia, serif;
   --sans: Inter, system-ui, -apple-system, sans-serif;
+  /* One material for the bar and every chip on it: white at just over half with
+     the wash behind pulled through and saturated. The rim is a dark hairline —
+     a white edge on a white page draws no shape at all. */
+  --glass: rgba(255, 255, 255, .5);
+  --glass-edge: rgba(31, 30, 29, .1);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -18,25 +23,48 @@ body {
   background: var(--bg); color: var(--text);
   font-family: var(--sans); font-size: 16px; line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  padding-top: 62px; /* room for the fixed nav */
+  padding-top: 104px; /* room for the floating pill */
+}
+/* ---------- the wash ----------
+   Five soft pools over near-white, fixed to the window so the page drifts over
+   them instead of dragging them along. One sits behind the middle of the first
+   screen on purpose: glass only reads as glass when there is something showing
+   through it. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(46% 40% at 50% 2%, rgba(120, 222, 188, .6), transparent 70%),
+    radial-gradient(40% 36% at 10% 90%, rgba(52, 148, 166, .5), transparent 72%),
+    radial-gradient(46% 42% at 90% 94%, rgba(139, 120, 246, .5), transparent 72%),
+    radial-gradient(40% 30% at 50% 58%, rgba(126, 148, 236, .5), transparent 72%),
+    radial-gradient(26% 22% at 66% 44%, rgba(186, 132, 240, .34), transparent 70%),
+    #fbfaf8;
 }
 a { color: inherit; }
 .wrap { width: min(1040px, calc(100% - 48px)); margin: 0 auto; }
 
 /* ---------- nav ----------
-   The bar sticks to the top of the window while the page scrolls under it.
-   It is full-bleed so nothing shows at its sides, and its inline padding is
-   the same maths as .wrap, so the brand and the links stay on the measure. */
+   A floating pill, lifted off the top edge so the wash shows on all sides.
+   Three columns: the links sit in the middle of the bar itself, not in whatever
+   gap is left between two neighbours of different widths. */
 .nav {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  position: fixed; inset: 0 0 auto 0; z-index: 50;
-  padding: 16px max(24px, calc(50vw - 520px));
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  position: fixed; z-index: 50;
+  inset: 20px auto auto 50%; transform: translateX(-50%);
+  width: min(1160px, calc(100% - 32px));
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px;
+  padding: 9px 9px 9px 18px;
+  border: 1px solid var(--glass-edge); border-radius: 999px;
+  background: var(--glass);
+  box-shadow: 0 12px 34px rgba(31, 30, 29, .09), inset 0 1px 0 rgba(255, 255, 255, .55);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
 }
-.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 600; }
-/* the Notal mark: three petals around a core, built from the brand PNGs */
+/* The name is set to stand up to the mark beside it rather than trail it. */
+.brand {
+  justify-self: start; display: inline-flex; align-items: center; gap: 11px;
+  text-decoration: none; font-family: var(--serif);
+  font-size: 25px; font-weight: 600; letter-spacing: -.4px; white-space: nowrap;
+}
 .notal-mark { position: relative; display: inline-block; width: 100%; height: 100%; }
 .notal-mark::before, .notal-mark::after {
   content: ""; position: absolute; inset: 0;
@@ -45,10 +73,23 @@ a { color: inherit; }
 .notal-mark::before { background-image: url("icons/notal-petals.png"); }
 .notal-mark::after { background-image: url("icons/notal-core.png"); }
 .tile { width: 30px; height: 30px; flex-shrink: 0; }
-.nav-links { display: flex; align-items: center; gap: 22px; font-size: 14.5px; }
+.nav-links {
+  justify-self: center; display: flex; align-items: center; gap: clamp(16px, 4vw, 44px);
+  font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase;
+}
 .nav-links a { text-decoration: none; color: var(--text-soft); }
 .nav-links a:hover { color: var(--text); }
 .nav-links a[aria-current="page"] { color: var(--text); font-weight: 600; }
+/* The way in is a chip of the same glass, not a slab of grey sitting on it. */
+.nav-cta {
+  justify-self: end; display: inline-flex; align-items: center;
+  padding: 10px 20px; border-radius: 999px; text-decoration: none; white-space: nowrap;
+  border: 1px solid var(--glass-edge); background: rgba(255, 255, 255, .55);
+  color: var(--text);
+  font-size: 11.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  transition: background .15s, color .15s, transform .14s;
+}
+.nav-cta:hover { background: var(--text); color: #fff; transform: translateY(-1px); }
 
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
@@ -76,11 +117,14 @@ a { color: inherit; }
 .site-footer a { color: var(--text-soft); text-decoration: none; }
 .site-footer a:hover { color: var(--accent); }
 
-/* On a phone the brand and three words still fit; they only get closer. */
-@media (max-width: 620px) {
-  body { padding-top: 58px; }
-  .nav { padding-block: 14px; gap: 12px; }
-  .nav-links { gap: 14px; font-size: 13.5px; }
+/* On a phone the pill keeps the name and the way in; the links are a desk thing.
+   Two columns, not three with an empty one — a collapsed middle track still
+   splits the bar, which leaves the button short of the right edge. */
+@media (max-width: 640px) {
+  body { padding-top: 92px; }
+  .nav { inset: 14px auto auto 50%; padding: 8px 8px 8px 14px; grid-template-columns: auto 1fr; }
+  .brand { font-size: 21px; gap: 9px; }
+  .nav-links { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

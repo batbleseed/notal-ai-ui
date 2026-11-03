@@ -35,7 +35,7 @@
       gap: clamp(30px, 5vw, 64px); align-items: start;
       padding: 42px 0 78px;
     }
-    .docs-toc { position: sticky; top: 78px; display: grid; gap: 10px; }
+    .docs-toc { position: sticky; top: 92px; display: grid; gap: 10px; }
     .toc-k {
       font-size: 11.5px; font-weight: 600; letter-spacing: .7px;
       text-transform: uppercase; color: var(--text-faint);
@@ -52,7 +52,8 @@
 
     /* ---------- article ---------- */
     .doc { min-width: 0; max-width: 760px; }
-    .doc section { scroll-margin-top: 92px; }
+    /* clear the floating pill, not the old bar that sat flush to the top */
+    .doc section { scroll-margin-top: 116px; }
     .doc section + section { margin-top: 54px; padding-top: 42px; border-top: 1px solid var(--border); }
     .kicker {
       font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
@@ -173,10 +174,11 @@
         <span>Notal AI</span>
       </a>
       <div class="nav-links">
+        <a href="#workspace">Features</a>
         <a href="./" aria-current="page">Docs</a>
-        <a href="../chat/">Chat</a>
         <a href="../oldindex.html#demo">Preview</a>
       </div>
+      <a class="nav-cta" href="../chat/">Chat with Notal AI</a>
     </nav>
 
     <header class="docs-hero">
