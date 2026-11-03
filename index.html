@@ -30,8 +30,10 @@
        One recipe for both the pill and the box, so they read as the same
        material: white at just over half, the wash behind them pulled through
        and saturated so the mint and violet colour the frost rather than
-       disappearing under it. */
-    :root { --glass: rgba(255, 255, 255, .52); --glass-edge: rgba(255, 255, 255, .65); }
+       disappearing under it. The rim is a dark hairline, not a white one — a
+       white edge on a white page draws no shape at all, which is why the box
+       looked solid while the pill, sitting over the mint, did not. */
+    :root { --glass: rgba(255, 255, 255, .5); --glass-edge: rgba(31, 30, 29, .1); }
 
     /* ---------- the floating pill ----------
        One rounded bar carrying the mark, the links and the way in, lifted off
@@ -68,14 +70,17 @@
 
     /* ---------- the wash ----------
        Four soft pools over near-white, fixed to the window so the page drifts
-       over them rather than dragging them along. */
+       over them rather than dragging them along. The middle one sits behind the
+       composer on purpose: glass only reads as glass when there is something to
+       see through it, and the box was parked on the whitest part of the page. */
     body::before {
       content: ""; position: fixed; inset: 0; z-index: -1;
       background:
         radial-gradient(46% 40% at 50% 2%, rgba(120, 222, 188, .6), transparent 70%),
         radial-gradient(40% 36% at 10% 90%, rgba(52, 148, 166, .5), transparent 72%),
         radial-gradient(46% 42% at 90% 94%, rgba(139, 120, 246, .5), transparent 72%),
-        radial-gradient(34% 30% at 54% 64%, rgba(104, 128, 214, .3), transparent 70%),
+        radial-gradient(40% 30% at 50% 58%, rgba(126, 148, 236, .5), transparent 72%),
+        radial-gradient(26% 22% at 66% 44%, rgba(186, 132, 240, .34), transparent 70%),
         #fbfaf8;
     }
     /* The app sheet paints the chat column with its own wash. Here the pools
