@@ -26,27 +26,39 @@
     .nav .brand { display: inline-flex; align-items: center; white-space: nowrap; }
     .nav .brand-mark { width: 30px; height: 30px; flex: 0 0 30px; }
 
+    /* ---------- the glass ----------
+       One recipe for both the pill and the box, so they read as the same
+       material: white at just over half, the wash behind them pulled through
+       and saturated so the mint and violet colour the frost rather than
+       disappearing under it. */
+    :root { --glass: rgba(255, 255, 255, .52); --glass-edge: rgba(255, 255, 255, .65); }
+
     /* ---------- the floating pill ----------
        One rounded bar carrying the mark, the links and the way in, lifted off
-       the top edge so the wash behind it can be seen on all sides. */
+       the top edge so the wash behind it can be seen on all sides.
+       Three columns — the links sit in the middle of the bar itself, not in the
+       gap left over between two unequal neighbours. */
     body { padding-top: 104px; }
     .nav {
       inset: 20px auto auto 50%; transform: translateX(-50%);
       width: min(1160px, calc(100% - 32px));
-      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px;
       position: fixed; z-index: 50;
       padding: 9px 9px 9px 18px;
-      border: 1px solid rgba(31, 30, 29, .09); border-radius: 999px;
-      background: rgba(255, 255, 255, .7);
-      box-shadow: 0 12px 34px rgba(31, 30, 29, .1);
-      -webkit-backdrop-filter: blur(16px) saturate(150%);
-      backdrop-filter: blur(16px) saturate(150%);
+      border: 1px solid var(--glass-edge); border-radius: 999px;
+      background: var(--glass);
+      box-shadow: 0 12px 34px rgba(31, 30, 29, .09), inset 0 1px 0 rgba(255, 255, 255, .55);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
     }
+    .nav .brand { justify-self: start; }
     .nav-links {
+      justify-self: center;
       display: flex; align-items: center; gap: clamp(16px, 4vw, 44px);
       font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase;
     }
     .nav-cta {
+      justify-self: end;
       padding: 10px 20px; border-radius: 999px; text-decoration: none; white-space: nowrap;
       background: rgba(31, 30, 29, .07); color: var(--text);
       font-size: 11.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
@@ -70,6 +82,20 @@
        behind have to reach through, so the page chrome goes clear. */
     .hero-shell, .hero-shell .main, .closing { background: none; }
 
+    /* The box takes the same glass as the pill. The app sheet gives it a raised
+       surface, which on this page would hide the wash right where the eye is. */
+    .hero-shell .composer {
+      background: var(--glass);
+      border-color: var(--glass-edge);
+      box-shadow: 0 18px 44px rgba(31, 30, 29, .1), inset 0 1px 0 rgba(255, 255, 255, .5);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
+    }
+    .hero-shell .composer:focus-within {
+      border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-edge));
+      box-shadow: 0 18px 44px rgba(31, 30, 29, .1), var(--ring);
+    }
+
     /* The chat is the first screen, and it keeps the app's own proportions.
        The shell is one viewport tall, less the pill's height and its 20px gap —
        a minimum, so a short window grows the page instead of clipping the
@@ -83,10 +109,12 @@
     .hero-shell .main.fresh { overflow: visible; overscroll-behavior: auto; }
 
     @media (max-width: 640px) {
-      /* the pill keeps the mark and the way in; the links are a desk thing */
+      /* the pill keeps the mark and the way in; the links are a desk thing.
+         Two columns, not three with an empty one: a collapsed middle track still
+         splits the bar, which left the button short of the right edge. */
       .nav-links { display: none; }
+      .nav { inset: 14px auto auto 50%; padding: 8px 8px 8px 14px; grid-template-columns: auto 1fr; }
       body { padding-top: 92px; }
-      .nav { inset: 14px auto auto 50%; padding: 8px 8px 8px 14px; }
       .hero-shell { min-height: calc(100dvh - 92px); }
     }
 
