@@ -20,6 +20,7 @@
        and the chat below is drawn by the same rules as chat/ -->
   <link rel="stylesheet" href="site.css" />
   <link rel="stylesheet" href="styles.css" />
+  <script>document.documentElement.classList.add("js");</script>
   <style>
     /* The pill, the wash and the glass all live in site.css now, so the docs
        page carries the same chrome. What is left here is only what this page
@@ -73,6 +74,129 @@
       .hero-shell { min-height: calc(100dvh - 92px); }
     }
 
+    /* ---------- features ----------
+       Each figure is drawn in CSS: an orbit, a stack, a grid, concentric rings.
+       Nothing here is a picture of a thing — it is the thing's shape, moving. */
+    .features { padding: 96px 0 30px; }
+    .features h2 {
+      font-family: var(--serif); font-size: clamp(30px, 4.6vw, 46px); font-weight: 600;
+      line-height: 1.08; letter-spacing: -.6px; margin: 0 0 30px;
+    }
+    .feat {
+      display: grid; grid-template-columns: 260px minmax(0, 1fr);
+      gap: clamp(26px, 6vw, 70px); align-items: center;
+      padding: 42px 0; border-top: 1px solid rgba(31, 30, 29, .09);
+    }
+    /* Only hidden when script is running — with it off, the copy is simply
+       there and nothing waits for a class that will never arrive. */
+    .js .feat {
+      opacity: 0; transform: translateY(20px);
+      transition: opacity .55s ease, transform .55s cubic-bezier(.22, 1, .36, 1);
+    }
+    .feat.in { opacity: 1; transform: none; }
+    .feat h3 { font-family: var(--serif); font-size: 23px; font-weight: 600; margin: 0 0 9px; }
+    .feat p { color: var(--text-soft); font-size: 15.5px; line-height: 1.62; max-width: 58ch; margin: 0; }
+    .shape { position: relative; width: 260px; height: 200px; }
+
+    /* orbit: three satellites on one ring at three speeds — three providers,
+       one chat */
+    .orbit .ring {
+      position: absolute; left: 50%; top: 50%; width: 152px; height: 152px; margin: -76px 0 0 -76px;
+      border: 1px solid rgba(31, 30, 29, .18); border-radius: 50%;
+    }
+    .orbit .core {
+      position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px;
+      border-radius: 50%;
+      background: conic-gradient(from 200deg, #43c6ac, #5b6cff, #d97757, #43c6ac);
+      box-shadow: 0 0 26px rgba(91, 108, 255, .35);
+    }
+    .orbit .sat {
+      position: absolute; left: 50%; top: 50%; width: 152px; height: 152px; margin: -76px 0 0 -76px;
+      animation: nb-spin 12s linear infinite;
+    }
+    .orbit .sat::after {
+      content: ""; position: absolute; top: -7px; left: 50%; width: 14px; height: 14px; margin-left: -7px;
+      border-radius: 50%; background: #2fae8f; box-shadow: 0 0 12px rgba(47, 174, 143, .6);
+    }
+    .orbit .s2 { animation-duration: 19s; animation-direction: reverse; }
+    .orbit .s2::after { background: #6d5cf0; box-shadow: 0 0 12px rgba(109, 92, 240, .6); }
+    .orbit .s3 { animation-duration: 27s; animation-delay: -9s; }
+    .orbit .s3::after { width: 10px; height: 10px; margin-left: -5px; background: var(--accent); box-shadow: 0 0 12px rgba(217, 119, 87, .6); }
+    @keyframes nb-spin { to { transform: rotate(360deg); } }
+
+    /* stack: projects, memory, skills — three sheets that fan apart as you reach
+       them, then drift together again */
+    .stack { animation: nb-drift 7s ease-in-out infinite; }
+    .stack .layer {
+      position: absolute; left: 50%; top: 50%; width: 150px; height: 96px;
+      border: 1px solid rgba(31, 30, 29, .18); border-radius: 14px;
+      background: rgba(255, 255, 255, .55);
+      -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+      transition: transform .7s cubic-bezier(.22, 1, .36, 1);
+    }
+    .stack .l3 { transform: translate(-50%, -50%) rotate(-3deg); }
+    .stack .l2 { transform: translate(-50%, -50%) translate(6px, 6px) rotate(2deg); }
+    .stack .l1 {
+      transform: translate(-50%, -50%) translate(12px, 12px) rotate(5deg);
+      background: rgba(47, 174, 143, .16); border-color: rgba(47, 174, 143, .45);
+    }
+    .feat.in .stack .l3 { transform: translate(-50%, -50%) translate(-34px, -30px) rotate(-9deg); }
+    .feat.in .stack .l2 { transform: translate(-50%, -50%) translate(2px, 2px) rotate(1deg); }
+    .feat.in .stack .l1 { transform: translate(-50%, -50%) translate(32px, 30px) rotate(8deg); }
+    @keyframes nb-drift { 50% { transform: translateY(-7px); } }
+
+    /* grid: nine cells lighting in turn — extensions switching on down the list */
+    .grid { display: grid; grid-template-columns: repeat(3, 52px); gap: 12px; place-content: center; }
+    .grid span {
+      width: 52px; height: 52px; border-radius: 14px;
+      border: 1px solid rgba(31, 30, 29, .16); background: rgba(255, 255, 255, .5);
+      animation: nb-cell 3.8s ease-in-out infinite;
+    }
+    .grid span:nth-child(1) { animation-delay: 0s; }
+    .grid span:nth-child(2) { animation-delay: .16s; }
+    .grid span:nth-child(3) { animation-delay: .32s; }
+    .grid span:nth-child(4) { animation-delay: .48s; }
+    .grid span:nth-child(5) { animation-delay: .64s; }
+    .grid span:nth-child(6) { animation-delay: .8s; }
+    .grid span:nth-child(7) { animation-delay: .96s; }
+    .grid span:nth-child(8) { animation-delay: 1.12s; }
+    .grid span:nth-child(9) { animation-delay: 1.28s; }
+    @keyframes nb-cell {
+      0%, 62%, 100% { transform: none; background: rgba(255, 255, 255, .5); border-color: rgba(31, 30, 29, .16); }
+      26% { transform: scale(.84) rotate(7deg); background: rgba(47, 174, 143, .5); border-color: rgba(47, 174, 143, .65); }
+    }
+
+    /* rings: three circles around one point, breathing outward and coming back —
+       nothing leaves the device */
+    .rings span {
+      position: absolute; left: 50%; top: 50%; border-radius: 50%;
+      border: 1px solid rgba(31, 30, 29, .16); transform: translate(-50%, -50%);
+    }
+    .rings .r1 { width: 62px; height: 62px; animation: nb-pulse 4.6s ease-in-out infinite; }
+    .rings .r2 { width: 108px; height: 108px; animation: nb-pulse 4.6s ease-in-out .35s infinite; }
+    .rings .r3 { width: 154px; height: 154px; animation: nb-pulse 4.6s ease-in-out .7s infinite; }
+    .rings .dot {
+      width: 16px; height: 16px; border: 0; background: #2fae8f;
+      box-shadow: 0 0 16px rgba(47, 174, 143, .65);
+      animation: nb-breathe 3.2s ease-in-out infinite;
+    }
+    @keyframes nb-pulse { 40% { transform: translate(-50%, -50%) scale(1.1); border-color: rgba(47, 174, 143, .5); } }
+    @keyframes nb-breathe { 50% { transform: translate(-50%, -50%) scale(1.35); } }
+
+    @media (max-width: 720px) {
+      .feat { grid-template-columns: 1fr; gap: 22px; padding: 34px 0; }
+      .shape { width: 100%; height: 180px; }
+      .grid { justify-content: start; }
+    }
+
+    /* Nothing here is load-bearing, so it all stops when you ask the page to
+       calm down — and the copy still arrives, already in place. */
+    @media (prefers-reduced-motion: reduce) {
+      .feat { opacity: 1; transform: none; transition: none; }
+      .stack, .orbit .sat, .grid span, .rings span, .rings .dot { animation: none; }
+      .stack .layer { transition: none; }
+    }
+
     /* ---------- closing ---------- */
     .closing { text-align: center; padding: 84px 0 80px; }
     .closing h2 {
@@ -92,7 +216,7 @@
       <span>Notal AI</span>
     </a>
     <div class="nav-links">
-      <a href="docs/#workspace">Features</a>
+      <a href="#features">Features</a>
       <a href="docs/">Docs</a>
       <a href="oldindex.html#demo">Preview</a>
     </div>
@@ -169,6 +293,69 @@
     </main>
   </div>
 
+  <!-- Four things the app actually does, each drawn rather than illustrated:
+       orbiting models, a stack of context, a grid that lights cell by cell, and
+       rings that stay put. They come in as you reach them and keep moving
+       slowly; prefers-reduced-motion stops all of it. -->
+  <section class="features" id="features">
+    <div class="wrap">
+      <p class="eyebrow">What is in the box</p>
+      <h2>Four shapes that do the work.</h2>
+
+      <div class="feat">
+        <div class="shape orbit" aria-hidden="true">
+          <span class="ring"></span>
+          <span class="sat s1"></span><span class="sat s2"></span><span class="sat s3"></span>
+          <span class="core"></span>
+        </div>
+        <div class="copy">
+          <h3>Your models, not ours</h3>
+          <p>Add a provider key and the chat runs through it — Anthropic, OpenAI, Google, or any
+             Open-compatible endpoint. There is also a model that runs in this tab over WebGPU, so a
+             first answer needs no account and no network at all.</p>
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="copy">
+          <h3>Projects, memory and skills</h3>
+          <p>Chats belong to projects. Memory holds the things you want remembered across them, and
+             skills are instructions you write once and switch on when you want them. The composer
+             reads all three before it answers.</p>
+        </div>
+        <div class="shape stack" aria-hidden="true">
+          <span class="layer l3"></span><span class="layer l2"></span><span class="layer l1"></span>
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="shape grid" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="copy">
+          <h3>Extensions, and plugins that can act</h3>
+          <p>An extension is a prompt add-on, or CSS and HTML drawn over the workspace itself — the
+             Extension Maker builds it in place. Plugins reach GitHub, YouTube, Gmail and Drive, and
+             every write stops for an approval card first. Nothing is sent anywhere without you
+             seeing the call.</p>
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="copy">
+          <h3>It stays on this machine</h3>
+          <p>Chats, projects, memory, skills and keys live in this browser on this device. There is
+             no Notal server to hold them, and signing in buys a name on a published card — not a
+             backup. Clear the browser storage and it is gone, which is the point.</p>
+        </div>
+        <div class="shape rings" aria-hidden="true">
+          <span class="r1"></span><span class="r2"></span><span class="r3"></span><span class="dot"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="closing">
     <div class="wrap">
       <h2>Chat with Notal AI.</h2>
@@ -212,6 +399,23 @@
       try { sessionStorage.setItem("notal.handoff", text); } catch { /* storage off */ }
       location.assign("chat/");
     });
+
+    /* The four figures rise into place as you reach them, once each. The shapes
+       keep moving on their own; this only decides when they show up. */
+    const feats = document.querySelectorAll(".feat");
+    const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!("IntersectionObserver" in window) || calm) {
+      feats.forEach((f) => f.classList.add("in"));
+    } else {
+      const seen = new IntersectionObserver((rows) => {
+        for (const r of rows) {
+          if (!r.isIntersecting) continue;
+          r.target.classList.add("in");
+          seen.unobserve(r.target);
+        }
+      }, { threshold: 0.3 });
+      feats.forEach((f) => seen.observe(f));
+    }
 
     if ("serviceWorker" in navigator)
       navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => {});
