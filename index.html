@@ -281,6 +281,42 @@
       backdrop-filter: blur(16px) saturate(160%);
     }
     .closing .btn-ghost:hover { background: rgba(255, 255, 255, .74); border-color: rgba(47, 174, 143, .5); }
+
+    /* ---------- footer ----------
+       Columns of links in this page's own palette: headings in the mono face at
+       small caps, links plain until you reach one. Every link goes somewhere
+       that exists — the three "from source" labels are the honest version of
+       products that have no published build. */
+    .foot { padding-top: 78px; }
+    .foot .wrap { display: block; }
+    .foot-grid {
+      display: grid; grid-template-columns: 1.5fr repeat(4, 1fr);
+      gap: clamp(22px, 4vw, 46px); align-items: start;
+    }
+    .foot-brand .brand { font-size: 20px; }
+    .foot-brand p { margin: 14px 0 0; max-width: 32ch; font-size: 13.5px; color: var(--text-soft); }
+    .foot-col { display: grid; gap: 9px; align-content: start; }
+    .foot-col h3 {
+      margin: 0 0 3px; font-family: var(--mono); font-size: 11px; font-weight: 600;
+      letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint);
+    }
+    .foot-col a {
+      width: fit-content; font-size: 13.5px; color: var(--text-soft); text-decoration: none;
+    }
+    .foot-col a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+    .foot .wrap.foot-line {
+      display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between;
+      margin-top: 48px; padding-top: 20px; border-top: 1px solid rgba(31, 30, 29, .09);
+      font-size: 12.5px; color: var(--text-faint);
+    }
+    @media (max-width: 900px) {
+      .foot-grid { grid-template-columns: 1fr 1fr; }
+      .foot-brand { grid-column: 1 / -1; }
+      .foot-brand p { max-width: 48ch; }
+    }
+    @media (max-width: 520px) {
+      .foot-grid { grid-template-columns: 1fr; gap: 24px; }
+    }
   </style>
 </head>
 <body>
@@ -444,17 +480,67 @@
       <h2>Chat with Notal AI.</h2>
       <p class="closing-actions">
         <a class="btn btn-primary btn-lg" href="chat/">Open the chat →</a>
-        <a class="btn btn-ghost btn-lg" href="https://github.com/batbleseed/notal-ai-ui/tree/main/studio-app">Download the desktop app</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/batbleseed/notal-ai-ui/tree/main/studio-app">Desktop app, from source</a>
       </p>
       <p class="closing-note">Opens straight into the workspace in this tab. Nothing to install, nothing to sign up for.</p>
       <p class="closing-fine">No desktop installer is published yet — the Windows build comes from <code>studio-app/</code> in the repo.</p>
     </div>
   </section>
 
-  <footer class="site-footer">
+  <footer class="site-footer foot">
     <div class="wrap">
+      <div class="foot-grid">
+        <div class="foot-brand">
+          <a class="brand" href="./">
+            <span class="brand-mark notal-mark" aria-hidden="true"></span>
+            <span>Notal AI</span>
+          </a>
+          <p>A workspace for talking with models you bring yourself. Chats, projects, memory and
+             keys stay in this browser on this device.</p>
+        </div>
+
+        <div class="foot-col">
+          <h3>Product</h3>
+          <a href="chat/">Chat workspace</a>
+          <a href="#features">Features</a>
+          <a href="oldindex.html#demo">Scroll preview</a>
+          <a href="https://github.com/batbleseed/notal-ai-ui/tree/main/studio-app" target="_blank" rel="noreferrer">Desktop app, from source</a>
+          <a href="https://github.com/batbleseed/notal-ai-ui/tree/main/browser-extension" target="_blank" rel="noreferrer">Browser companion, from source</a>
+        </div>
+
+        <div class="foot-col">
+          <h3>In the workspace</h3>
+          <a href="docs/#models">Models and providers</a>
+          <a href="docs/#context">Projects and memory</a>
+          <a href="docs/#extensions">Extensions</a>
+          <a href="docs/#plugins">Plugins</a>
+          <a href="docs/#themes">Themes</a>
+          <a href="docs/#shortcuts">Shortcuts</a>
+        </div>
+
+        <div class="foot-col">
+          <h3>Documents</h3>
+          <a href="docs/">Docs home</a>
+          <a href="docs/#start">Start here</a>
+          <a href="docs/#workspace">The workspace</a>
+          <a href="docs/#privacy">Privacy and storage</a>
+          <a href="docs/#help">If something breaks</a>
+        </div>
+
+        <div class="foot-col">
+          <h3>Elsewhere</h3>
+          <a href="https://github.com/batbleseed/notal-ai-ui" target="_blank" rel="noreferrer">Source on GitHub</a>
+          <a href="https://github.com/batbleseed/notal-ai-ui/issues" target="_blank" rel="noreferrer">Issues</a>
+          <a href="https://github.com/batbleseed/notal-ai-ui/releases" target="_blank" rel="noreferrer">Releases</a>
+          <a href="https://github.com/batbleseed/notal-ai-ui/blob/main/SECURITY.md" target="_blank" rel="noreferrer">Security policy</a>
+          <a href="https://github.com/batbleseed/notal-ai-ui/blob/main/LICENSE" target="_blank" rel="noreferrer">MIT licence</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="wrap foot-line">
       <span>Notal AI · built by batbleseed · MIT licensed</span>
-      <span><a href="docs/">Docs</a> · <a href="https://github.com/batbleseed/notal-ai-ui" target="_blank" rel="noreferrer">Source on GitHub</a> · <a href="chat/">Open chat</a></span>
+      <span>No account needed to open it. No server holds your chats.</span>
     </div>
   </footer>
 
