@@ -115,11 +115,13 @@ a { color: inherit; }
 .nav-cta:hover .cta-mark .notal-mark { animation: cta-spin 1.6s linear infinite; }
 .nav-cta:focus-visible { outline: 2px solid rgba(47, 174, 143, .7); outline-offset: 2px; }
 @keyframes cta-spin { to { transform: rotate(360deg); } }
-/* The right end holds the way in and, on a phone, the three lines that open the
-   links. On a desk the links are already in the bar, so the burger has nothing
-   to do and the arrow stays where the label is. */
-.nav-side { justify-self: end; display: inline-flex; align-items: center; gap: 6px; }
-.nav-burger { display: none; }
+/* The three lines and the way in are separate grid items, so the burger can sit
+   in the middle of the bar on a phone while the button keeps the right end. On a
+   desk the burger is not a grid item at all. Both are pinned to row 1: with the
+   default sparse packing the cursor has already walked past the middle column by
+   the time the burger is placed, and it dropped onto a second line. */
+.nav-cta { grid-column: 3; grid-row: 1; }
+.nav-burger { display: none; grid-column: 2; grid-row: 1; justify-self: center; }
 .cta-arrow { display: none; }
 
 .btn {
@@ -150,7 +152,7 @@ a { color: inherit; }
 
 @media (max-width: 640px) {
   body { padding-top: 92px; }
-  .nav { inset: 14px auto auto 50%; padding: 8px 8px 8px 14px; grid-template-columns: auto 1fr; }
+  .nav { inset: 14px auto auto 50%; padding: 8px 8px 8px 14px; }
   .brand { font-size: 21px; gap: 9px; }
 
   /* The button is an arrow on a phone: its label is a whole line of words, and

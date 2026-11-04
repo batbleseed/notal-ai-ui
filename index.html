@@ -30,6 +30,13 @@
        reading pages size it with .tile; the nav needs its own fixed box */
     .nav .brand-mark { width: 30px; height: 30px; flex: 0 0 30px; }
 
+    /* The pointer's trail sits on the same layer as the wash, above it in paint
+       order because it is a real element, and below every word on the page. */
+    .dust {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      z-index: -1; pointer-events: none;
+    }
+
     /* The app sheet paints the chat column with its own wash. Here the pools
        behind have to reach through, so the page chrome goes clear. */
     .hero-shell, .hero-shell .main, .closing { background: none; }
@@ -210,6 +217,9 @@
   </style>
 </head>
 <body>
+  <!-- the pointer's trail, painted behind everything on the page -->
+  <canvas class="dust" id="dust" aria-hidden="true"></canvas>
+
   <nav class="nav">
     <a class="brand" href="./">
       <span class="brand-mark notal-mark" aria-hidden="true"></span>
@@ -220,16 +230,14 @@
       <a href="docs/">Docs</a>
       <a href="oldindex.html#demo">Preview</a>
     </div>
-    <div class="nav-side">
-      <a class="nav-cta" href="chat/" aria-label="Chat with Notal AI">
-        <span class="cta-mark" aria-hidden="true"><span class="notal-mark"></span></span>
-        <span class="cta-text">Chat with Notal AI</span>
-        <svg class="cta-arrow" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
-      </a>
-      <button class="nav-burger" type="button" aria-expanded="false" aria-controls="navLinks" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
+    <a class="nav-cta" href="chat/" aria-label="Chat with Notal AI">
+      <span class="cta-mark" aria-hidden="true"><span class="notal-mark"></span></span>
+      <span class="cta-text">Chat with Notal AI</span>
+      <svg class="cta-arrow" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+    </a>
+    <button class="nav-burger" type="button" aria-expanded="false" aria-controls="navLinks" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
   </nav>
 
   <!-- The new-chat screen, copied from chat/ with its own markup and styles:
@@ -276,7 +284,7 @@
                   </button>
                 </div>
               </div>
-              <button type="button" class="icon-btn" title="Dictate" aria-label="Voice input">
+              <button type="button" class="icon-btn" id="micBtn" title="Dictate" aria-label="Voice input">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3M8.5 21h7"/></svg>
               </button>
             </div>
@@ -423,6 +431,59 @@
         }
       }, { threshold: 0.3 });
       feats.forEach((f) => seen.observe(f));
+    }
+
+    /* ---------- pointer dust ----------
+       A few blue grains where the cursor has been, drifting up and fading out.
+       Mouse only, because a finger leaves no trail worth following; capped, and
+       it never runs in a hidden tab or when you asked for less motion. */
+    const dust = document.getElementById("dust");
+    if (dust && dust.getContext && !calm) {
+      const ctx = dust.getContext("2d");
+      const parts = [];
+      const MAX = 130;
+      let vw = 0, vh = 0, running = false;
+
+      const size = () => {
+        const dpr = Math.min(devicePixelRatio || 1, 2);
+        vw = innerWidth; vh = innerHeight;
+        dust.width = Math.round(vw * dpr);
+        dust.height = Math.round(vh * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      };
+      size();
+      addEventListener("resize", size);
+
+      addEventListener("pointermove", (e) => {
+        if (e.pointerType === "touch") return;
+        for (let i = 0; i < 2; i++) {
+          if (parts.length >= MAX) parts.shift();
+          parts.push({
+            x: e.clientX + (Math.random() - 0.5) * 12,
+            y: e.clientY + (Math.random() - 0.5) * 12,
+            vx: (Math.random() - 0.5) * 0.4,
+            vy: -0.12 - Math.random() * 0.42,
+            r: 1 + Math.random() * 2.3,
+            life: 1,
+          });
+        }
+        if (!running) { running = true; requestAnimationFrame(step); }
+      }, { passive: true });
+
+      function step() {
+        ctx.clearRect(0, 0, vw, vh);
+        for (let i = parts.length - 1; i >= 0; i--) {
+          const p = parts[i];
+          p.x += p.vx; p.y += p.vy; p.vy *= 0.99; p.life -= 0.011;
+          if (p.life <= 0) { parts.splice(i, 1); continue; }
+          ctx.beginPath();
+          ctx.fillStyle = "rgba(88, 118, 240, " + (p.life * 0.5).toFixed(3) + ")";
+          ctx.arc(p.x, p.y, p.r * (0.6 + p.life * 0.7), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        running = parts.length > 0 && !document.hidden;
+        if (running) requestAnimationFrame(step);
+      }
     }
 
     if ("serviceWorker" in navigator)
