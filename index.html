@@ -215,13 +215,21 @@
       <span class="brand-mark notal-mark" aria-hidden="true"></span>
       <span>Notal AI</span>
     </a>
-    <div class="nav-links">
+    <div class="nav-links" id="navLinks">
       <a href="#features">Features</a>
       <a href="docs/">Docs</a>
       <a href="oldindex.html#demo">Preview</a>
     </div>
-    <!-- Chat is the way in, so it is the button and not also a link -->
-    <a class="nav-cta" href="chat/"><span class="cta-mark" aria-hidden="true"><span class="notal-mark"></span></span>Chat with Notal AI</a>
+    <div class="nav-side">
+      <a class="nav-cta" href="chat/" aria-label="Chat with Notal AI">
+        <span class="cta-mark" aria-hidden="true"><span class="notal-mark"></span></span>
+        <span class="cta-text">Chat with Notal AI</span>
+        <svg class="cta-arrow" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+      </a>
+      <button class="nav-burger" type="button" aria-expanded="false" aria-controls="navLinks" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
   </nav>
 
   <!-- The new-chat screen, copied from chat/ with its own markup and styles:
@@ -241,7 +249,7 @@
       <footer class="composer-wrap">
         <form class="composer" id="composer" action="chat/" method="get">
           <div class="input-wrap">
-            <textarea id="input" rows="1" placeholder="Paste a bug, ask a question, or type a URL..." aria-label="Message Notal AI"></textarea>
+            <textarea id="input" rows="1" placeholder="Message Notal AI" aria-label="Message Notal AI"></textarea>
           </div>
           <div class="composer-bar">
             <div class="composer-left">

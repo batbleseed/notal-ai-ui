@@ -30,3 +30,32 @@
     if (match) mark(match);
   });
 })();
+
+/* The three lines. They only appear on a phone, where the links live in a panel
+   under the bar: choosing a link, tapping outside, Escape or widening the window
+   all put it away again. */
+(function () {
+  const nav = document.querySelector(".nav");
+  const burger = document.querySelector(".nav-burger");
+  if (!nav || !burger) return;
+
+  const set = (open) => {
+    nav.classList.toggle("open", open);
+    burger.setAttribute("aria-expanded", String(open));
+  };
+
+  burger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    set(!nav.classList.contains("open"));
+  });
+  document.addEventListener("click", (e) => {
+    if (nav.classList.contains("open") && !e.target.closest(".nav")) set(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") set(false);
+  });
+  nav.querySelectorAll(".nav-links a").forEach((a) => a.addEventListener("click", () => set(false)));
+
+  const wide = matchMedia("(min-width: 641px)");
+  if (wide.addEventListener) wide.addEventListener("change", (e) => { if (e.matches) set(false); });
+})();

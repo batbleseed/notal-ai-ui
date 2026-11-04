@@ -115,6 +115,12 @@ a { color: inherit; }
 .nav-cta:hover .cta-mark .notal-mark { animation: cta-spin 1.6s linear infinite; }
 .nav-cta:focus-visible { outline: 2px solid rgba(47, 174, 143, .7); outline-offset: 2px; }
 @keyframes cta-spin { to { transform: rotate(360deg); } }
+/* The right end holds the way in and, on a phone, the three lines that open the
+   links. On a desk the links are already in the bar, so the burger has nothing
+   to do and the arrow stays where the label is. */
+.nav-side { justify-self: end; display: inline-flex; align-items: center; gap: 6px; }
+.nav-burger { display: none; }
+.cta-arrow { display: none; }
 
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
@@ -142,14 +148,51 @@ a { color: inherit; }
 .site-footer a { color: var(--text-soft); text-decoration: none; }
 .site-footer a:hover { color: var(--accent); }
 
-/* On a phone the pill keeps the name and the way in; the links are a desk thing.
-   Two columns, not three with an empty one — a collapsed middle track still
-   splits the bar, which leaves the button short of the right edge. */
 @media (max-width: 640px) {
   body { padding-top: 92px; }
   .nav { inset: 14px auto auto 50%; padding: 8px 8px 8px 14px; grid-template-columns: auto 1fr; }
   .brand { font-size: 21px; gap: 9px; }
-  .nav-links { display: none; }
+
+  /* The button is an arrow on a phone: its label is a whole line of words, and
+     the page has one job for it. */
+  .cta-text { display: none; }
+  .cta-arrow { display: block; }
+  .nav-cta { padding: 10px 13px; }
+  .nav-cta:hover .cta-mark { width: 0; margin-right: 0; }
+
+  /* Three lines that drop the links under the bar. */
+  .nav-burger {
+    display: grid; place-content: center; gap: 4px; width: 40px; height: 40px;
+    border-radius: 999px;
+  }
+  .nav-burger span {
+    display: block; width: 17px; height: 2px; border-radius: 2px;
+    background: var(--text);
+    transition: transform .22s ease, opacity .18s ease;
+  }
+  .nav.open .nav-burger span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+  .nav.open .nav-burger span:nth-child(2) { opacity: 0; }
+  .nav.open .nav-burger span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+  /* fixed, not absolute: as a grid item an absolutely positioned panel is
+     measured against the track it would have sat in — 111px of middle column —
+     while the bar is transformed, so a fixed child hangs off the bar itself.
+     Spanning the grid area and stretching makes left:0 right:0 mean the bar.
+     The desk rule's justify-self: centre was shrinking the panel to its words
+     and floating it in the middle, which is what it looked like. */
+  .nav-links {
+    position: fixed; left: 0; right: 0; top: calc(100% + 10px);
+    grid-area: 1 / 1 / -1 / -1; justify-self: stretch; align-self: start;
+    display: none; flex-direction: column; align-items: stretch; gap: 2px;
+    padding: 8px; border-radius: 20px;
+    border: 1px solid var(--glass-edge); background: rgba(255, 255, 255, .88);
+    box-shadow: 0 18px 40px rgba(31, 30, 29, .16);
+    -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+  }
+  .nav.open .nav-links { display: flex; }
+  .nav-links a { padding: 12px; border-radius: 12px; }
+  .nav-links a:hover { background: rgba(31, 30, 29, .05); }
+  .nav-links a::after { left: 12px; right: auto; width: 26px; bottom: 7px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
