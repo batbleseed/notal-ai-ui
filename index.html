@@ -69,6 +69,26 @@
         0 0 24px rgba(64, 214, 170, .45);
     }
 
+    /* The arrow should not be a black hole in a page of pastel. It is glass
+       like the rest of the box while there is nothing to send, then takes the
+       mint of the wash once there is. The workspace keeps its dark button —
+       this palette belongs to the landing page. */
+    .hero-shell .send-btn {
+      background: rgba(255, 255, 255, .5);
+      border: 1px solid var(--glass-edge);
+      color: var(--text-soft);
+      transition: background .18s, border-color .18s, opacity .15s, transform .1s;
+    }
+    .hero-shell .send-btn:hover { filter: none; background: rgba(255, 255, 255, .74); box-shadow: none; }
+    .hero-shell .send-btn:not(:disabled) {
+      background: linear-gradient(180deg, rgba(126, 224, 190, .8), rgba(52, 148, 166, .62));
+      border-color: rgba(47, 174, 143, .55);
+      color: #0e3b33;
+    }
+    .hero-shell .send-btn:not(:disabled):hover {
+      background: linear-gradient(180deg, rgba(126, 224, 190, .95), rgba(52, 148, 166, .8));
+    }
+
     /* The chat is the first screen, and it keeps the app's own proportions.
        The shell is one viewport tall, less the pill's height and its 20px gap —
        a minimum, so a short window grows the page instead of clipping the
