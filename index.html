@@ -30,11 +30,17 @@
        reading pages size it with .tile; the nav needs its own fixed box */
     .nav .brand-mark { width: 30px; height: 30px; flex: 0 0 30px; }
 
-    /* The pointer's trail sits on the same layer as the wash, above it in paint
-       order because it is a real element, and below every word on the page. */
-    .dust {
-      position: fixed; inset: 0; width: 100%; height: 100%;
-      z-index: -1; pointer-events: none;
+    /* ---------- the cursor's pool ----------
+       One soft blue-violet circle that lags behind the pointer and melts into
+       the wash. It is a radial gradient rather than a blurred element: the
+       gradient's own falloff is the blur, and it costs nothing to move, while
+       filter: blur(200px) on a layer that repaints every frame does. */
+    .glow {
+      position: fixed; left: 0; top: 0; width: 460px; height: 460px;
+      margin: -230px 0 0 -230px; border-radius: 50%;
+      background: radial-gradient(circle,
+        rgba(104, 128, 214, .42) 0%, rgba(139, 120, 246, .26) 42%, transparent 72%);
+      z-index: -1; pointer-events: none; will-change: transform;
     }
 
     /* The app sheet paints the chat column with its own wash. Here the pools
@@ -202,6 +208,8 @@
       .feat { opacity: 1; transform: none; transition: none; }
       .stack, .orbit .sat, .grid span, .rings span, .rings .dot { animation: none; }
       .stack .layer { transition: none; }
+      /* nothing will move it, so a pool frozen in the middle of the page goes */
+      .glow { display: none; }
     }
 
     /* ---------- closing ---------- */
@@ -217,8 +225,8 @@
   </style>
 </head>
 <body>
-  <!-- the pointer's trail, painted behind everything on the page -->
-  <canvas class="dust" id="dust" aria-hidden="true"></canvas>
+  <!-- the pool that follows the cursor, painted behind everything on the page -->
+  <div class="glow" id="glow" aria-hidden="true"></div>
 
   <nav class="nav">
     <a class="brand" href="./">
@@ -433,57 +441,33 @@
       feats.forEach((f) => seen.observe(f));
     }
 
-    /* ---------- pointer dust ----------
-       A few blue grains where the cursor has been, drifting up and fading out.
-       Mouse only, because a finger leaves no trail worth following; capped, and
-       it never runs in a hidden tab or when you asked for less motion. */
-    const dust = document.getElementById("dust");
-    if (dust && dust.getContext && !calm) {
-      const ctx = dust.getContext("2d");
-      const parts = [];
-      const MAX = 130;
-      let vw = 0, vh = 0, running = false;
+    /* The pool chases the pointer at a fraction of the distance each frame, so
+       it reads as something the cursor is dragging through the wash rather than
+       a sticker under it. It stops when it arrives, and does not run at all for
+       a finger, a hidden tab or reduced motion. */
+    const glow = document.getElementById("glow");
+    if (glow && !calm) {
+      let tx = innerWidth / 2, ty = innerHeight * 0.34;
+      let x = tx, y = ty, moving = false;
+      glow.style.transform = `translate3d(${x}px, ${y}px, 0)`;
 
-      const size = () => {
-        const dpr = Math.min(devicePixelRatio || 1, 2);
-        vw = innerWidth; vh = innerHeight;
-        dust.width = Math.round(vw * dpr);
-        dust.height = Math.round(vh * dpr);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const step = () => {
+        x += (tx - x) * 0.11;
+        y += (ty - y) * 0.11;
+        glow.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+        if (Math.abs(tx - x) + Math.abs(ty - y) < 0.6 || document.hidden) {
+          moving = false;
+          return;
+        }
+        requestAnimationFrame(step);
       };
-      size();
-      addEventListener("resize", size);
 
       addEventListener("pointermove", (e) => {
         if (e.pointerType === "touch") return;
-        for (let i = 0; i < 2; i++) {
-          if (parts.length >= MAX) parts.shift();
-          parts.push({
-            x: e.clientX + (Math.random() - 0.5) * 12,
-            y: e.clientY + (Math.random() - 0.5) * 12,
-            vx: (Math.random() - 0.5) * 0.4,
-            vy: -0.12 - Math.random() * 0.42,
-            r: 1 + Math.random() * 2.3,
-            life: 1,
-          });
-        }
-        if (!running) { running = true; requestAnimationFrame(step); }
+        tx = e.clientX;
+        ty = e.clientY;
+        if (!moving) { moving = true; requestAnimationFrame(step); }
       }, { passive: true });
-
-      function step() {
-        ctx.clearRect(0, 0, vw, vh);
-        for (let i = parts.length - 1; i >= 0; i--) {
-          const p = parts[i];
-          p.x += p.vx; p.y += p.vy; p.vy *= 0.99; p.life -= 0.011;
-          if (p.life <= 0) { parts.splice(i, 1); continue; }
-          ctx.beginPath();
-          ctx.fillStyle = "rgba(88, 118, 240, " + (p.life * 0.5).toFixed(3) + ")";
-          ctx.arc(p.x, p.y, p.r * (0.6 + p.life * 0.7), 0, Math.PI * 2);
-          ctx.fill();
-        }
-        running = parts.length > 0 && !document.hidden;
-        if (running) requestAnimationFrame(step);
-      }
     }
 
     if ("serviceWorker" in navigator)
