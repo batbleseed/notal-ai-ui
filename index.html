@@ -82,6 +82,11 @@
       border-color: rgba(47, 174, 143, .5);
     }
     .hero-shell .attach-picker > .icon-btn:active { transform: scale(.95); }
+    /* the quiet failure is the one that keeps pretending, so it shows */
+    .hero-shell #micBtn.mic-error {
+      color: #c0392b; border-radius: 50%;
+      box-shadow: 0 0 0 4px rgba(192, 57, 43, .13);
+    }
 
     /* The arrow should not be a black hole in a page of pastel. It is glass
        like the rest of the box while there is nothing to send, then takes the
@@ -256,6 +261,26 @@
     .closing-note { margin-top: 16px; font-size: 14.5px; color: var(--text-soft); }
     .closing-fine { margin-top: 8px; font-size: 12.5px; color: var(--text-faint); }
     .closing-fine code { font-family: var(--mono); font-size: 12px; }
+
+    /* The closing pair was a black pill beside a cream one, straight out of the
+       shared sheet. This page's palette stops at glass and mint, so they take it
+       — the primary in the same wash as the send arrow, the other as a chip. */
+    .closing .btn-primary {
+      background: linear-gradient(180deg, rgba(126, 224, 190, .85), rgba(52, 148, 166, .7));
+      border-color: rgba(47, 174, 143, .55);
+      color: #0e3b33;
+      box-shadow: 0 14px 34px rgba(47, 174, 143, .22);
+    }
+    .closing .btn-primary:hover {
+      background: linear-gradient(180deg, rgba(126, 224, 190, 1), rgba(52, 148, 166, .85));
+      box-shadow: 0 18px 42px rgba(47, 174, 143, .3);
+    }
+    .closing .btn-ghost {
+      background: var(--glass); color: var(--text); border-color: var(--glass-edge);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      backdrop-filter: blur(16px) saturate(160%);
+    }
+    .closing .btn-ghost:hover { background: rgba(255, 255, 255, .74); border-color: rgba(47, 174, 143, .5); }
   </style>
 </head>
 <body>
@@ -457,6 +482,64 @@
       try { sessionStorage.setItem("notal.handoff", text); } catch { /* storage off */ }
       location.assign("chat/");
     });
+
+    /* Dictation that actually dictates: the browser's own recogniser writes into
+       the box while you talk, and the text stays yours to edit — you can carry
+       on typing over it. Where the browser has no recogniser the button is taken
+       away rather than left there to lie about what it does. */
+    const mic = document.getElementById("micBtn");
+    const Recognizer = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (mic && !Recognizer) {
+      mic.remove();
+    } else if (mic) {
+      const rec = new Recognizer();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = navigator.language || "en-US";
+      let spoken = "";
+
+      mic.addEventListener("click", () => {
+        if (mic.classList.contains("recording")) { rec.stop(); return; }
+        spoken = "";
+        rec.base = input.value ? input.value + " " : "";
+        try { rec.start(); } catch { /* already running */ }
+      });
+      rec.addEventListener("start", () => {
+        mic.classList.add("recording");
+        mic.title = "Stop dictating";
+        mic.setAttribute("aria-label", mic.title);
+      });
+      rec.addEventListener("end", () => {
+        mic.classList.remove("recording");
+        /* stopping after an error fires this too, and it must not overwrite the
+           reason with a clean label before you have read it */
+        if (mic.classList.contains("mic-error")) return;
+        mic.title = "Dictate";
+        mic.setAttribute("aria-label", "Voice input");
+      });
+      rec.addEventListener("error", (e) => {
+        /* A mic that fails quietly is a mic that is still pretending. Flag it
+           before stopping, because stopping fires end. */
+        mic.title = e.error === "not-allowed" || e.error === "service-not-allowed"
+          ? "This browser will not let the page listen"
+          : "Dictation stopped — " + (e.error || "no speech");
+        mic.setAttribute("aria-label", mic.title);
+        mic.classList.add("mic-error");
+        rec.stop();
+        setTimeout(() => {
+          mic.classList.remove("mic-error");
+          mic.title = "Dictate";
+          mic.setAttribute("aria-label", "Voice input");
+        }, 2800);
+      });
+      rec.addEventListener("result", (e) => {
+        let text = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) text += e.results[i][0].transcript;
+        spoken = text;
+        input.value = (rec.base || "") + spoken;
+        syncComposer();
+      });
+    }
 
     /* The four figures rise into place as you reach them, once each. The shapes
        keep moving on their own; this only decides when they show up. */
