@@ -69,6 +69,20 @@
         0 0 24px rgba(64, 214, 170, .45);
     }
 
+    /* The plus takes the same ring as the arrow, so the box reads as two ends —
+       a place to add, a place to send — rather than a row of loose glyphs. */
+    .hero-shell .attach-picker > .icon-btn {
+      width: 34px; height: 34px;
+      border: 1px solid var(--glass-edge); border-radius: 50%;
+      background: rgba(255, 255, 255, .5);
+      transition: background .16s, border-color .16s, transform .1s;
+    }
+    .hero-shell .attach-picker > .icon-btn:hover {
+      background: rgba(255, 255, 255, .78);
+      border-color: rgba(47, 174, 143, .5);
+    }
+    .hero-shell .attach-picker > .icon-btn:active { transform: scale(.95); }
+
     /* The arrow should not be a black hole in a page of pastel. It is glass
        like the rest of the box while there is nothing to send, then takes the
        mint of the wash once there is. The workspace keeps its dark button —
