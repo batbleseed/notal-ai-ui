@@ -124,9 +124,13 @@
        moves its model pill up into the topbar and leaves three things in the
        box: a place to add, the words, a place to send. This page has no topbar
        for the pill to move to, so it goes rather than squeezing the placeholder
-       into a sliver of the row. */
+       into a sliver of the row. The count is named here too even though
+       styles.css already hides it at this width: the app's sheet is the one a
+       returning visit can serve from an old cache entry, and this page's own
+       style block cannot, so saying it twice is what makes the two go together. */
     @media (max-width: 860px) {
-      .hero-shell .model-picker { display: none; }
+      .hero-shell .model-picker,
+      .hero-shell .char-count { display: none; }
     }
 
     /* The pill's own mobile rules are in site.css; only the shell's height is
