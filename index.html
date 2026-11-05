@@ -120,6 +120,15 @@
        the scroll from reaching the page. */
     .hero-shell .main.fresh { overflow: visible; overscroll-behavior: auto; }
 
+    /* At the width where the app's composer becomes one row, the workspace
+       moves its model pill up into the topbar and leaves three things in the
+       box: a place to add, the words, a place to send. This page has no topbar
+       for the pill to move to, so it goes rather than squeezing the placeholder
+       into a sliver of the row. */
+    @media (max-width: 860px) {
+      .hero-shell .model-picker { display: none; }
+    }
+
     /* The pill's own mobile rules are in site.css; only the shell's height is
        this page's business. */
     @media (max-width: 640px) {
