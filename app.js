@@ -2468,6 +2468,12 @@ function autoresize() {
   const ta = els.input;
   ta.style.height = "auto";
   ta.style.height = Math.min(ta.scrollHeight, 200) + "px";
+  /* one line, or more than one? the composer's ends centre on the line when
+     there is only one, and ride the last when there are several */
+  const cs = getComputedStyle(ta);
+  const line = (parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2)
+    + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  els.composer.classList.toggle("tall", ta.scrollHeight > line + 1);
   $("#charCount").textContent = ta.value.length;
   renderMentionGlow();
   updateSendState();
