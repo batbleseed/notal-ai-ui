@@ -251,6 +251,110 @@
       .glow { display: none; }
     }
 
+    /* ---------- the argument ----------
+       Borrowed shape, not borrowed words: the page makes a claim, walks the
+       route a prompt takes, then discloses what leaves the machine and lists
+       what does not work yet. Everything below is prose and tables — the only
+       decoration is the one accent, used for the dash on a gap. */
+    .claim { padding: 88px 0 6px; }
+    .claim h2 {
+      font-family: var(--serif); font-size: clamp(29px, 4.8vw, 50px); font-weight: 600;
+      line-height: 1.07; letter-spacing: -.9px; margin: 0 0 22px; max-width: 21ch;
+    }
+    .claim p { font-size: 17px; line-height: 1.68; color: var(--text-soft); max-width: 63ch; margin: 0 0 18px; }
+    .claim p.lead { color: var(--text); }
+    .claim code, .gaps code, .leaves code, .steps code, .start-card code {
+      font-family: var(--mono); font-size: .88em;
+      background: rgba(255, 255, 255, .55); border: 1px solid var(--glass-edge);
+      border-radius: 5px; padding: 1px 5px;
+    }
+
+    /* the route, as five numbered beats */
+    .steps { padding: 70px 0 8px; }
+    .steps h2, .leaves h2, .start h2, .gaps h2 {
+      font-family: var(--serif); font-size: clamp(27px, 4.2vw, 42px); font-weight: 600;
+      line-height: 1.08; letter-spacing: -.7px; margin: 0;
+    }
+    .steps ol { list-style: none; counter-reset: beat; margin: 24px 0 0; padding: 0; }
+    .steps li {
+      display: grid; grid-template-columns: 44px minmax(0, 1fr);
+      gap: clamp(14px, 3vw, 28px); padding: 22px 0;
+      border-top: 1px solid rgba(31, 30, 29, .09);
+    }
+    .steps li::before {
+      counter-increment: beat; content: counter(beat, decimal-leading-zero);
+      font-family: var(--mono); font-size: 12px; letter-spacing: .06em;
+      color: var(--text-faint); padding-top: 4px;
+    }
+    .steps h3 { font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 0 0 7px; }
+    .steps p { font-size: 15.5px; line-height: 1.62; color: var(--text-soft); max-width: 62ch; margin: 0; }
+
+    /* ---------- what leaves ----------
+       A real table because it is a real set of facts you may check. Under 720px
+       the rows stack and the header goes, since three columns of prose in a
+       phone width is unreadable. */
+    .leaves { padding: 70px 0 6px; }
+    .leaves table { width: 100%; border-collapse: collapse; margin-top: 24px; font-size: 14.5px; }
+    .leaves th {
+      text-align: left; padding: 0 16px 9px 0; border-bottom: 1px solid rgba(31, 30, 29, .16);
+      font-family: var(--mono); font-size: 11px; font-weight: 600;
+      letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint);
+    }
+    .leaves td {
+      padding: 13px 16px 13px 0; vertical-align: top;
+      border-bottom: 1px solid rgba(31, 30, 29, .07); color: var(--text-soft);
+    }
+    .leaves td:first-child { color: var(--text); font-weight: 500; }
+    .never {
+      margin: 26px 0 0; padding: 20px 22px; border-radius: 14px;
+      border: 1px solid var(--glass-edge); background: var(--glass);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      backdrop-filter: blur(16px) saturate(160%);
+      font-size: 14.5px; line-height: 1.65; color: var(--text-soft); max-width: 74ch;
+    }
+    .never b { color: var(--text); font-weight: 600; }
+
+    /* ---------- quick start ---------- */
+    .start { padding: 70px 0 6px; }
+    .start-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+    .start-card {
+      padding: 20px; border-radius: 16px; border: 1px solid var(--glass-edge);
+      background: var(--glass);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      backdrop-filter: blur(16px) saturate(160%);
+    }
+    .start-card h3 { font-family: var(--serif); font-size: 18px; font-weight: 600; margin: 8px 0 6px; }
+    .start-card p { font-size: 14px; line-height: 1.6; color: var(--text-soft); margin: 0; }
+    .start-card a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+    .start-n { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); }
+    .start-src {
+      margin: 18px 0 0; padding: 14px 16px; border-radius: 12px; overflow-x: auto;
+      border: 1px solid var(--glass-edge); background: rgba(255, 255, 255, .5);
+      font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--text-soft);
+      white-space: pre;
+    }
+
+    /* ---------- gaps ---------- */
+    .gaps { padding: 70px 0 10px; }
+    .gaps ul { list-style: none; margin: 24px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 34px; }
+    .gaps li {
+      position: relative; padding: 14px 0 14px 24px;
+      border-top: 1px solid rgba(31, 30, 29, .08);
+      font-size: 14.5px; line-height: 1.6; color: var(--text-soft);
+    }
+    .gaps li::before { content: "\2014"; position: absolute; left: 0; color: var(--accent); }
+    .gaps li b { color: var(--text); font-weight: 600; }
+
+    @media (max-width: 720px) {
+      .steps li { grid-template-columns: 34px minmax(0, 1fr); }
+      .leaves table, .leaves tbody, .leaves tr, .leaves td { display: block; width: 100%; }
+      .leaves thead { display: none; }
+      .leaves tr { border-top: 1px solid rgba(31, 30, 29, .1); padding: 12px 0 }
+      .leaves td { border: 0; padding: 3px 0 }
+      .start-grid { grid-template-columns: 1fr; }
+      .gaps ul { grid-template-columns: 1fr; }
+    }
+
     /* ---------- closing ---------- */
     .closing { text-align: center; padding: 84px 0 80px; }
     .closing h2 {
@@ -412,6 +516,74 @@
     </main>
   </div>
 
+  <!-- The claim, then the route. Stated as facts the reader can check in the
+       workspace, not as adjectives about it. -->
+  <section class="claim">
+    <div class="wrap">
+      <p class="eyebrow">What it is</p>
+      <h2>Most AI chat apps are a server with a text box in front of it.</h2>
+      <p class="lead">Your conversations live in someone else's database, the model is the one they
+        bought, and the account is the product.</p>
+      <p>Notal AI is the other shape: a workspace that runs in your browser against models you bring
+        yourself. Paste a key from Anthropic, OpenAI or Google, point at a local Ollama, use any
+        Open-compatible endpoint, or switch on the small model that runs
+        in this tab over WebGPU — which needs no account and no network at all.</p>
+      <p>Chats, projects, memory, skills and keys are written to this browser's storage on this
+        device. There is no Notal server holding them, and no backup to fall back on. Clear the site
+        data and the workspace is gone, which is the point.</p>
+    </div>
+  </section>
+
+  <section class="steps">
+    <div class="wrap">
+      <p class="eyebrow">The route</p>
+      <h2>How a question travels.</h2>
+      <ol>
+        <li>
+          <div>
+            <h3>Assembled here</h3>
+            <p>Before anything is sent, the composer reads this browser: the active project's
+              instructions, the memory you switched on, every extension that is on, and the plugin you
+              named with <code>@</code>. That assembly happens locally; the provider only sees the
+              prompt that comes out of it.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>One endpoint</h3>
+            <p>The prompt goes to exactly one place — the provider you configured. Your API key rides
+              as a header on that request and is never sent anywhere else. Ollama goes to
+              <code>localhost:11434</code>, so with it nothing crosses the network at all.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Or nowhere</h3>
+            <p>Choose <b>local ai</b> and the answer is made on your own graphics card. A 0.5B Qwen
+              downloads once, about 290 MB, and every call after that is served from the browser's own
+              cache.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Written down here</h3>
+            <p>The reply lands in the same storage blob as the rest of the chat. Nothing is uploaded to
+              make it appear there, and searching your history reads those local records — it is not a
+              query to anyone.</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Held before it acts</h3>
+            <p>Anything that changes the world — opening a pull request, posting a reply, writing a
+              file — stops at an approval card that shows the call first. A plugin cannot act on an
+              answer alone.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
   <!-- Four things the app actually does, each drawn rather than illustrated:
        orbiting models, a stack of context, a grid that lights cell by cell, and
        rings that stay put. They come in as you reach them and keep moving
@@ -472,6 +644,134 @@
           <span class="r1"></span><span class="r2"></span><span class="r3"></span><span class="dot"></span>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Every address this app can reach, what goes there, and what triggers it.
+       Written from the code, not from intent: each row is a host that appears in
+       app.js, plugins.js or webmodel.js, and the last one is the thing that is
+       built but switched off. -->
+  <section class="leaves">
+    <div class="wrap">
+      <p class="eyebrow">Disclosed</p>
+      <h2>What leaves your machine, and when.</h2>
+      <table>
+        <thead>
+          <tr><th>Where</th><th>What goes</th><th>When it goes</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>The provider you picked</td>
+            <td>The assembled prompt, and the answer that comes back</td>
+            <td>Only when you press send. The key is a header on that one request.</td>
+          </tr>
+          <tr>
+            <td><code>localhost:11434</code></td>
+            <td>The same prompt</td>
+            <td>Only if you point a provider at Ollama. Nothing leaves the machine.</td>
+          </tr>
+          <tr>
+            <td><code>cdn.jsdelivr.net</code></td>
+            <td>A request for the WebLLM engine and about 290 MB of weights</td>
+            <td>Once, when you switch on <b>local ai</b>. Later calls read the browser's cache.</td>
+          </tr>
+          <tr>
+            <td><code>fonts.googleapis.com</code></td>
+            <td>A stylesheet request and two font files</td>
+            <td>On load of this page, the docs and the workspace. No content of yours is in it.</td>
+          </tr>
+          <tr>
+            <td>Firebase</td>
+            <td>Your email address, a password hash, the verified flag</td>
+            <td>Only when you sign in or register. Nothing is sent while you stay anonymous.</td>
+          </tr>
+          <tr>
+            <td>Supabase — the extension library</td>
+            <td>Reads: the public cards. Writes: your name, a title, a description, a screenshot</td>
+            <td>Only when you open the Library view, or publish. Never your chats or keys.</td>
+          </tr>
+          <tr>
+            <td>GitHub, Gmail, Drive and YouTube APIs</td>
+            <td>Your token as a header, plus the query you asked for</td>
+            <td>Only for an <code>@github</code>, <code>@gmail</code>, <code>@drive</code> or
+              <code>@youtube</code> call, and only once you are connected to it.</td>
+          </tr>
+          <tr>
+            <td>A relay, if you typed one</td>
+            <td>Device-flow codes for GitHub and Google; page reads for the browser companion</td>
+            <td>Only if you put a URL in Settings. Left blank, those sign-ins simply do not
+              complete — there is no default relay to fall back to.</td>
+          </tr>
+          <tr>
+            <td>Cloudflare Turnstile</td>
+            <td>Nothing</td>
+            <td>The captcha is written into the signup form but this build ships no site key, so it
+              never loads.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="never"><b>Never leaves this device:</b> your chats, projects, memory, skills, provider
+        keys, attachments and history. They live in one <code>localStorage</code> blob as plain text,
+        which means anyone holding your unlocked machine can read them. That makes this a privacy
+        claim, not a security claim.</p>
+    </div>
+  </section>
+
+  <section class="start">
+    <div class="wrap">
+      <p class="eyebrow">Quick start</p>
+      <h2>Three steps, and none of them is an install.</h2>
+      <div class="start-grid">
+        <div class="start-card">
+          <p class="start-n">01</p>
+          <h3><a href="chat/">Open the workspace</a></h3>
+          <p>This tab is the app. No account, no download, nothing to sign up for.</p>
+        </div>
+        <div class="start-card">
+          <p class="start-n">02</p>
+          <h3>Bring a model</h3>
+          <p>Settings → Providers: paste a key, or use the address
+            <code>http://localhost:11434</code> for Ollama. Or switch on <b>local ai</b> and wait for
+            the download.</p>
+        </div>
+        <div class="start-card">
+          <p class="start-n">03</p>
+          <h3>Ask it something</h3>
+          <p>Type <code>@</code> to name a plugin, <code>/</code> for a skill, or nothing at all and it
+            reads your project.</p>
+        </div>
+      </div>
+      <p class="start-src">git clone https://github.com/batbleseed/notal-ai-ui.git
+cd notal-ai-ui && node server.js     # then open http://127.0.0.1:4173/</p>
+    </div>
+  </section>
+
+  <!-- What does not work, is not published, or needs an account you own. Said
+       here so nobody discovers it in the app and calls it a bug. -->
+  <section class="gaps">
+    <div class="wrap">
+      <p class="eyebrow">Limits</p>
+      <h2>Known gaps.</h2>
+      <ul>
+        <li><b>No desktop installer is published.</b> The Windows build comes from
+          <code>studio-app/</code> in the repo — clone it and run <code>npm run dist</code>.</li>
+        <li><b>The browser companion is not on the Chrome Web Store.</b> It loads unpacked from
+          <code>browser-extension/</code>; a listing needs a paid developer account and a human review
+          of its <code>&lt;all_urls&gt;</code> permission.</li>
+        <li><b>local ai is a 0.5B model.</b> It answers, it summarises, it is not clever, and it needs
+          a WebGPU-capable browser. On a machine without one the switch says so rather than
+          pretending.</li>
+        <li><b>Plugins need accounts you own.</b> A GitHub OAuth app with device flow enabled, a Google
+          TV / limited-input client plus a secret on the relay, and a YouTube Data API key. Until those
+          exist, <code>@youtube</code> reports itself as not connected.</li>
+        <li><b>Publishing takes an account</b> and caps at ten extensions. Reading the library does
+          not.</li>
+        <li><b>No sync, no backup.</b> Two machines do not share a workspace, and there is nothing to
+          restore from.</li>
+        <li><b>The plus in the box at the top of this page does nothing.</b> It is the workspace's
+          attach menu, drawn here so the box reads right. The real one is in
+          <a href="chat/">the chat</a>.</li>
+      </ul>
     </div>
   </section>
 
