@@ -1321,7 +1321,27 @@ button:disabled { opacity: .5; cursor: default; }
 @media (prefers-reduced-motion: reduce) { .drop-veil { animation: none; } }
 
 .attach-picker { position: relative; display: inline-flex; }
+/* The plus takes a ring, so the composer bar reads as two ends — a place to
+   add, a place to send — instead of a loose glyph beside the mic. The landing
+   page's mock box has had this shape since it was drawn; now the real one
+   matches it. Tokens only, so the dark theme gets the same ring in its own
+   colours rather than a white chip on charcoal. */
+.composer .attach-picker > .icon-btn {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface-2);
+  transition: background .16s, border-color .16s, color .15s, transform .1s;
+}
+.composer .attach-picker > .icon-btn:hover {
+  background: var(--surface); border-color: var(--text-faint); color: var(--text);
+}
+.composer .attach-picker > .icon-btn:active { transform: scale(.95); }
+.composer .attach-picker > .icon-btn:focus-visible {
+  border-color: var(--text-faint); box-shadow: var(--ring);
+}
 .attach-picker.open > .icon-btn { background: var(--surface-2); color: var(--text); }
+.composer .attach-picker.open > .icon-btn {
+  background: var(--surface); border-color: var(--text-faint); color: var(--text);
+}
 .attach-menu {
   position: absolute; left: 0; bottom: calc(100% + 9px); z-index: 30;
   min-width: 154px; padding: 6px; display: grid; gap: 2px;
@@ -1995,6 +2015,9 @@ kbd {
   .ed-hl, .ed-input { font-size: 16px; }
 
   .icon-btn { width: 42px; height: 42px; }
+  /* the ringed plus keeps its circle at the bigger touch size, so the target
+     grows and the shape does not turn into a disc twice the width of the mic */
+  .composer .attach-picker > .icon-btn { width: 42px; height: 42px; }
   .send-btn { width: 44px; height: 44px; }
   .ghost-btn { padding: 11px 15px; }
   .nav-item, .history-item { padding: 11px 12px; }
