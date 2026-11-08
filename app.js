@@ -1255,6 +1255,68 @@ function appendMessage(msg) {
     thinkLabel.textContent = reasoningStreamed ? "Reasoning" : "Thinking";
   };
 
+  function restoreThinkingTrail(items) {
+    if (!Array.isArray(items)) return;
+    for (const item of items) {
+      if (!item || typeof item !== "object") continue;
+      if (item.type === "note" && typeof item.text === "string") {
+        const note = document.createElement("p");
+        note.className = "think-notes";
+        note.textContent = item.text;
+        thinkText.append(note);
+      } else if (item.type === "browse" && typeof item.url === "string") {
+        const ok = item.ok === true;
+        const row = document.createElement("p");
+        row.className = "think-row think-browse";
+        if (!ok) row.classList.add("failed");
+        stepGlyph(row, ok ? "check" : "cross");
+        const kind = document.createElement("span");
+        kind.className = "tb-kind";
+        kind.textContent = ok ? "Read" : "Failed";
+        const where = document.createElement("span");
+        where.className = "tb-url";
+        where.textContent = shortUrl(item.url);
+        where.title = item.url;
+        const state = document.createElement("span");
+        state.className = "tb-state";
+        state.textContent = ok && typeof item.title === "string"
+          ? item.title : ok ? "read" : "did not open";
+        row.append(kind, where, state);
+        thinkText.append(row);
+      }
+    }
+    if (thinkText.childElementCount) {
+      thinkBox.hidden = false;
+      thinkLabel.textContent = typeof msg.thinkingSummary === "string"
+        ? msg.thinkingSummary : "Reasoning";
+      setReasoningOpen(false);
+    }
+  }
+
+  function thinkingSnapshot() {
+    const items = [];
+    for (const node of thinkText.children) {
+      if (node.classList.contains("think-notes")) {
+        items.push({ type: "note", text: node.textContent || "" });
+      } else if (node.classList.contains("think-browse")) {
+        const where = node.querySelector(".tb-url");
+        const kind = node.querySelector(".tb-kind");
+        const state = node.querySelector(".tb-state");
+        if (!where?.title) continue;
+        const ok = kind?.textContent === "Read";
+        items.push({
+          type: "browse",
+          url: where.title,
+          ok,
+          ...(ok ? { title: state?.textContent || "" } : {}),
+        });
+      }
+    }
+    return items.length ? { items, summary: thinkLabel.textContent || "Reasoning" } : null;
+  }
+
+  restoreThinkingTrail(msg.thinkingTrail);
+
   return {
     wrap,
     textEl: content,
@@ -1263,6 +1325,7 @@ function appendMessage(msg) {
     thinkText,
     sources,
     endLoading,
+    thinkingSnapshot,
     openTrail: openBox,
     startThinking() {
       wrap.classList.add("thinking");
@@ -1362,8 +1425,8 @@ function appendMessage(msg) {
       thinkBox.classList.remove("live");
       reasoningOn = false;
     },
-    /* the reply is whole: the caret goes, the actions arrive, and the pages it
-       read are kept with the message so they survive a reload */
+    /* the reply is whole: the caret goes, the actions arrive, and its trail is
+       saved with the message so it survives a reload */
     complete(text) {
       actionText = text;
       if (sources.length) { actionSources = sources.slice(); buildSources(); }
@@ -1595,9 +1658,9 @@ async function runAssistantTurn(conv, trimmed, explicitIds) {
       /* a finished reply is better evidence than any test button */
       recordProviderResult(model.providerId, true, "Answered a real message");
     } else if (model.browser) {
-      /* the tokens arrive through the same push path, so `answer` is already
-         whole by the time this returns */
-      await streamBrowserModel(withDocuments(conv.messages), onDelta, ac.signal, turn);
+      /* Keep the streamed text responsive, but render and save the complete
+         response returned by the model once generation has finished. */
+      answer = await streamBrowserModel(withDocuments(conv.messages), onDelta, ac.signal, turn);
     } else {
       await streamBuiltIn(craftReply(trimmed, conv.messages.length), push, ac.signal);
     }
@@ -1605,7 +1668,7 @@ async function runAssistantTurn(conv, trimmed, explicitIds) {
     draw(true);
     turn.stopThinking();
     const reply = cleanAnswer(answer);
-    conv.messages.push(storedReply(reply, turn.sources));
+    conv.messages.push(storedReply(reply, turn.sources, turn.thinkingSnapshot()));
     turn.complete(reply);
     save();
     notifyReply(reply);
@@ -1632,7 +1695,7 @@ async function runAssistantTurn(conv, trimmed, explicitIds) {
       draw(true);
       const partial = cleanAnswer(answer);
       if (partial) {
-        conv.messages.push(storedReply(partial, turn.sources));
+        conv.messages.push(storedReply(partial, turn.sources, turn.thinkingSnapshot()));
         turn.complete(partial);
         save();
       } else {
@@ -1656,11 +1719,14 @@ async function runAssistantTurn(conv, trimmed, explicitIds) {
   }
 }
 
-/* The pages a reply read travel with it, so the sources row is still there
-   tomorrow rather than only in the turn that happened to be on screen. */
-function storedReply(text, sources) {
+/* Keep the visible trail with the reply, so it remains available after reload. */
+function storedReply(text, sources, thinking) {
   const m = { role: "assistant", text };
   if (sources?.length) m.sources = sources.map(s => ({ url: s.url, title: s.title || "" }));
+  if (thinking?.items?.length) {
+    m.thinkingTrail = thinking.items;
+    m.thinkingSummary = thinking.summary;
+  }
   return m;
 }
 
@@ -1808,10 +1874,8 @@ async function streamBrowserModel(history, onDelta, signal, turn) {
          only blur which kind of WebGPU failure this is */
       throw Object.assign(new Error(localAINoWords(support.reason)), { plain: true });
     }
-    let text = "";
     const got = await webModelAsk(browserMessages(history), (d) => {
       if (!wrote) { wrote = true; step.set("Writing the answer"); }
-      text += d;
       onDelta({ text: d });
     }, {
       signal,
@@ -7426,4 +7490,3 @@ if (bootSplash) {
     }, { once: true });
   }, Math.max(0, hold - performance.now()));
 }
-
