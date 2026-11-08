@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Notal AI — browser companion",
+  "name": "Notal AI browser companion",
   "version": "0.2",
-  "description": "Lets Notal AI read and act on the tabs you already have open. It answers only the Notal page you named in its options, and nothing that changes a page happens until you approve it there.",
+  "description": "Lets Notal AI read and act on the tabs you already have open.",
   "permissions": ["tabs", "scripting", "storage"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" },

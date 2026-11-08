@@ -76,6 +76,77 @@
   --tk-name: #569cd6;
 }
 
+/* ---------------- Loading / thinking / streaming foundation ----------------
+   The three states a reply passes through share one vocabulary. The names below
+   are the ones the components were written against, resolved onto this app's own
+   palette so a state never arrives wearing a different theme's colours. Both
+   themes inherit through var(), because data-theme sits on this same element. */
+:root {
+  --ink: var(--text);
+  --ink-2: var(--text-soft);
+  --ink-3: var(--text-faint);
+  --canvas: var(--bg);
+  --inset: var(--surface-2);
+  --line: var(--border);
+  --line-strong: color-mix(in srgb, var(--text) 24%, var(--border));
+  --hover: color-mix(in srgb, var(--text) 5%, transparent);
+  --hover-2: color-mix(in srgb, var(--text) 8%, transparent);
+  --accent-tint: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  --rounded-control: 9px;
+  --shadow-hairline: 0 0 0 1px color-mix(in srgb, var(--text) 9%, transparent);
+  --shadow-overlay: 0 1px 2px rgba(31, 30, 29, .07), 0 10px 30px rgba(31, 30, 29, .13);
+  --green: #3d6b3a;
+  --orange: var(--accent);
+  --red: #c0392b;
+  --ease-out-soft: cubic-bezier(.23, 1, .32, 1);
+}
+[data-theme="dark"] {
+  --shadow-overlay: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 34px rgba(0, 0, 0, .45);
+  /* a dark drop shadow cannot lift a card off a dark page — the edge has to */
+  --shadow-hairline: 0 0 0 1px color-mix(in srgb, var(--text) 17%, transparent);
+  --green: #8fc79a;
+  --red: #e2938a;
+}
+
+/* A label that is still being worked on: one highlight travels the ink ramp. */
+.shimmer {
+  background-image: linear-gradient(90deg, var(--ink-3) 35%, var(--ink) 50%, var(--ink-3) 65%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  animation: shimmer-text 1.4s linear infinite;
+}
+@keyframes shimmer-text {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(.96); }
+  to { opacity: 1; transform: none; }
+}
+/* A word arriving: it resolves out of blur rather than blinking into place. */
+@keyframes stream-resolve {
+  from { opacity: 0; filter: blur(5px); }
+  to { opacity: 1; filter: blur(0); }
+}
+@keyframes caret-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* the wait still has to read as a wait, so the mark slows instead of stopping;
+     everything that only decorates a state stands still */
+  .shimmer { animation: none; background-image: none; color: var(--ink-2); }
+  .load-mark .notal-mark::before { animation-duration: 5s; }
+  .tr-spin { animation-duration: 2.4s; }
+  .stream-word { animation: none; }
+  .stream-caret { animation: none; }
+  .think-row, .think-notes, .sel-pop, .msg-actions, .src-list a { animation: none; }
+  .think-veil, .src-veil { transition-duration: .01s; }
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body { height: 100%; }
@@ -528,8 +599,8 @@ body.login-open { overflow: hidden; }
 .wm-bar::-webkit-progress-value { background: var(--accent); border-radius: 999px; }
 .wm-bar::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
 /* while a local reply is being made the trail says what is happening in numbers,
-   so the hopping stand-in words have nothing left to stand in for */
-.msg.named-work .think-words { display: none; }
+   so the loading row has nothing left to stand in for */
+.msg.named-work .load-row { display: none; }
 .provider-list { list-style: none; display: grid; gap: 8px; margin-top: 16px; }
 .provider-item {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px;
@@ -952,6 +1023,83 @@ button:disabled { opacity: .5; cursor: default; }
   display: inline-block; max-width: 100%;
 }
 
+/* ---------------- Streaming text ----------------
+   A word lands, resolves out of blur, and the caret sits where the next one
+   will arrive. Only the words still inside their own resolve window carry the
+   animation, so a long reply never accumulates a thousand filtered spans. */
+.stream-word { animation: stream-resolve 320ms var(--ease-out-soft) both; }
+.stream-caret {
+  display: inline-block; width: 2px; height: .95em; margin-left: 2px;
+  border-radius: 2px; background: var(--ink); vertical-align: -.14em;
+  animation: caret-breathe 1.2s ease-in-out infinite;
+}
+
+/* What you can do with a finished reply. It fades in only once the reply is
+   whole — an action row under half a sentence is an invitation to copy half a
+   sentence. Sources are listed only when the turn really read pages. */
+.msg-actions {
+  display: flex; align-items: center; gap: 2px; margin-top: 9px;
+  animation: fade-up 350ms var(--ease-out-soft) both;
+}
+.msg-actions[hidden] { display: none; }
+.ma-btn {
+  display: grid; place-items: center; width: 27px; height: 27px;
+  border-radius: 7px; color: var(--ink-3);
+  transition: background-color .12s, color .12s, transform .1s;
+}
+.ma-btn:hover { background: var(--hover-2); color: var(--ink-2); }
+.ma-btn:active { transform: scale(.94); }
+.ma-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.ma-btn.copied { color: var(--green); }
+.ma-sources {
+  display: inline-flex; align-items: center; gap: 7px; margin-left: 6px;
+  padding: 3px 9px 3px 5px; border-radius: 7px;
+  font-size: 12px; color: var(--ink-2);
+  transition: background-color .15s, color .15s;
+}
+.ma-sources:hover { background: var(--hover); color: var(--ink); }
+.ma-sources:focus-visible { outline: none; box-shadow: var(--ring); }
+.ma-sources[hidden] { display: none; }
+.src-stack { display: flex; }
+.src-stack .src-avatar + .src-avatar { margin-left: -5px; }
+/* No favicon service: a letter on a hue of its own tells the sources apart
+   without telling a third party which pages this reply read. */
+.src-avatar {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 16px; height: 16px; border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--canvas);
+  font-family: var(--sans); font-size: 8.5px; font-weight: 700; color: #fff;
+}
+.src-veil {
+  display: grid; grid-template-rows: 0fr; opacity: 0;
+  transition: grid-template-rows .3s var(--ease-out-soft), opacity .25s ease;
+}
+.src-veil.open { grid-template-rows: 1fr; opacity: 1; }
+.src-clip { overflow: hidden; min-height: 0; }
+.src-list {
+  display: flex; flex-direction: column; gap: 1px;
+  margin-top: 8px; padding: 5px;
+  border-radius: var(--radius-sm); background: var(--inset);
+  box-shadow: var(--shadow-hairline);
+}
+.src-list a {
+  display: flex; align-items: center; gap: 9px;
+  padding: 6px 8px; border-radius: 7px;
+  font-size: 12.5px; color: var(--ink-2); text-decoration: none;
+  animation: fade-up 300ms var(--ease-out-soft) both;
+  transition: background-color .15s, color .15s;
+}
+.src-list a:hover { background: var(--hover); color: var(--ink); }
+.src-list .src-avatar { width: 18px; height: 18px; border-radius: 5px; font-size: 9px; box-shadow: none; }
+.src-name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px; background-repeat: no-repeat; background-position: 0 100%;
+  transition: background-size .25s var(--ease-out-soft);
+}
+.src-list a:hover .src-name { background-size: 100% 1px; }
+.src-domain { margin-left: auto; flex-shrink: 0; font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); }
+
 /* ---------------- Code cards ----------------
    Generated code gets its own raised surface: a gutter of line numbers, the
    language named, a toolbar, and for HTML or JavaScript a Preview that runs it
@@ -1046,25 +1194,29 @@ button:disabled { opacity: .5; cursor: default; }
 .code-card .hljs-tag { color: var(--tk-tag); }
 .code-card .hljs-name { color: var(--tk-name); font-weight: 600; }
 
-/* The wait given a shape: while a reply is being produced, the words beside the
-   spinning mark hop one after another — up, past the line, back to rest. Pure
-   CSS, so nothing has to tick it and it survives a background tab. */
-.think-words { display: none; align-items: baseline; gap: 4px; }
-.msg.thinking .think-words { display: inline-flex; }
-.think-word { display: inline-block; color: var(--accent); font-weight: 600; }
-.msg.thinking .think-word { animation: think-hop 1.45s ease-in-out infinite; }
-.msg.thinking .think-word:nth-child(2) { animation-delay: .14s; }
-.msg.thinking .think-word:nth-child(3) { animation-delay: .28s; }
+/* ---------------- AI loading state ----------------
+   Nothing has arrived yet, so the row says only what is true: the mark is
+   turning, the label is still being worked on, and the clock is the real one.
+   It steps out the moment there is something to show — the first word of the
+   answer, or the first line of the trail — and never sits beside either. */
+.load-row { display: none; align-items: center; gap: 7px; }
+.msg.thinking .load-row {
+  display: inline-flex;
+  animation: pop-in 200ms var(--ease-out-soft) both;
+}
+.msg.named-work .load-row, .msg.has-answer .load-row, .msg.trail-open .load-row { display: none; }
+.load-mark { width: 13px; height: 13px; flex-shrink: 0; }
+.load-mark .notal-mark::before { animation: notal-spin 1.15s linear infinite; }
+.load-label { font-size: 12.5px; font-weight: 600; letter-spacing: .1px; white-space: nowrap; }
+.load-elapsed {
+  font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums;
+  color: var(--ink-3); white-space: nowrap;
+}
 @keyframes think-hop {
   0%, 62%, 100% { transform: translateY(0); }
   16% { transform: translateY(-5px); }
   34% { transform: translateY(1.5px); }
   48% { transform: translateY(0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  /* the same deal as the spinning mark: slow it down rather than switch it off,
-     so the wait still reads as a wait on a machine that dials motion back */
-  .msg.thinking .think-word { animation-duration: 3.6s; }
 }
 
 /* Boot splash — the page-open counterpart of the thinking message: the mark
@@ -1104,66 +1256,91 @@ button:disabled { opacity: .5; cursor: default; }
 .boot-splash.quick { transition-duration: .18s; }
 .boot-splash.quick.zoom .boot-mark { animation-duration: .45s; }
 
-/* Model reasoning folds into a one-line row once the answer is ready. */
-.msg-think { display: grid; gap: 3px; align-content: start; margin-bottom: 10px; }
+/* ---------------- Thinking state ----------------
+   The trail of what actually happened: reasoning, a page read, a tool. The
+   header carries the mark at rest — the turning one belongs to the wait above
+   it — and the label shimmers only while there is still work behind it. Once
+   the reply is whole the header says what the trail can honestly claim and
+   folds shut, staying one press away from the evidence. */
+.msg-think { display: grid; align-content: start; margin-bottom: 10px; }
 .msg-think[hidden] { display: none; }
 .think-head {
-  display: inline-flex; align-items: center; gap: 5px; align-self: start;
-  padding: 3px 7px 3px 0; border-radius: var(--radius-xs); background: none; border: 0;
-  font-family: var(--sans); color: var(--text-faint); cursor: pointer;
-  transition: color .15s, background .15s;
+  display: inline-flex; align-items: center; gap: 7px; align-self: start;
+  margin-left: -6px; padding: 4px 7px 4px 6px;
+  border-radius: var(--rounded-control); background: none; border: 0;
+  font-family: var(--sans); color: var(--ink-2); cursor: pointer;
+  transition: background-color .12s, color .12s;
 }
-.think-head:hover { color: var(--text-soft); background: var(--surface-2); }
-.think-label { font-size: 12.5px; font-weight: 600; }
-.msg-think.live .think-label { color: var(--accent); }
-.think-chevron { flex-shrink: 0; transition: transform .2s cubic-bezier(.24, 1.3, .4, 1); }
-.msg-think.open .think-chevron { transform: rotate(90deg); }
-.think-text {
-  display: none; margin-top: 3px; padding-left: 12px;
-  border-left: 1px solid var(--border);
-  font-size: 13px; line-height: 1.6; color: var(--text-soft);
-  white-space: pre-wrap; word-wrap: break-word;
-  max-height: 168px; overflow-y: auto;
-}
-.msg-think.open .think-text { display: block; }
+.think-head:hover { background: var(--hover-2); color: var(--ink); }
+.think-head:focus-visible { outline: none; box-shadow: var(--ring); }
+/* the mark here never spins: this is the trace, not the wait */
+.think-mark { width: 15px; height: 15px; flex-shrink: 0; transition: opacity .2s; }
+.msg-think:not(.live) .think-mark { opacity: .55; }
+.think-label { font-size: 13px; font-weight: 500; white-space: nowrap; }
+.think-chevron { flex-shrink: 0; color: var(--ink-3); transition: transform .3s var(--ease-out-soft); }
+.msg-think.open .think-chevron { transform: rotate(180deg); }
 
-/* The opened panel is a trail of steps in the order they really happened:
-   reasoning, a page lookup, then the thinking that used what it read. */
-.think-notes { margin: 0 0 8px; }
-.think-notes:last-child { margin-bottom: 0; }
-.think-browse {
-  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
-  margin: 0 0 8px; padding: 5px 8px;
-  border-radius: var(--radius-xs);
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
-  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+/* 0fr → 1fr is the one way to animate to an unknown height without measuring
+   it; the clip inside is what makes the fraction mean anything. */
+.think-veil {
+  display: grid; grid-template-rows: 0fr; opacity: 0;
+  transition: grid-template-rows .4s var(--ease-out-soft), opacity .3s ease;
 }
-.think-browse:last-child { margin-bottom: 0; }
+.msg-think.open .think-veil { grid-template-rows: 1fr; opacity: 1; }
+.think-clip { overflow: hidden; min-height: 0; }
+.think-text {
+  margin: 4px 0 0 5px; padding: 3px 0 3px 14px;
+  border-left: 1px solid var(--line);
+  font-size: 13px; line-height: 1.6; color: var(--ink-2);
+  max-height: 172px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent;
+  transition: border-color .2s;
+}
+.msg-think.busy .think-text { border-left-color: var(--line-strong); }
+
+/* A step: the glyph says whether it is running, finished or refused, and the
+   words beside it are the ones the app measured — never a script of them. */
+.think-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  min-height: 26px; margin: 0 0 2px; padding: 2px 6px;
+  border-radius: 6px; text-align: left;
+  animation: fade-up 320ms var(--ease-out-soft) both;
+}
+.think-row:last-child { margin-bottom: 0; }
+.tr-glyph {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 14px; height: 14px; color: var(--ink-3);
+}
+.tr-glyph svg { display: block; }
+.tr-spin {
+  width: 11px; height: 11px; border-radius: 50%;
+  border: 1.5px solid var(--line-strong); border-top-color: var(--ink-2);
+  animation: notal-spin 700ms linear infinite;
+}
+.think-row.failed .tr-glyph { color: var(--red); }
+.tr-label { font-size: 12.5px; font-weight: 500; color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.tr-detail { font-size: 11.5px; color: var(--ink-3); overflow-wrap: anywhere; }
 .tb-kind {
+  flex-shrink: 0;
   font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   color: var(--accent);
 }
 .tb-url {
-  font-family: var(--mono); font-size: 12px; color: var(--text);
-  overflow-wrap: anywhere;
+  font-family: var(--mono); font-size: 12px; color: var(--ink);
+  min-width: 0; max-width: 240px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tb-state { font-size: 12px; color: var(--text-faint); }
-.think-browse.failed {
-  border-color: var(--border);
-  background: var(--surface-2);
+.tb-state { font-size: 11.5px; color: var(--ink-3); margin-left: auto; }
+.think-row.failed .tb-kind { color: var(--ink-3); }
+.think-row.failed .tb-url { color: var(--ink-2); }
+
+/* Reasoning is prose, not a step, so it keeps the rail and loses the glyph. */
+.think-notes {
+  margin: 0 0 8px; font-size: 12.5px; line-height: 1.65; color: var(--ink-2);
+  white-space: pre-wrap; word-wrap: break-word;
+  animation: fade-up 320ms var(--ease-out-soft) both;
 }
-.think-browse.failed .tb-kind { color: var(--text-faint); }
-/* the lookup in flight breathes, so the trail shows which step is current */
-.msg-think.busy .think-browse:last-child .tb-state {
-  animation: browse-breathe 1.5s ease-in-out infinite;
-}
-@keyframes browse-breathe {
-  0%, 100% { opacity: 1; }
-  50% { opacity: .45; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .msg-think.busy .think-browse:last-child .tb-state { animation-duration: 4s; }
-}
+.think-notes:last-child { margin-bottom: 0; }
 
 /* ---------------- Composer ---------------- */
 .composer-wrap { padding: 8px 24px 14px; }
@@ -1815,6 +1992,135 @@ button:disabled { opacity: .5; cursor: default; }
 @media (max-width: 700px) { .feature-grid { grid-template-columns: 1fr; } }
 
 /* ---------- the right-click menu ---------- */
+/* ---------------- Selection actions ----------------
+   Select words in a reply and a bar arrives under the last selected line,
+   centred on the whole selection. It is one pill around 28px controls: type an
+   instruction, or take one of the named edits. While the model works the pill
+   holds the turning mark and a shimmering gerund; when the rewrite lands it
+   offers Keep, Discard and Try again, and nothing is written into the chat
+   until Keep is pressed. */
+.sel-pop {
+  position: fixed; z-index: 130; left: 0; top: 0;
+  display: grid; justify-items: center; gap: 8px;
+  max-width: calc(100vw - 16px);
+  --sel-input-w: 145px;
+  transform: translate3d(var(--sel-x, 0px), var(--sel-y, 0px), 0) translateX(-50%);
+  transition: transform 320ms cubic-bezier(.77, 0, .175, 1), opacity 180ms ease-out;
+  will-change: transform;
+}
+.sel-pop[hidden] { display: none; }
+/* every mode span inside the pill sets its own display, so the attribute alone
+   would not put it away */
+.sel-pop [hidden] { display: none !important; }
+.sel-pop.placing { transition: none; }
+::highlight(notal-selection) { background: var(--accent-tint); color: var(--ink); }
+
+.sel-bar {
+  display: flex; align-items: center; justify-content: center;
+  width: fit-content; max-width: calc(100vw - 16px); height: 36px;
+  padding: 4px; overflow: hidden;
+  border-radius: 999px; background: var(--surface);
+  box-shadow: var(--shadow-overlay), var(--shadow-hairline);
+  font-family: var(--sans); font-size: 12.5px; font-weight: 400; color: var(--ink);
+  animation: pop-in 220ms var(--ease-out-soft) both;
+}
+.sel-inner { display: flex; align-items: center; justify-content: center; gap: 2px; width: fit-content; flex-shrink: 0; }
+.sel-idle, .sel-result, .sel-primary { display: flex; align-items: center; gap: 2px; }
+.sel-primary { flex-shrink: 0; }
+.sel-group {
+  display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; flex-shrink: 0;
+  transition: max-width .4s var(--ease-out-soft), opacity .3s ease, transform .4s var(--ease-out-soft), margin .4s var(--ease-out-soft);
+}
+.sel-form {
+  display: flex; align-items: center; height: 28px; flex-shrink: 0;
+  transition: width .4s var(--ease-out-soft);
+}
+.sel-input {
+  height: 28px; width: 100%; min-width: 0; padding: 0 10px 0 12px;
+  border: 0; background: none; outline: none;
+  font: inherit; font-size: 12.5px; color: var(--ink);
+}
+.sel-input::placeholder { color: var(--ink-3); }
+.sel-btn {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  height: 28px; padding: 0 9px; border-radius: 999px;
+  font-size: 12.5px; color: var(--ink-2); white-space: nowrap;
+  transition: background-color .15s, color .15s, transform .1s;
+}
+.sel-btn:hover { background: var(--hover-2); color: var(--ink); }
+.sel-btn:active { transform: scale(.96); }
+.sel-btn:focus-visible, .sel-icon:focus-visible, .sel-keep:focus-visible, .sel-send:focus-visible {
+  outline: none; box-shadow: var(--ring);
+}
+.sel-btn svg, .sel-icon svg, .sel-keep svg, .sel-send svg { flex-shrink: 0; }
+.sel-icon {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 50%; color: var(--ink-3);
+  transition: background-color .15s, color .15s, transform .1s;
+}
+.sel-icon:hover { background: var(--hover-2); color: var(--ink-2); }
+.sel-icon:active { transform: scale(.96); }
+.sel-sep { width: 1px; height: 16px; flex-shrink: 0; margin: 0 4px; background: var(--line); }
+.sel-sep.strong { background: var(--line-strong); }
+.sel-chevron { display: flex; transition: transform .4s var(--ease-out-soft); }
+.sel-expand.expanded .sel-chevron { transform: rotate(180deg); }
+.sel-send {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--ink); color: var(--canvas);
+  transition: opacity .2s, transform .2s;
+}
+.sel-send:active { transform: scale(.94); }
+.sel-keep {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  height: 28px; padding: 0 11px; border-radius: 999px;
+  background: var(--ink); color: var(--canvas); box-shadow: var(--shadow-hairline);
+  font-size: 12.5px; white-space: nowrap;
+  transition: opacity .15s, transform .15s;
+}
+.sel-keep:hover { opacity: .9; }
+.sel-keep:active { transform: scale(.96); }
+.sel-busy {
+  display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
+  height: 28px; padding: 0 11px; white-space: nowrap;
+  font-size: 12.5px; color: var(--ink-2);
+}
+.sel-busy .load-mark { display: inline-block; }
+
+/* The proposed rewrite, streamed where the selection can still be seen. It is
+   a proposal, not an edit: the reply underneath keeps its own words until Keep. */
+.sel-preview {
+  width: min(460px, calc(100vw - 16px));
+  padding: 10px 13px 12px;
+  border-radius: var(--radius-sm); background: var(--surface);
+  box-shadow: var(--shadow-overlay), var(--shadow-hairline);
+  animation: pop-in 220ms var(--ease-out-soft) both;
+}
+.sel-preview[hidden] { display: none; }
+.sel-preview-head {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.sel-preview-head .sel-action-name { color: var(--accent); }
+.sel-preview-text {
+  font-size: 13.5px; line-height: 1.65; color: var(--ink);
+  white-space: pre-wrap; word-wrap: break-word;
+  max-height: 34vh; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent;
+}
+.sel-preview.failed .sel-preview-text { color: var(--red); font-size: 12.5px; }
+.sel-preview.failed .sel-preview-head { color: var(--red); }
+
+@media (max-width: 560px) {
+  .sel-pop { --sel-input-w: 96px; }
+  /* the pill keeps every action, but on a phone they are glyphs: five labelled
+     buttons and a text field cannot share one 36px row */
+  .sel-btn { padding: 0; width: 28px; justify-content: center; }
+  .sel-btn-text { display: none; }
+  .sel-preview { width: calc(100vw - 16px); }
+}
+
 .ctx-menu {
   position: fixed; z-index: 140; min-width: 200px;
   display: grid; gap: 2px; padding: 6px;
